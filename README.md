@@ -23,3 +23,7 @@ Times in `js/bellSchedule.js` come from MHS's official "Daily Rotating Schedule"
 ## Note
 
 A fuller version with real Google sign-in, a shared database, and friends who can see each other's current class was built first — it's a small Node/Express + SQLite app. This static version strips all of that out per request ("just the site, no oauth or database for now"). Bring the server version back when you're ready to self-host accounts.
+
+## More documentation
+
+See [`DOCS.md`](./DOCS.md) for project structure, how the `localStorage` data model works, the bell schedule format, how to add a new tool, and known limitations.
