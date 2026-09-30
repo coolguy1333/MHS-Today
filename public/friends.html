@@ -3,88 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
   <title>Friends · MHS Hub</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
-  <div class="container">
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
     <h1>Friends</h1>
-
-    <div class="card">
-      <h2 class="mt0">Add a friend</h2>
-      <form id="add-form" class="flex">
-        <input type="text" id="friend-name" placeholder="Their username" required maxlength="20" />
-        <button class="btn" type="submit">Send request</button>
-      </form>
-      <p class="small muted">Once they add you back, you can see what class each other is in.</p>
-      <p class="small" id="msg" role="status"></p>
+    <div class="grid grid-even">
+      <div class="card">
+        <h2>Your friend code</h2>
+        <p class="muted small">Share this with people you want as friends. Only people with the code can send you a request.</p>
+        <p><span class="code-box mono" id="my-code">…</span></p>
+        <div class="row">
+          <button class="btn small" type="button" id="copy-code">Copy code</button>
+          <button class="btn small secondary" type="button" id="copy-link">Copy invite link</button>
+          <button class="btn small secondary" type="button" id="new-code">Get a new code</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Add a friend</h2>
+        <form id="find-form" class="stack">
+          <label><span>Their friend code</span>
+            <span class="inline-field"><input type="text" id="friend-code" class="mono" maxlength="14" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
+            <button class="btn" type="submit">Find</button></span>
+          </label>
+        </form>
+        <div id="confirm-box" class="notice" hidden></div>
+      </div>
     </div>
-
-    <div class="card" id="requests-card" style="display:none;">
-      <h2 class="mt0">Requests</h2>
+    <div class="card" id="requests-card" hidden>
+      <h2>Requests</h2>
       <div id="requests"></div>
     </div>
-
     <div class="card">
-      <h2 class="mt0">Your friends</h2>
+      <h2>Your friends</h2>
       <div id="friends"><p class="muted">Loading…</p></div>
     </div>
-  </div>
-  <script src="js/app.js"></script>
+  </main>
+  <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
-  <script>
-    renderNav('friends');
-    const $ = id => document.getElementById(id);
-
-    function nowClass(friend, today) {
-      const cur = getCurrentPeriod(today.scheduleType, new Date());
-      if (cur.status !== 'in-class') return { text: cur.status === 'after-school' ? "School's out" : cur.status === 'before-school' ? 'Before school' : 'Passing period', muted: true };
-      const c = friend.classes[`${today.dayLetter}_${cur.period.hour}`];
-      if (!c) return { text: `Hour ${cur.period.hour}: no class set`, muted: true };
-      return { text: `${c.name}${c.room ? ' · Rm ' + c.room : ''}${c.teacher ? ' · ' + c.teacher : ''}`, muted: false };
-    }
-
-    async function load() {
-      const [data, today] = await Promise.all([api('GET', '/api/friends'), api('GET', '/api/today')]);
-      $('friends').innerHTML = data.friends.length === 0 ? '<p class="muted">No friends yet.</p>' : data.friends.map(f => {
-        const n = nowClass(f, today);
-        return `<div class="event-row"><div><strong>${escapeHtml(f.username)}</strong><br/>
-          <span class="small ${n.muted ? 'muted' : ''}">${escapeHtml(n.text)}</span></div>
-          <button class="linklike" data-remove="${escapeHtml(f.username)}">Remove</button></div>`;
-      }).join('');
-      const reqs = [
-        ...data.incoming.map(n => `<div class="event-row"><div><strong>${escapeHtml(n)}</strong> <span class="small muted">wants to be friends</span></div>
-          <div><button class="linklike" data-accept="${escapeHtml(n)}">Accept</button> · <button class="linklike" data-remove="${escapeHtml(n)}">Decline</button></div></div>`),
-        ...data.outgoing.map(n => `<div class="event-row"><div><strong>${escapeHtml(n)}</strong> <span class="small muted">request sent</span></div>
-          <button class="linklike" data-remove="${escapeHtml(n)}">Cancel</button></div>`)
-      ];
-      $('requests-card').style.display = reqs.length ? '' : 'none';
-      $('requests').innerHTML = reqs.join('');
-    }
-
-    document.addEventListener('click', async e => {
-      const b = e.target.closest('button[data-accept], button[data-remove]');
-      if (!b) return;
-      try {
-        if (b.dataset.accept) await api('POST', '/api/friends/' + b.dataset.accept, {});
-        else await api('DELETE', '/api/friends/' + b.dataset.remove);
-        await load();
-      } catch (err) { $('msg').textContent = err.message; }
-    });
-    $('add-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const name = $('friend-name').value.trim().toLowerCase();
-      try {
-        await api('POST', '/api/friends/' + encodeURIComponent(name), {});
-        $('msg').textContent = 'Request sent.';
-        e.target.reset();
-        await load();
-      } catch (err) { $('msg').textContent = err.status === 404 ? 'No user with that username.' : err.message; }
-    });
-
-    requireLogin().then(load).catch(err => { $('friends').innerHTML = `<p class="muted">${escapeHtml(err.message)}</p>`; });
-    setInterval(() => load().catch(() => {}), 60000);
-  </script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/friends.js"></script>
 </body>
 </html>

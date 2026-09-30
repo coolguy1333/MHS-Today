@@ -3,93 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
   <title>Events · MHS Hub</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
-  <div class="container">
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
     <h1>Events</h1>
-    <p class="muted small">
-      Shared with everyone on the site; sign in to add events. For the official calendar, see
-      <a href="https://www.masd.k12.wi.us/Calendar/" target="_blank" rel="noopener">masd.k12.wi.us/Calendar</a>.
-    </p>
-
-    <div class="card" id="add-card">
-      <h2 class="mt0">Add an event</h2>
-      <form id="event-form" class="grid grid-2">
-        <label><span>Title</span><input type="text" id="title" required /></label>
+    <p class="muted small">Shared with everyone on the site. For the official calendar, see
+      <a href="https://www.masd.k12.wi.us/Calendar/" target="_blank" rel="noopener noreferrer">masd.k12.wi.us/Calendar</a>.</p>
+    <div class="card" id="add-card" hidden>
+      <h2>Add an event</h2>
+      <form id="event-form" class="form-grid">
+        <label class="wide"><span>Title</span><input type="text" id="title" required maxlength="120" /></label>
         <label><span>Date</span><input type="date" id="date" required /></label>
         <label><span>Time (optional)</span><input type="time" id="time" /></label>
-        <label><span>Description (optional)</span><input type="text" id="description" /></label>
-        <button class="btn" type="submit" style="grid-column: 1 / -1;">Add event</button>
+        <label class="wide"><span>Details (optional)</span><input type="text" id="description" maxlength="500" /></label>
+        <div class="wide"><button class="btn" type="submit">Add event</button></div>
       </form>
     </div>
-
+    <div class="card" id="signin-card" hidden><p><a href="login.html?next=events.html">Sign in</a> to add an event.</p></div>
     <div class="card">
-      <h2 class="mt0">All events</h2>
-      <div id="event-list"></div>
+      <h2>Upcoming</h2>
+      <div id="upcoming"><p class="muted">Loading…</p></div>
     </div>
-  </div>
-
+    <details class="card" id="past-card" hidden>
+      <summary>Past events</summary>
+      <div id="past"></div>
+    </details>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
   <script src="js/app.js"></script>
-  <script>
-    renderNav('events');
-
-    let me = null;
-    let events = [];
-
-    function render() {
-      const list = document.getElementById('event-list');
-      const sorted = events.slice().sort((a, b) => a.date.localeCompare(b.date));
-      if (sorted.length === 0) {
-        list.innerHTML = `<p class="muted">No events yet.</p>`;
-        return;
-      }
-      list.innerHTML = sorted.map(e => `
-        <div class="event-row">
-          <div>
-            <strong>${escapeHtml(e.title)}</strong><br/>
-            <span class="small muted">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''}${e.by ? ' · added by ' + escapeHtml(e.by) : ''}</span>
-            ${e.description ? `<br/><span class="small">${escapeHtml(e.description)}</span>` : ''}
-          </div>
-          ${e.mine ? `<button class="linklike" data-id="${escapeHtml(e.id)}">Delete</button>` : ''}
-        </div>
-      `).join('');
-      list.querySelectorAll('button[data-id]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          try { await api('DELETE', '/api/events/' + btn.dataset.id); await load(); }
-          catch (err) { alert(err.message); }
-        });
-      });
-    }
-
-    async function load() {
-      try { events = await api('GET', '/api/events'); render(); }
-      catch (err) { document.getElementById('event-list').innerHTML = `<p class="muted">Could not load: ${escapeHtml(err.message)}</p>`; }
-    }
-
-    document.getElementById('event-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const body = {
-        title: document.getElementById('title').value.trim(),
-        date: document.getElementById('date').value,
-        time: document.getElementById('time').value,
-        description: document.getElementById('description').value.trim()
-      };
-      if (!body.title || !body.date) return;
-      try {
-        await api('POST', '/api/events', body);
-        e.target.reset();
-        await load();
-      } catch (err) { alert(err.message); }
-    });
-
-    getMe().then(m => {
-      me = m.user;
-      if (!me) document.getElementById('add-card').innerHTML = '<p><a href="login.html?next=events.html">Sign in</a> to add events.</p>';
-    });
-    load();
-  </script>
+  <script src="js/pages/events.js"></script>
 </body>
 </html>

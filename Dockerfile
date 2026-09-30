@@ -1,8 +1,9 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY server.js ./
+COPY src ./src
 COPY public ./public
-# /data is the app's persistent volume (WebManager backs it up)
+# /data is the app's persistent volume; WebManager backs it up before each restart or update.
 RUN mkdir -p /data && chown node:node /data
 USER node
 ENV NODE_ENV=production DATA_DIR=/data

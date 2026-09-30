@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
+  <title>Account · MHS Hub</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <h1>Account</h1>
+    <div class="card">
+      <h2>Profile</h2>
+      <form id="name-form" class="stack">
+        <label><span>Display name (shown to your friends and on events you add)</span>
+          <span class="inline-field"><input type="text" id="name" maxlength="40" required /><button class="btn" type="submit">Save</button></span>
+        </label>
+      </form>
+      <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students.</p>
+    </div>
+    <div class="card">
+      <h2>Privacy</h2>
+      <label class="check"><input type="checkbox" id="share" /><span>Let friends see my classes and where I am right now</span></label>
+    </div>
+    <div class="card" id="admin-card" hidden>
+      <h2>Admin</h2>
+      <p><a href="admin.html">Open the admin page</a> to manage the school calendar, users and backups.</p>
+    </div>
+    <div class="card">
+      <h2>Delete my account</h2>
+      <p class="small muted">Removes your classes, your events, and your friend connections for good. You can always sign in again to start over.</p>
+      <form id="delete-form" class="stack">
+        <label><span>Type <strong>DELETE</strong> to confirm</span><input type="text" id="confirm-delete" autocomplete="off" /></label>
+        <button class="btn danger" type="submit" id="delete-btn" disabled>Delete my account</button>
+      </form>
+    </div>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/account.js"></script>
+</body>
+</html>

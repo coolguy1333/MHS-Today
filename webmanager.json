@@ -1,17 +1,33 @@
 {
   "type": "app",
   "health": "/api/health",
-  "memory_mb": 128,
+  "memory_mb": 512,
   "env": [
     {
-      "name": "ADMIN_USERS",
-      "description": "Comma-separated usernames allowed to set today's schedule type and day letter and to delete any event. If empty, the first account created is the admin."
+      "name": "GOOGLE_CLIENT_ID",
+      "description": "Client ID of a Google OAuth \"Web application\" client. Its authorized redirect URI must be this app's address followed by /auth/google/callback.",
+      "required": true
     },
     {
-      "name": "ALLOW_REGISTRATION",
-      "description": "Let new people create accounts.",
-      "default": "true",
-      "choices": ["true", "false"]
+      "name": "GOOGLE_CLIENT_SECRET",
+      "description": "Client secret of that Google OAuth client.",
+      "secret": true,
+      "required": true
+    },
+    {
+      "name": "ADMIN_EMAILS",
+      "description": "Comma-separated Google email addresses that are admins (they set the day letter and breaks, remove people, and manage backups).",
+      "required": true
+    },
+    {
+      "name": "ALLOWED_DOMAINS",
+      "description": "Optional. Comma-separated Google Workspace domains allowed to sign in, for example your school's domain. Leave empty to let any Google account sign in."
+    },
+    {
+      "name": "EVENT_POSTING",
+      "description": "Who can add events to the shared events board.",
+      "default": "everyone",
+      "choices": ["everyone", "admins"]
     }
   ]
 }

@@ -1,0 +1,13 @@
+{
+  "name": "mhs-hub",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Schedule, events and friends for Mukwonago High School students",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/*.test.js\"",
+    "test:e2e": "node test/e2e.js"
+  }
+}

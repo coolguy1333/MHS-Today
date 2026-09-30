@@ -3,48 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
   <title>Tools · MHS Hub</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
-  <div class="container">
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
     <h1>Tools</h1>
-    <p class="muted">A growing set of tools. More coming eventually.</p>
-
+    <p class="muted">Extra tools for MHS students.</p>
     <div class="tool-grid" id="tool-grid"></div>
-  </div>
-
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
   <script src="js/app.js"></script>
-  <script>
-    renderNav('tools');
-
-    // Class Cards is being built as its own app elsewhere in this project.
-    // Update this URL once it's deployed (or edit directly here).
-    const TOOLS = [
-      {
-        name: 'Class Cards',
-        description: 'Flashcards for your classes — built as its own app.',
-        url: '', // e.g. 'http://your-classcards-url'
-      }
-    ];
-
-    const grid = document.getElementById('tool-grid');
-    grid.innerHTML = TOOLS.map(t => {
-      const ready = !!t.url;
-      return `
-        <a class="card tool-card" href="${ready ? t.url : '#'}" ${ready ? 'target="_blank" rel="noopener"' : 'onclick="return false;"'}>
-          <h3>${t.name}</h3>
-          <p>${t.description}</p>
-          ${!ready ? '<span class="badge muted" style="margin-top:8px;">Coming soon</span>' : ''}
-        </a>
-      `;
-    }).join('') + `
-      <div class="card tool-card" style="opacity:0.6;">
-        <h3>+ More tools</h3>
-        <p>New tools will show up here over time.</p>
-      </div>
-    `;
-  </script>
+  <script src="js/pages/tools.js"></script>
 </body>
 </html>
