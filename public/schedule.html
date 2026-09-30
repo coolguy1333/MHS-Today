@@ -10,7 +10,7 @@
   <header class="nav" id="site-nav"></header>
   <div class="container">
     <h1>My Schedule</h1>
-    <p class="muted">Set your class for each hour, on each rotation day (A/B/C/D). Leave a box blank to clear it. Saved in this browser only.</p>
+    <p class="muted">Set your class for each hour, on each rotation day (A/B/C/D). Leave a box blank to clear it. Saved to your account.</p>
 
     <div class="class-grid" id="class-grid"></div>
     <button class="btn" id="save-btn">Save schedule</button>
@@ -25,8 +25,11 @@
     const DAYS = ['A', 'B', 'C', 'D'];
     const HOURS = [1, 2, 3, 4, 5, 6];
     const grid = document.getElementById('class-grid');
-    const classes = getClasses();
+    let classes = {};
 
+    function esc(v) { return escapeHtml(v).replace(/"/g, '&quot;'); }
+    function build() {
+    grid.innerHTML = '';
     DAYS.forEach(day => {
       const col = document.createElement('div');
       col.className = 'class-col';
@@ -39,17 +42,20 @@
         slot.className = 'class-slot';
         slot.innerHTML = `
           <div class="hour-label">Hour ${hour} · ${period ? period.start : ''}</div>
-          <label><input type="text" data-key="${key}" data-field="name" placeholder="Class name" value="${cls.name || ''}" /></label>
-          <label><input type="text" data-key="${key}" data-field="teacher" placeholder="Teacher" value="${cls.teacher || ''}" /></label>
-          <label><input type="text" data-key="${key}" data-field="room" placeholder="Room" value="${cls.room || ''}" /></label>
+          <label><input type="text" data-key="${key}" data-field="name" placeholder="Class name" value="${esc(cls.name)}" /></label>
+          <label><input type="text" data-key="${key}" data-field="teacher" placeholder="Teacher" value="${esc(cls.teacher)}" /></label>
+          <label><input type="text" data-key="${key}" data-field="room" placeholder="Room" value="${esc(cls.room)}" /></label>
           <input type="color" data-key="${key}" data-field="color" value="${cls.color || '#4f7cff'}" />
         `;
         col.appendChild(slot);
       });
       grid.appendChild(col);
     });
+    }
+    requireLogin().then(() => api('GET', '/api/classes')).then(c => { classes = c; build(); })
+      .catch(e => { grid.innerHTML = `<p class="muted">Could not load: ${escapeHtml(e.message)}</p>`; });
 
-    document.getElementById('save-btn').addEventListener('click', () => {
+    document.getElementById('save-btn').addEventListener('click', async () => {
       const updated = {};
       grid.querySelectorAll('[data-key]').forEach(input => {
         const key = input.dataset.key;
@@ -61,10 +67,13 @@
       Object.keys(updated).forEach(key => {
         if (!updated[key].name || !updated[key].name.trim()) delete updated[key];
       });
-      saveClasses(updated);
       const msg = document.getElementById('saved-msg');
+      try {
+        classes = await api('PUT', '/api/classes', updated);
+        msg.textContent = 'Saved ✓';
+      } catch (e) { msg.textContent = 'Save failed: ' + e.message; }
       msg.style.display = 'inline';
-      setTimeout(() => (msg.style.display = 'none'), 1500);
+      setTimeout(() => (msg.style.display = 'none'), 2500);
     });
   </script>
 </body>

@@ -1,29 +1,42 @@
-# MHS Hub (static site, no accounts/backend — for now)
+# MHS Hub
 
-A plain HTML/CSS/JS site for Mukwonago High School: today's bell schedule, your classes, events, and a tools page. No server, no database, no login — everything is saved in your own browser's `localStorage`.
+Site for Mukwonago High School: today's bell schedule, your classes, a shared events board, and friends who can see what class you're in. A small zero-dependency Node server (`server.js`) serves the pages in `public/` and a JSON API. All data is stored in one file, `$DATA_DIR/db.json`.
 
-## Pages
+## Pages (`public/`)
 
-- `index.html` — Dashboard: today's schedule type/day, current period highlighted, upcoming events
-- `schedule.html` — Set your classes per hour, per rotation day (A/B/C/D)
-- `events.html` — Add/view events (saved locally; links to the official MASD calendar)
-- `tools.html` — Tools list. **Class Cards** is being built as its own app elsewhere in this project — set its URL in `tools.html` (`TOOLS` array) once it's deployed
-- `friends.html` — Placeholder explaining that friends/sharing need real accounts (that version exists — see note below)
+- `index.html` — Dashboard: schedule, current period, upcoming events, friends
+- `schedule.html` — Your classes per hour, per rotation day (A/B/C/D)
+- `events.html` — Shared events board (anyone can read; sign in to add)
+- `friends.html` — Add friends (mutual), see what class they're in now
+- `tools.html` — Tools list
+- `login.html` — Sign in / create account (username + password)
 
-## Running it
+## Run locally
 
-No build step. Either:
-- Open `index.html` directly in a browser, or
-- Serve the folder with any static server, e.g. `npx serve .` or `python3 -m http.server`
+Needs Node 22+. Run `node server.js` and open http://localhost:8080. Data goes to `./data/db.json` (override with `DATA_DIR`).
+
+## Deploy with WebManager
+
+This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`). It needs [app hosting](https://github.com/coolguy1333/WebManager/blob/main/docs/APP_HOSTING.md) turned on.
+
+1. In WebManager, **Sources → add** this repository, then choose **Deploy as an app**.
+2. Set the variables on the app's **Variables** page (both optional):
+   - `ADMIN_USERS` — usernames that can set today's schedule type/day letter and delete any event. If empty, the first account created is the admin.
+   - `ALLOW_REGISTRATION` — `true` (default) or `false`.
+3. Create your account on the new site first so you're the admin.
+
+### Backup and restore
+
+Everything lives in `/data/db.json` inside the container. Per WebManager's [backup and restore](https://github.com/coolguy1333/WebManager#backup-and-restore):
+
+- WebManager backs up `/data` automatically before each restart/update (last 3 kept in `/var/lib/webmanager/app-backups/<id>/`), and the normal server backup (`tar` of `/var/lib/webmanager`) includes those copies.
+- For a current copy of the live data: `sudo docker cp webmanager-app-<id>:/data - > app-<id>-data.tar`
+- To restore, follow *Restoring an app's data* in [APP_HOSTING.md § Operations](https://github.com/coolguy1333/WebManager/blob/main/docs/APP_HOSTING.md#7-operations).
+
+The database holds password hashes (scrypt) and login sessions — store backups securely.
 
 ## Bell schedule data
 
-Times in `js/bellSchedule.js` come from MHS's official "Daily Rotating Schedule" doc (linked from mhs.masd.k12.wi.us as "Bell Schedule"). There's no public feed for which day (A/B/C/D) or schedule type (Daily/Advisory/Early Release) applies on a given date, so you pick it yourself on the dashboard.
+Times in `public/js/bellSchedule.js` come from MHS's official "Daily Rotating Schedule" doc. There's no public feed for which day (A/B/C/D) or schedule type applies on a date, so an admin sets it on the dashboard for everyone.
 
-## Note
-
-A fuller version with real Google sign-in, a shared database, and friends who can see each other's current class was built first — it's a small Node/Express + SQLite app. This static version strips all of that out per request ("just the site, no oauth or database for now"). Bring the server version back when you're ready to self-host accounts.
-
-## More documentation
-
-See [`DOCS.md`](./DOCS.md) for project structure, how the `localStorage` data model works, the bell schedule format, how to add a new tool, and known limitations.
+More detail: [`DOCS.md`](./DOCS.md).

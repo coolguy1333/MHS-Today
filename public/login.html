@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in · MHS Hub</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="nav" id="site-nav"></header>
+  <div class="container" style="max-width:420px;">
+    <div class="card">
+      <h1 class="mt0" id="heading">Sign in</h1>
+      <form id="form">
+        <label><span>Username</span><input type="text" id="username" autocomplete="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" /></label>
+        <label><span>Password</span><input type="password" id="password" autocomplete="current-password" required minlength="8" maxlength="128" /></label>
+        <p class="small" id="error" style="color:#dc2626;" role="alert"></p>
+        <button class="btn" type="submit" id="submit">Sign in</button>
+        <button class="linklike" type="button" id="toggle"></button>
+      </form>
+      <p class="muted small">Usernames are 3–20 letters, numbers or underscores. Passwords are at least 8 characters.</p>
+    </div>
+  </div>
+  <script src="js/app.js"></script>
+  <script>
+    renderNav('');
+    let mode = 'login';
+    const $ = id => document.getElementById(id);
+    function setMode(m) {
+      mode = m;
+      $('heading').textContent = m === 'login' ? 'Sign in' : 'Create account';
+      $('submit').textContent = m === 'login' ? 'Sign in' : 'Create account';
+      $('toggle').textContent = m === 'login' ? 'New here? Create an account' : 'Have an account? Sign in';
+      $('password').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+      $('error').textContent = '';
+    }
+    getMe().then(me => {
+      if (me.user) return location.replace('index.html');
+      if (!me.registration) $('toggle').style.display = 'none';
+    });
+    $('toggle').addEventListener('click', () => setMode(mode === 'login' ? 'register' : 'login'));
+    $('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      $('error').textContent = '';
+      try {
+        await api('POST', mode === 'login' ? '/api/login' : '/api/register',
+          { username: $('username').value, password: $('password').value });
+        const next = new URLSearchParams(location.search).get('next') || 'index.html';
+        location.href = /^[a-z]+\.html$/.test(next) ? next : 'index.html';
+      } catch (err) { $('error').textContent = err.message; }
+    });
+    setMode('login');
+  </script>
+</body>
+</html>

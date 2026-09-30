@@ -80,3 +80,10 @@ label span { display: block; margin-bottom: 4px; }
 .flex { display: flex; align-items: center; gap: 10px; }
 .flex-between { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .linklike { background: none; border: none; color: #dc2626; cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+
+/* auth bits in the nav */
+.nav nav .linklike { color: white; opacity: 0.85; }
+.nav nav .linklike:hover { opacity: 1; }
+#nav-auth { display: inline-flex; align-items: center; gap: 8px; color: white; }
+label { display: block; margin-bottom: 10px; }
+label > span { display: block; font-size: 0.85rem; margin-bottom: 3px; }

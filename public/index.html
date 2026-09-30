@@ -46,7 +46,8 @@
 
         <div class="card">
           <h2 class="mt0">Friends</h2>
-          <p class="muted small">Friends & sharing need real accounts, which aren't wired up yet on this static version. <a href="friends.html">More info</a>.</p>
+          <div id="friends-preview"><p class="muted small">Loading…</p></div>
+          <a class="small" href="friends.html">Manage friends →</a>
         </div>
       </div>
     </div>
@@ -58,7 +59,6 @@
   <script>
     renderNav('dashboard');
 
-    const today = getToday();
     const typeSelect = document.getElementById('schedule-type');
     Object.values(SCHEDULES).forEach(s => {
       const opt = document.createElement('option');
@@ -66,14 +66,17 @@
       opt.textContent = s.label;
       typeSelect.appendChild(opt);
     });
-    typeSelect.value = today.scheduleType;
-    document.getElementById('day-letter').value = today.dayLetter;
+    const daySelect = document.getElementById('day-letter');
+
+    let state = { today: { scheduleType: 'daily', dayLetter: 'A' }, classes: {}, events: [], friends: null, me: null };
 
     function render() {
-      const t = getToday();
+      const t = state.today;
       const schedule = SCHEDULES[t.scheduleType] || SCHEDULES.daily;
       const current = getCurrentPeriod(t.scheduleType, new Date());
-      const classes = getClasses();
+      const classes = state.classes;
+      typeSelect.value = t.scheduleType;
+      daySelect.value = t.dayLetter;
 
       let summary = `${schedule.label} · Day <strong>${t.dayLetter}</strong> — `;
       if (current.status === 'in-class') {
@@ -99,18 +102,20 @@
           classCell = `<strong>${escapeHtml(cls.name)}</strong>` + (cls.room ? ` <span class="muted small">· Rm ${escapeHtml(cls.room)}</span>` : '');
         } else if (p.hour === 'advisory') {
           classCell = `<span class="muted">Advisory</span>`;
-        } else {
+        } else if (state.me) {
           classCell = `<span class="muted small">Not set — <a href="schedule.html">add it</a></span>`;
+        } else {
+          classCell = `<span class="muted small"><a href="login.html">Sign in</a> to see your classes</span>`;
         }
         tr.innerHTML = `<td>${p.label}</td><td class="small muted">${p.start}–${p.end}</td><td>${classCell}</td>`;
         body.appendChild(tr);
       });
 
-      // Events preview
-      const events = getEvents()
+      const todayStr = new Date().toLocaleDateString('en-CA'); // local YYYY-MM-DD
+      const events = state.events
         .slice()
         .sort((a, b) => a.date.localeCompare(b.date))
-        .filter(e => e.date >= new Date().toISOString().slice(0, 10))
+        .filter(e => e.date >= todayStr)
         .slice(0, 5);
       const preview = document.getElementById('events-preview');
       if (events.length === 0) {
@@ -119,33 +124,57 @@
         preview.innerHTML = events.map(e => `
           <div style="margin-bottom:10px;">
             <strong>${escapeHtml(e.title)}</strong><br/>
-            <span class="small muted">${e.date}${e.time ? ' · ' + e.time : ''}</span>
+            <span class="small muted">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''}</span>
           </div>
         `).join('');
       }
+
+      const fp = document.getElementById('friends-preview');
+      if (!state.me) {
+        fp.innerHTML = `<p class="muted small"><a href="login.html">Sign in</a> to see what your friends are in.</p>`;
+      } else if (!state.friends || state.friends.length === 0) {
+        fp.innerHTML = `<p class="muted small">No friends added yet.</p>`;
+      } else {
+        fp.innerHTML = state.friends.map(f => {
+          const c = f.classes[`${t.dayLetter}_${current.status === 'in-class' ? current.period.hour : ''}`];
+          return `<div style="margin-bottom:6px;"><strong>${escapeHtml(f.username)}</strong> <span class="small muted">${
+            current.status === 'in-class' ? (c ? escapeHtml(c.name) + (c.room ? ' · Rm ' + escapeHtml(c.room) : '') : 'no class set') : '—'}</span></div>`;
+        }).join('');
+      }
     }
 
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
+    async function load() {
+      const me = (await getMe()).user;
+      state.me = me;
+      const jobs = [api('GET', '/api/today'), api('GET', '/api/events')];
+      if (me) jobs.push(api('GET', '/api/classes'), api('GET', '/api/friends'));
+      try {
+        const [today, events, classes, friends] = await Promise.all(jobs);
+        state.today = today;
+        state.events = events;
+        if (me) { state.classes = classes; state.friends = friends.friends; }
+      } catch (e) {
+        document.getElementById('today-summary').textContent = 'Could not load data: ' + e.message;
+        return;
+      }
+      const canEdit = !!(me && me.admin);
+      typeSelect.disabled = daySelect.disabled = !canEdit;
+      typeSelect.title = daySelect.title = canEdit ? '' : 'Only admins can change this';
+      render();
     }
 
-    typeSelect.addEventListener('change', () => {
-      const t = getToday();
-      t.scheduleType = typeSelect.value;
-      saveToday(t);
+    async function updateToday() {
+      try {
+        state.today = await api('PUT', '/api/today', { scheduleType: typeSelect.value, dayLetter: daySelect.value });
+      } catch (e) { alert(e.message); }
       render();
-    });
-    document.getElementById('day-letter').addEventListener('change', (e) => {
-      const t = getToday();
-      t.dayLetter = e.target.value;
-      saveToday(t);
-      render();
-    });
+    }
+    typeSelect.addEventListener('change', updateToday);
+    daySelect.addEventListener('change', updateToday);
 
-    render();
+    load();
     setInterval(render, 30000); // keep "current period" fresh
+    setInterval(load, 5 * 60000); // pick up shared changes (day letter, events)
   </script>
 </body>
 </html>

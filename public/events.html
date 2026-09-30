@@ -11,11 +11,11 @@
   <div class="container">
     <h1>Events</h1>
     <p class="muted small">
-      Saved in this browser only for now. For the official calendar, see
+      Shared with everyone on the site; sign in to add events. For the official calendar, see
       <a href="https://www.masd.k12.wi.us/Calendar/" target="_blank" rel="noopener">masd.k12.wi.us/Calendar</a>.
     </p>
 
-    <div class="card">
+    <div class="card" id="add-card">
       <h2 class="mt0">Add an event</h2>
       <form id="event-form" class="grid grid-2">
         <label><span>Title</span><input type="text" id="title" required /></label>
@@ -36,53 +36,60 @@
   <script>
     renderNav('events');
 
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
-    }
+    let me = null;
+    let events = [];
 
     function render() {
-      const events = getEvents().slice().sort((a, b) => a.date.localeCompare(b.date));
       const list = document.getElementById('event-list');
-      if (events.length === 0) {
+      const sorted = events.slice().sort((a, b) => a.date.localeCompare(b.date));
+      if (sorted.length === 0) {
         list.innerHTML = `<p class="muted">No events yet.</p>`;
         return;
       }
-      list.innerHTML = events.map(e => `
+      list.innerHTML = sorted.map(e => `
         <div class="event-row">
           <div>
             <strong>${escapeHtml(e.title)}</strong><br/>
-            <span class="small muted">${e.date}${e.time ? ' · ' + e.time : ''}</span>
+            <span class="small muted">${escapeHtml(e.date)}${e.time ? ' · ' + escapeHtml(e.time) : ''}${e.by ? ' · added by ' + escapeHtml(e.by) : ''}</span>
             ${e.description ? `<br/><span class="small">${escapeHtml(e.description)}</span>` : ''}
           </div>
-          <button class="linklike" data-id="${e.id}">Delete</button>
+          ${e.mine ? `<button class="linklike" data-id="${escapeHtml(e.id)}">Delete</button>` : ''}
         </div>
       `).join('');
       list.querySelectorAll('button[data-id]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const remaining = getEvents().filter(ev => ev.id !== btn.dataset.id);
-          saveEvents(remaining);
-          render();
+        btn.addEventListener('click', async () => {
+          try { await api('DELETE', '/api/events/' + btn.dataset.id); await load(); }
+          catch (err) { alert(err.message); }
         });
       });
     }
 
-    document.getElementById('event-form').addEventListener('submit', (e) => {
+    async function load() {
+      try { events = await api('GET', '/api/events'); render(); }
+      catch (err) { document.getElementById('event-list').innerHTML = `<p class="muted">Could not load: ${escapeHtml(err.message)}</p>`; }
+    }
+
+    document.getElementById('event-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const title = document.getElementById('title').value.trim();
-      const date = document.getElementById('date').value;
-      const time = document.getElementById('time').value;
-      const description = document.getElementById('description').value.trim();
-      if (!title || !date) return;
-      const events = getEvents();
-      events.push({ id: cryptoId(), title, date, time, description });
-      saveEvents(events);
-      e.target.reset();
-      render();
+      const body = {
+        title: document.getElementById('title').value.trim(),
+        date: document.getElementById('date').value,
+        time: document.getElementById('time').value,
+        description: document.getElementById('description').value.trim()
+      };
+      if (!body.title || !body.date) return;
+      try {
+        await api('POST', '/api/events', body);
+        e.target.reset();
+        await load();
+      } catch (err) { alert(err.message); }
     });
 
-    render();
+    getMe().then(m => {
+      me = m.user;
+      if (!me) document.getElementById('add-card').innerHTML = '<p><a href="login.html?next=events.html">Sign in</a> to add events.</p>';
+    });
+    load();
   </script>
 </body>
 </html>
