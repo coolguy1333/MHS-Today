@@ -1,10 +1,11 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY server.js ./
-COPY src ./src
-COPY public ./public
-# /data is the app's persistent volume; WebManager backs it up before each restart or update.
-RUN mkdir -p /data && chown node:node /data
+COPY --chown=node:node server.js ./
+COPY --chown=node:node src ./src
+COPY --chown=node:node public ./public
+# Whatever modes the build checkout had (WebManager's can be 0600/0700), the app must be readable by `node`.
+RUN chmod -R u+rwX,go+rX /app \
+ && mkdir -p /data && chown node:node /data
 USER node
 ENV NODE_ENV=production DATA_DIR=/data
 EXPOSE 8080
