@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
+  <title>Friends · MHS Hub</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <h1>Friends</h1>
+    <div class="grid grid-even">
+      <div class="card">
+        <h2>Your friend code</h2>
+        <p class="muted small">Share this with people you want as friends. Only people with the code can send you a request.</p>
+        <p><span class="code-box mono" id="my-code">…</span></p>
+        <div class="row">
+          <button class="btn small" type="button" id="copy-code">Copy code</button>
+          <button class="btn small secondary" type="button" id="copy-link">Copy invite link</button>
+          <button class="btn small secondary" type="button" id="new-code">Get a new code</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Add a friend</h2>
+        <form id="find-form" class="stack">
+          <label><span>Their friend code</span>
+            <span class="inline-field"><input type="text" id="friend-code" class="mono" maxlength="14" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
+            <button class="btn" type="submit">Find</button></span>
+          </label>
+        </form>
+        <div id="confirm-box" class="notice" hidden></div>
+      </div>
+    </div>
+    <div class="card" id="requests-card" hidden>
+      <h2>Requests</h2>
+      <div id="requests"></div>
+    </div>
+    <div class="card">
+      <h2>Your friends</h2>
+      <div id="friends"><p class="muted">Loading…</p></div>
+    </div>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/friends.js"></script>
+</body>
+</html>

@@ -1,82 +1,65 @@
-# MHS Hub — Documentation
+# MHS Hub: how it works
 
-This is the static (no-login, no-server) version of the MHS Hub site: a schedule, events board, and tools page for Mukwonago High School students. Everything lives in the browser — there is no backend, database, or accounts in this version.
-
-## Project structure
+## Layout
 
 ```
-.
-├── index.html          Dashboard: today's schedule + current period, upcoming events preview
-├── schedule.html        Editor for your own classes, per hour, per rotation day (A/B/C/D)
-├── events.html          Shared-looking but actually per-browser events board
-├── tools.html           Tools list (currently just a link out to Class Cards)
-├── friends.html         Placeholder explaining why friends/sharing isn't available yet
-├── css/
-│   └── style.css        All page styling (single shared stylesheet)
-├── js/
-│   ├── app.js            localStorage helpers + shared nav renderer
-│   └── bellSchedule.js   The MHS bell schedule data + "what period is it right now" logic
-├── README.md            Quick-start / running instructions
-└── DOCS.md              This file
+server.js            starts the app; exits with a clear message on bad settings
+src/config.js        environment variables -> settings
+src/app.js           security headers, Google sign-in routes, JSON API, static files
+src/google.js        Google OpenID Connect (code flow + PKCE, ID-token verification)
+src/db.js            db.json: atomic writes, daily snapshots, old-format archive
+src/util.js          text cleaning, cookies, rate limiter, friend codes
+public/              the pages; js/calendar.js and js/bellSchedule.js are shared with the server
+public/js/pages/     one script per page (no inline scripts anywhere)
+test/                node:test suites, a mock Google, and helpers
+Dockerfile, webmanager.json   what WebManager needs to run it as an app
 ```
 
-There is no build step and no dependencies. Any static file server (or just opening `index.html` in a browser) works.
+## The school calendar
 
-## How data is stored
+`public/js/calendar.js` is loaded by the browser **and** `require`d by the server, so both always agree. A calendar is plain data (saved from the Admin page):
 
-Everything is saved in the browser's `localStorage`, under three keys (see `js/app.js`):
+```
+anchorDate, anchorLetter   the first school day on/after anchorDate is this letter
+noSchool      { 'YYYY-MM-DD': 'Fall break' }   weekends are implicit
+types         { 'YYYY-MM-DD': 'advisory' | 'early_release' | 'daily' }   one-day overrides
+weekdayTypes  { '3': 'advisory' }   repeating pattern, 1 = Monday
+```
 
-| Key | Shape | Used for |
+The letter advances one step per school day (a weekday not listed in `noSchool`). "Today" and the live period are computed in the school's time zone, using the server's clock so a wrong phone clock doesn't matter. Bell times are in `public/js/bellSchedule.js`.
+
+## Data (`$DATA_DIR/db.json`)
+
+Written atomically (temp file, fsync, rename), mode 0600. Shape: `users` (id → `{ sub, email, name, classes, friends: [ids], friendCode, shareSchedule }`), `sessions` (SHA-256 of the cookie token → user and expiry), `events`, `calendar`. A friendship exists when both people list each other. An older password-based `db.json` (first release) is archived to `backups/db.old-format-*.json` and the app starts empty.
+
+## API
+
+State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: application/json` when there is a body).
+
+| Route | Who | Purpose |
 |---|---|---|
-| `mhs_classes` | `{ "<dayLetter>_<hour>": { name, teacher, room, color } }` | Your class schedule, set on `schedule.html` |
-| `mhs_today` | `{ scheduleType, dayLetter }` | Which bell schedule (Daily/Advisory/Early Release) and which rotation day is "today" — set from the dashboard |
-| `mhs_events` | `[ { id, title, date, time, description } ]` | The events board |
+| `GET /auth/google`, `/auth/google/callback` | anyone | Sign-in |
+| `GET /api/health` `/api/me` `/api/calendar` `/api/events` | anyone | Health, current user + settings, calendar, events (author names only for signed-in viewers) |
+| `POST /api/logout` | anyone | End the session |
+| `PUT /api/me`, `POST /api/me/friend-code`, `DELETE /api/me` | signed in | Name/privacy, new friend code, delete account |
+| `GET/PUT /api/classes` | signed in | Own classes |
+| `POST /api/events`, `DELETE /api/events/:id` | signed in (delete: owner or admin) | Events |
+| `GET /api/friends`, `POST /api/friends/lookup`, `POST /api/friends/request`, `POST /api/friends/:id/accept`, `DELETE /api/friends/:id` | signed in | Friends |
+| `GET /api/admin/status` `users`, `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
 
-Because this is `localStorage`, **each browser/device has its own separate copy** — nothing syncs between people or devices. That's the main limitation of this version (see "Known limitations" below).
+## Security design
 
-## Bell schedule data (`js/bellSchedule.js`)
+- **Sign-in**: authorization-code flow with PKCE, `state` and `nonce`. The pending-login cookie is signed and ties the callback to the browser that started it (no login CSRF). The ID token's RS256 signature (Google's published keys), issuer, audience, expiry and nonce are checked; the email must be verified. Accounts are keyed by Google's `sub`, not the email. `ALLOWED_DOMAINS` checks the token's Workspace `hd` claim, never the email suffix. Admins are the verified emails in `ADMIN_EMAILS`.
+- **Sessions**: random 256-bit token in an `HttpOnly; SameSite=Lax` cookie (`Secure` and `__Host-` prefixed over https, so sibling subdomains can't plant cookies). Only the token's hash is stored. Sign-in rotates the session, sign-out deletes it on the server, 10 sessions per person, 60-day expiry.
+- **Requests**: custom-header + same-host `Origin` + `Sec-Fetch-Site` checks on every write; no CORS. Strict CSP (`script-src 'self'`, `style-src 'self'`, no inline code), `frame-ancestors 'none'`, nosniff, same-origin referrer/resource policies, HSTS over https, `noindex`.
+- **No XSS by construction**: pages build DOM with `h()` (text nodes); `innerHTML` is never used. Text from users is stripped of control, zero-width and bidi-override characters and length-limited on the server.
+- **Abuse limits**: 120 writes/minute per person, 10 events/day per student, friend-code lookups and requests limited per hour, sign-in throttled per address (generous, because a school shares one address), caps on users, events and friends. Client address comes from `X-Real-IP` only when `TRUST_PROXY=true` (WebManager's Nginx overwrites it).
+- **Data handling**: default display name is first name + last initial; emails are never sent to other students; friend codes can be regenerated; deleting an account removes the person, their events, sessions and friend links; nothing sensitive is logged.
 
-The three schedule types (`daily`, `advisory`, `early_release`) and their period times come from MHS's official "Daily Rotating Schedule" document (linked from mhs.masd.k12.wi.us as "Bell Schedule" / "Class Schedule"). Each schedule is a list of periods:
+## Adding a tool
 
-```js
-{ hour: 1, label: 'Hour 1', start: '07:30', end: '08:32' }
-```
+Add an entry to `TOOLS` in `public/js/pages/tools.js`; an empty `url` shows "Coming soon".
 
-`getCurrentPeriod(scheduleKey, now)` compares the current time against a schedule's periods and returns one of:
-- `{ status: 'before-school', next }`
-- `{ status: 'in-class', period }`
-- `{ status: 'passing', next }`
-- `{ status: 'after-school' }`
+## Limits
 
-There is no public feed for which rotation day (A/B/C/D) or which schedule type applies on a given calendar date, so the dashboard just lets you pick both yourself (stored in `mhs_today`). If MHS ever publishes a rotation calendar, that's the place to wire up an automatic lookup instead of the manual dropdowns in `index.html`.
-
-## Adding a new tool (`tools.html`)
-
-Tools are just entries in the `TOOLS` array inside `tools.html`:
-
-```js
-const TOOLS = [
-  { name: 'Class Cards', description: '...', url: '' } // url: '' shows "Coming soon"
-];
-```
-
-Add a new object to that array to add a tool card. Class Cards itself is being built as a separate app — once it's deployed, put its URL in that `url` field.
-
-## Known limitations (this version)
-
-- **No accounts** — nothing identifies "you" across devices or browsers.
-- **No sharing** — `events.html` and `schedule.html` only affect the browser you're using; two people never see the same data.
-- **Friends/sharing don't work** — `friends.html` is a placeholder explaining this.
-- **"Today's schedule" is manual** — no calendar feed tells the site which day letter or schedule type applies.
-
-## The fuller version (reference)
-
-A version with real Google OAuth sign-in, a shared SQLite database, and friends who can see each other's current class was built first, as a small Node.js/Express app. It's not in this repo's history in this branch, but the shape was:
-
-- `server.js` + `routes/*.js` — Express app and routes (`/`, `/schedule`, `/friends`, `/events`, `/tools`, `/auth/google*`)
-- `db/init.js` — SQLite schema (`users`, `classes`, `friendships`, `events`, `site_settings`)
-- `lib/passport.js` — Google OAuth strategy
-- `lib/bellSchedule.js` — same bell schedule data as this version
-- `views/*.ejs` — server-rendered pages
-
-That version needs a place to actually run (a small VM/LXC works well, since it's a plain Node process + local SQLite file — no external services required beyond Google OAuth credentials). Bring it back when you're ready to self-host real accounts; the bell schedule data and general page layout can be reused as-is.
+One JSON file in memory: comfortable for a school (a 3,000-student database with full schedules idles around 130 MB, hence the 512 MB container limit), not for huge sites. Restore files are limited to 12 MB and accounts to 5,000. Login throttling and rate limits are in memory and reset on restart.
