@@ -27,7 +27,8 @@ const step = (m) => console.log('•', m);
 
 (async () => {
   const mock = await startMockGoogle();
-  const ctx = await startApp({ mock, env: { ALLOWED_DOMAINS: 'school.test', ADMIN_EMAILS: 'admin@school.test' } });
+  // EVENT_POSTING=verified is the real default (the test helper opens posting to everyone)
+  const ctx = await startApp({ mock, env: { ALLOWED_DOMAINS: 'school.test', ADMIN_EMAILS: 'admin@school.test', EVENT_POSTING: 'verified' } });
   const base = ctx.local;
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 
@@ -113,31 +114,51 @@ const step = (m) => console.log('•', m);
   assert.match(ann.page.url(), /schedule\.html$/);
   step('sign-in returned to the page the student wanted');
   const sp = ann.page;
-  await sp.waitForSelector('#panel-A .slot');
-  assert.equal(await sp.locator('#tab-A').getAttribute('aria-selected'), 'true'); // today is Day A
-  const fillSlot = async (day, hour, name, teacher, room) => {
-    await sp.fill(`[data-day="${day}"][data-hour="${hour}"][data-field="name"]`, name);
-    await sp.fill(`[data-day="${day}"][data-hour="${hour}"][data-field="teacher"]`, teacher);
-    await sp.fill(`[data-day="${day}"][data-hour="${hour}"][data-field="room"]`, room);
+  // one row per color block; Day A runs Yellow, Red, Pink, Green, Purple, Silver
+  await sp.waitForSelector('#blocks [data-block="yellow"][data-field="name"]');
+  assert.equal(await sp.locator('#blocks [data-field="name"]').count(), 8);
+  const field = (block, f) => `#blocks [data-block="${block}"][data-field="${f}"]`;
+  const fillBlock = async (block, name, teacher, room, lunch) => {
+    await sp.fill(field(block, 'name'), name);
+    if (teacher) await sp.fill(field(block, 'teacher'), teacher);
+    if (room) await sp.fill(field(block, 'room'), room);
+    if (lunch) await sp.selectOption(field(block, 'lunch'), lunch);
   };
-  await fillSlot('A', 1, 'English 10', 'Ms. Quill', '110');
-  await fillSlot('A', 2, 'Algebra II', 'Mr. Sum', '204');
-  await fillSlot('A', 3, 'Chemistry', 'Dr. Mole', '305');
-  await fillSlot('A', 4, 'Spanish 2', 'Sra. Sol', '118');
-  await sp.fill('[data-day="A"][data-hour="5"][data-field="name"]', '<img src=x onerror="window.__xss=1">');
+  // the lunch picker is only on the Hour 4 blocks: Green (Day A) and Orange (Days B-D)
+  assert.deepEqual(await sp.locator('#blocks [data-field="lunch"]').evaluateAll((els) => els.map((e) => e.dataset.block)), ['green', 'orange']);
+  assert.deepEqual(await sp.locator(field('green', 'lunch') + ' option').evaluateAll((els) => els.map((e) => e.value)), ['', 'A', 'B', 'C']);
+  assert.match(await text(sp, '#lunch-help'), /Green[\s\S]*Day A[\s\S]*Orange[\s\S]*Day B, Day C, Day D/);
+  await fillBlock('yellow', 'English 10', 'Ms. Quill', '110');
+  await fillBlock('red', 'Algebra II', 'Mr. Sum', '204');
+  await fillBlock('pink', 'Chemistry', 'Dr. Mole', '305');
+  await fillBlock('green', 'Spanish 2', 'Sra. Sol', '118', 'B');
+  await fillBlock('orange', 'Health', 'Mr. Fit', '120', 'C');
+  await sp.fill(field('purple', 'name'), '<img src=x onerror="window.__xss=1">');
   assert.match(await text(sp, '#save-state'), /Unsaved/);
-  await sp.click('#day-actions button:has-text("Copy Day A")');
-  assert.equal(await sp.inputValue('[data-day="C"][data-hour="3"][data-field="name"]'), 'Chemistry');
-  await sp.click('#tab-B'); await sp.click('#day-actions button:has-text("Clear Day B")');
-  assert.equal(await sp.inputValue('[data-day="B"][data-hour="3"][data-field="name"]'), '');
+  // the rotation grid follows what's typed: Pink is Hour 3 on Days A-C, Blue (unset) on Day D
+  const gridRow = (hour) => sp.locator(`#rotation tbody tr:nth-child(${hour}) td`);
+  assert.deepEqual((await gridRow(3).allInnerTexts()).map((t) => t.split('\n')[0]), ['Chemistry', 'Chemistry', 'Chemistry', 'Blue']);
+  assert.match((await gridRow(4).allInnerTexts())[0], /Spanish 2[\s\S]*Green · B Lunch/);
+  assert.match((await gridRow(4).allInnerTexts())[1], /Health[\s\S]*Orange · C Lunch/);
   await sp.click('#save-btn');
   await sp.waitForFunction(() => document.querySelector('#save-state').innerText === '');
-  await sp.reload(); await sp.waitForSelector('#panel-A .slot');
-  assert.equal(await sp.inputValue('[data-day="A"][data-hour="3"][data-field="name"]'), 'Chemistry');
-  assert.equal(await sp.inputValue('[data-day="D"][data-hour="2"][data-field="teacher"]'), 'Mr. Sum');
+  await sp.reload(); await sp.waitForSelector(field('yellow', 'name'));
+  assert.equal(await sp.inputValue(field('pink', 'name')), 'Chemistry');
+  assert.equal(await sp.inputValue(field('red', 'teacher')), 'Mr. Sum');
+  assert.equal(await sp.inputValue(field('green', 'lunch')), 'B');
+  assert.equal(await sp.inputValue(field('orange', 'lunch')), 'C');
+  assert.equal(await sp.inputValue(field('purple', 'name')), '<img src=x onerror="window.__xss=1">');
   assert.equal(await sp.evaluate(() => window.__xss), undefined, 'class names never execute as HTML');
+  assert.equal(await sp.locator('#rotation img').count(), 0);
+  // Clear all empties every block but saves nothing until Save
+  await sp.click('#clear-btn');
+  assert.equal(await sp.inputValue(field('pink', 'name')), '');
+  assert.equal(await sp.inputValue(field('green', 'lunch')), '');
+  assert.match(await text(sp, '#save-state'), /Unsaved/);
+  await sp.reload(); await sp.waitForSelector(field('yellow', 'name'));
+  assert.equal(await sp.inputValue(field('pink', 'name')), 'Chemistry');
   await sp.screenshot({ path: path.join(SHOTS, 'schedule.png'), fullPage: true });
-  step('schedule: edit, copy day, clear day, save, reload persisted; HTML in a class name stays text');
+  step('schedule: fill blocks + lunch, grid follows, save, reload persisted, clear all unsaved; HTML in a class name stays text');
 
   // dashboard with live status (Thu 10:00 AM = Hour 3)
   await sp.goto(base + '/index.html');
@@ -150,14 +171,19 @@ const step = (m) => console.log('•', m);
   assert.match(await text(sp, '#day-head'), /Thursday, October 1[\s\S]*Day A/);
   assert.match(await text(sp, '#schedule-body tr.current'), /Hour 3[\s\S]*9:49 AM – 10:51 AM[\s\S]*Chemistry/);
   assert.match(await text(sp, '#schedule-body'), /9:44 AM – 9:49 AM · MTV & Announcements/);
+  // Hour 4 on Day A is Green, so it shows Green's B Lunch time
+  assert.match(await text(sp, '#schedule-body tr[data-hour="4"]'), /Spanish 2[\s\S]*Green[\s\S]*B Lunch 11:31 AM – 11:56 AM/);
+  assert.equal(await sp.evaluate(() => window.__xss), undefined);
   await sp.screenshot({ path: path.join(SHOTS, 'dashboard-ann.png'), fullPage: true });
-  // next school day: Fri 10/2 (Day B) then skips the break to Thu 10/8 (Day C)
+  // next school day: Fri 10/2 (Day B, Hour 4 = Orange, C Lunch) then skips the break to Thu 10/8 (Day C)
   await sp.click('button:has-text("Next school day")');
   assert.match(await text(sp, '#day-head'), /Friday, October 2[\s\S]*Day B/);
+  assert.match(await text(sp, '#schedule-body tr[data-hour="4"]'), /Health[\s\S]*Orange[\s\S]*C Lunch 12:06 PM – 12:31 PM/);
   await sp.click('button:has-text("Next school day")');
   assert.match(await text(sp, '#day-head'), /Thursday, October 8[\s\S]*Day C/);
   await sp.click('button:has-text("Next school day")');
   assert.match(await text(sp, '#day-head'), /Friday, October 9[\s\S]*Early release/);
+  assert.match(await text(sp, '#schedule-body tr[data-hour="4"]'), /Health[\s\S]*C Lunch 10:44 AM – 11:09 AM/); // early release lunch times
   assert.equal(await sp.locator('#status').isHidden(), true);
   await sp.click('button:has-text("Back to today")');
   assert.match(await text(sp, '#day-head'), /Thursday, October 1/);
@@ -184,24 +210,36 @@ const step = (m) => console.log('•', m);
   await sp.fill('#friend-code', 'AAAAA-AAAAA'); await sp.click('#find-form button');
   await sp.waitForSelector('#confirm-box.error');
   assert.match(await text(sp, '#confirm-box'), /No one has that code/);
-  // Ben fills in a schedule that overlaps with Ann's Algebra and Chemistry
-  await bp.goto(base + '/schedule.html'); await bp.waitForSelector('#panel-A .slot');
-  await bp.fill('[data-day="A"][data-hour="2"][data-field="name"]', 'algebra ii');
-  await bp.fill('[data-day="A"][data-hour="2"][data-field="teacher"]', 'Mr. Sum');
-  await bp.fill('[data-day="A"][data-hour="3"][data-field="name"]', 'Physics');
-  await bp.fill('[data-day="A"][data-hour="3"][data-field="room"]', '301');
+  // Ben's Red block is Ann's Algebra (same class, different case), his Pink isn't, and he shares her B Lunch
+  await bp.goto(base + '/schedule.html'); await bp.waitForSelector('#blocks [data-block="red"][data-field="name"]');
+  await bp.fill('#blocks [data-block="red"][data-field="name"]', 'algebra ii');
+  await bp.fill('#blocks [data-block="red"][data-field="teacher"]', 'Mr. Sum');
+  await bp.fill('#blocks [data-block="pink"][data-field="name"]', 'Physics');
+  await bp.fill('#blocks [data-block="pink"][data-field="room"]', '301');
+  await bp.fill('#blocks [data-block="green"][data-field="name"]', 'Art');
+  await bp.selectOption('#blocks [data-block="green"][data-field="lunch"]', 'B');
   await bp.click('#save-btn'); await bp.waitForFunction(() => document.querySelector('#save-state').innerText === '');
   await bp.goto(base + '/index.html'); await bp.waitForSelector('#schedule-body tr.current');
   assert.match(await text(bp, '#friends-preview'), /Ann L\.[\s\S]*Chemistry · Rm 305/);
   assert.match(await text(bp, '#schedule-body'), /Algebra/i);
   assert.match(await text(bp, '#schedule-body tr[data-hour="2"]'), /With Ann L\./);
   assert.doesNotMatch(await text(bp, '#schedule-body tr[data-hour="3"]'), /With/);
+  assert.match(await text(bp, '#schedule-body tr[data-hour="4"]'), /Art[\s\S]*B Lunch 11:31 AM – 11:56 AM[\s\S]*Lunch with Ann L\./);
   await bp.screenshot({ path: path.join(SHOTS, 'dashboard-ben-mobile.png'), fullPage: true });
-  step('friends: accepted; friend shown in current class; shared-class hint on matching hours only');
+  step('friends: accepted; friend shown in current class; shared-class and shared-lunch hints on matching hours only');
 
   // ---------------------------------------------------------------- events + XSS
+  // posting is for admins and verified people by default: Ann can't until the admin verifies her
   const ep = ann.page;
-  await ep.goto(base + '/events.html'); await ep.waitForSelector('#add-card:not([hidden])');
+  await ep.goto(base + '/events.html'); await ep.waitForSelector('#signin-card:not([hidden])');
+  assert.equal(await ep.locator('#add-card').isHidden(), true);
+  assert.match(await text(ep, '#signin-card'), /Only verified people can add events/);
+  await ap.goto(base + '/admin.html'); await ap.waitForSelector('#users tr');
+  await ap.click('#users button[aria-label="Verify Ann L."]');
+  await ap.waitForSelector('.toast:has-text("Ann L. can now post events")');
+  assert.match(await text(ap, '#users'), /Ann L\.\s*verified/);
+  step('events: unverified student cannot post; admin verifies Ann');
+  await ep.reload(); await ep.waitForSelector('#add-card:not([hidden])');
   await ep.fill('#title', '<img src=x onerror="window.__xss2=1"> Pep rally');
   await ep.fill('#date', '2026-10-03'); await ep.fill('#time', '14:30'); await ep.fill('#description', '<script>window.__xss3=1</script>Gym');
   await ep.click('#event-form button');
