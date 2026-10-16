@@ -6,7 +6,8 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
   <title>Account · MHS Hub</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/icon-167.png" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -21,10 +22,19 @@
       <form id="profile-form" class="form-grid">
         <label class="wide"><span>Display name (shown to your friends, in name search and on events you add)</span>
           <input type="text" id="name" maxlength="40" required /></label>
+        <div class="wide">
+          <span class="field-label">Avatar</span>
+          <div class="person" id="avatar-preview"></div>
+          <div class="picker" id="color-picker" role="radiogroup" aria-label="Avatar color"></div>
+          <div class="picker" id="emoji-picker" role="radiogroup" aria-label="Avatar picture"></div>
+        </div>
+        <label><span>Pronouns (optional)</span><input type="text" id="pronouns" maxlength="20" placeholder="she/her, he/him, they/them…" /></label>
         <label><span>Grade</span>
           <select id="grade"><option value="">Not set</option><option value="9">9th</option><option value="10">10th</option><option value="11">11th</option><option value="12">12th</option></select></label>
         <label class="wide"><span>Bio (optional, shown to friends)</span>
           <textarea id="bio" maxlength="160" rows="2" placeholder="Clubs, sports, what you're into…"></textarea></label>
+        <label class="wide"><span>Interests (up to 5, separated by commas)</span>
+          <input type="text" id="interests" maxlength="140" placeholder="Robotics, soccer, band" /></label>
         <div class="wide row"><button class="btn" type="submit" id="profile-save">Save profile</button><span class="small muted" id="bio-count"></span></div>
       </form>
       <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students.</p>
@@ -50,6 +60,7 @@
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
   <script src="js/pages/account.js"></script>
 </body>

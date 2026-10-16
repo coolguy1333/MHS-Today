@@ -1,5 +1,5 @@
 // Friends: share a code, add by code (always confirmed first) or by name search, accept requests,
-// see where friends are, and choose what each friend can see of your schedule.
+// see where friends are, choose what each friend can see of your schedule, and people you may know.
 (async function () {
   renderNav('friends');
   const user = await requireLogin();
@@ -10,21 +10,29 @@
   let lastKey = '';
 
   const LEVELS = [['full', 'Classes + lunch'], ['lunch', 'Lunch only'], ['none', 'Nothing']];
-  const gradeText = (g) => (g ? `${g}th grade` : null);
   const pretty = (c) => `${c.slice(0, 5)}-${c.slice(5)}`;
   const inviteLink = () => `${location.origin}/friends.html?code=${myCode}`;
   const showCode = () => { $('my-code').textContent = pretty(myCode); };
+
+  // Avatar + name (+ grade) for anyone; a friend's name opens their profile card.
+  function person(p, ...more) {
+    const name = p.bio !== undefined
+      ? h('button', { class: 'linklike name-link', type: 'button', onclick: () => showProfileCard(p) }, p.name)
+      : h('strong', null, p.name);
+    return h('div', { class: 'person' }, avatarEl(p, 36),
+      h('div', null, name, gradeText(p.grade) ? h('span', { class: 'small muted' }, ` · ${gradeText(p.grade)}`) : null, more));
+  }
 
   function render() {
     const live = liveState(info);
     const reqs = [
       ...data.incoming.map((r) => h('div', { class: 'list-row' },
-        h('div', null, h('strong', null, r.name), ' wants to be friends'),
+        person(r, h('div', { class: 'small muted' }, 'wants to be friends')),
         h('div', { class: 'row' },
           h('button', { class: 'btn small', type: 'button', onclick: (e) => act(e, () => api('POST', `/api/friends/${r.id}/accept`, {}), `You and ${r.name} are friends`) }, 'Accept'),
           h('button', { class: 'btn small secondary', type: 'button', onclick: (e) => act(e, () => api('DELETE', `/api/friends/${r.id}`), 'Request declined') }, 'Decline')))),
       ...data.outgoing.map((r) => h('div', { class: 'list-row' },
-        h('div', null, 'Request sent to ', h('strong', null, r.name), h('div', { class: 'small muted' }, 'Waiting for them to accept')),
+        person(r, h('div', { class: 'small muted' }, 'Request sent. Waiting for them to accept')),
         h('button', { class: 'linklike danger', type: 'button', onclick: (e) => act(e, () => api('DELETE', `/api/friends/${r.id}`), 'Request cancelled') }, 'Cancel')))
     ];
     $('requests-card').hidden = !reqs.length;
@@ -43,9 +51,8 @@
           } catch (err) { level.value = f.myLevel; throw err; }
         }));
         return h('div', { class: 'list-row friend-row' },
-          h('div', null,
-            h('strong', null, f.name), gradeText(f.grade) ? h('span', { class: 'small muted' }, ` · ${gradeText(f.grade)}`) : null,
-            f.bio ? h('div', { class: 'small' }, f.bio) : null,
+          person(f,
+            f.pronouns ? h('span', { class: 'small muted' }, ` · ${f.pronouns}`) : null,
             h('div', { class: 'small' + (t.muted ? ' muted' : '') }, t.text),
             lunch ? h('div', { class: 'small' + (lunch.same ? '' : ' muted') }, `Today: ${lunch.text}`) : null),
           h('div', { class: 'friend-actions' },
@@ -55,7 +62,30 @@
               onclick: (e) => { if (confirm(`Remove ${f.name} from your friends?`)) act(e, () => api('DELETE', `/api/friends/${f.id}`), `${f.name} removed`); }
             }, 'Remove')));
       })
-      : h('p', { class: 'muted' }, "No friends yet. Share your code, or enter a friend's code above."));
+      : h('p', { class: 'muted' }, "No friends yet. Search for someone's name, or share your code."));
+  }
+
+  // ---- people you may know
+  async function loadSuggestions() {
+    const { suggestions } = await api('GET', '/api/friends/suggestions');
+    $('suggest-card').hidden = !suggestions.length;
+    fill($('suggestions'), suggestions.map((s) => {
+      const why = [
+        s.mutual ? `${s.mutual} mutual friend${s.mutual === 1 ? '' : 's'}` : null,
+        s.sharedClasses ? (s.sharedClasses === 1 ? 'In one of your classes' : `In ${s.sharedClasses} of your classes`) : null
+      ].filter(Boolean).join(' · ');
+      return h('div', { class: 'list-row' },
+        person(s, h('div', { class: 'small muted' }, why)),
+        h('div', { class: 'row' },
+          h('button', {
+            class: 'btn small', type: 'button',
+            onclick: (e) => act(e, async () => { await api('POST', '/api/friends/request', { id: s.id }); await loadSuggestions(); }, `Request sent to ${s.name}`)
+          }, 'Add friend'),
+          h('button', {
+            class: 'linklike', type: 'button', 'aria-label': `Hide ${s.name} from suggestions`,
+            onclick: (e) => busy(e.currentTarget, async () => { await api('POST', `/api/friends/suggestions/${s.id}/hide`, {}); await loadSuggestions(); })
+          }, 'Hide')));
+    }));
   }
 
   async function load(force) {
@@ -117,7 +147,7 @@
         onclick: (e) => act(e, async () => { await api('POST', '/api/friends/request', { id: r.id }); await runSearch(lastQuery); }, `Request sent to ${r.name}`)
       }, 'Add friend')
     }[r.status || 'none'];
-    return h('div', { class: 'list-row' }, h('div', null, h('strong', null, r.name), gradeText(r.grade) ? h('span', { class: 'small muted' }, ` · ${gradeText(r.grade)}`) : null), status);
+    return h('div', { class: 'list-row' }, person(r), status);
   }
   async function runSearch(q, button) {
     lastQuery = q;
@@ -139,6 +169,7 @@
   try {
     info = await loadCalendar();
     await load(true);
+    loadSuggestions().catch(() => {});
   } catch (e) {
     fill($('friends'), h('p', { class: 'notice error' }, e.message));
   }

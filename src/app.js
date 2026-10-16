@@ -7,6 +7,7 @@ const crypto = require('node:crypto');
 
 const cal = require('../public/js/calendar.js');
 const bell = require('../public/js/bellSchedule.js');
+const avatars = require('../public/js/avatars.js');
 const { openDb } = require('./db');
 const { createGoogle, AuthError, newPkce } = require('./google');
 const { createMenu } = require('./menu');
@@ -23,6 +24,23 @@ const EVENT_KEEP_DAYS = 60; // events older than this are removed automatically
 // What a friend may see of your schedule: everything, only which lunch you have, or nothing.
 const SHARE_LEVELS = ['full', 'lunch', 'none'];
 const GRADES = [9, 10, 11, 12];
+const MAX_LINKS = 100;
+const MAX_HIDDEN_SUGGESTIONS = 300;
+// Starting list for the Links page (admins can change it). All from the MHS and district websites.
+const DEFAULT_LINKS = [
+  ['Tickets & events', 'MHS events ticketing', 'https://www.justagame.com/clients/12_caXiG', 'Buy tickets for games, concerts and other MHS events.'],
+  ['Tickets & events', 'Athletic schedules', 'https://www.gobound.com/wi/schools/mukwonago', 'Game times and results for every MHS team.'],
+  ['Tickets & events', 'Classic 8 conference', 'https://www.gobound.com/wi/conferences/classiceight', ''],
+  ['Activities', 'Athletics & Activities', 'https://mhs.masd.k12.wi.us/Athletics--Activities/index.html', 'Teams, clubs and how to join.'],
+  ['Activities', 'Booster Club', 'https://mhs.masd.k12.wi.us/Athletics--Activities/Athletics/Booster-Club/index.html', ''],
+  ['Activities', 'Fine Arts', 'https://mhs.masd.k12.wi.us/Athletics--Activities/Activities/Fine-Arts/index.html', ''],
+  ['School', 'Infinite Campus', 'https://mukwonagowi.infinitecampus.org/campus/portal/mukwonago.jsp', 'Grades, attendance and your official schedule.'],
+  ['School', 'MHS calendar', 'https://mhs.masd.k12.wi.us/__catapult_pages/78502d00-3dcd-46f6-ad44-e5e7a9b512ad/Calendar.html', ''],
+  ['School', 'Lunch menus', 'https://www.myschoolmenus.com/organizations/2534', ''],
+  ['Counseling', 'Counseling', 'https://mhs.masd.k12.wi.us/Academics/Counseling/index.html', ''],
+  ['Counseling', 'Course registration', 'https://mhs.masd.k12.wi.us/Academics/Counseling/Course-Registration/index.html', ''],
+  ['Counseling', 'Scholarships & financial aid', 'https://mhs.masd.k12.wi.us/Academics/Counseling/Scholarships-and-Financial-Aid/index.html', '']
+];
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -67,7 +85,10 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
 
   // ---------- small helpers ----------
   const today = () => cal.schoolNow(config.tz).date;
-  const isAdmin = (u) => !!u && config.adminEmails.has(u.email);
+  // Owners are the ADMIN_EMAILS (always admins, can't be removed in the app); other admins are
+  // people an admin promoted on the Admin page.
+  const isOwner = (u) => !!u && config.adminEmails.has(u.email);
+  const isAdmin = (u) => isOwner(u) || (!!u && u.adminGranted === true);
   // Events go on a board everyone sees, so by default only people an admin has verified may post.
   const canPostEvents = (u) => !!u && (isAdmin(u) || config.eventPosting === 'everyone' || (config.eventPosting === 'verified' && u.verified === true));
   const getUser = (id) => (typeof id === 'string' && hasOwn(state.users, id) ? state.users[id] : null);
@@ -164,6 +185,11 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (!GRADES.includes(u.grade)) u.grade = null;
     if (typeof u.bio !== 'string') u.bio = '';
     if (typeof u.profileLocked !== 'boolean') u.profileLocked = false;
+    if (typeof u.adminGranted !== 'boolean') u.adminGranted = false;
+    if (typeof u.pronouns !== 'string') u.pronouns = '';
+    if (!Array.isArray(u.interests)) u.interests = [];
+    u.avatar = avatars.clean(u.avatar);
+    if (!Array.isArray(u.hiddenSuggestions)) u.hiddenSuggestions = [];
     return u;
   }
   for (const u of Object.values(state.users)) fillUserDefaults(u);
@@ -189,15 +215,23 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   function deleteUser(id) {
     delete state.users[id];
     for (const [h, s] of Object.entries(state.sessions)) if (s.userId === id) delete state.sessions[h];
-    for (const u of Object.values(state.users)) { u.friends = u.friends.filter((f) => f !== id); delete u.shareLevels[id]; }
+    for (const u of Object.values(state.users)) {
+      u.friends = u.friends.filter((f) => f !== id);
+      delete u.shareLevels[id];
+      u.hiddenSuggestions = u.hiddenSuggestions.filter((f) => f !== id);
+    }
     state.events = state.events.filter((e) => e.by !== id);
     db.save();
   }
   const profile = (u) => ({
-    id: u.id, name: u.name, admin: isAdmin(u), verified: u.verified === true, canPostEvents: canPostEvents(u),
+    id: u.id, name: u.name, admin: isAdmin(u), owner: isOwner(u), verified: u.verified === true, canPostEvents: canPostEvents(u),
     friendCode: u.friendCode, shareSchedule: u.shareSchedule, searchable: u.searchable,
-    grade: u.grade, bio: u.bio, profileLocked: u.profileLocked
+    grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, pronouns: u.pronouns, interests: u.interests, avatar: u.avatar
   });
+  // What anyone signed in may see of someone (search results, suggestions, requests).
+  const publicCard = (u) => ({ id: u.id, name: u.name, grade: u.grade, avatar: u.avatar });
+  // What friends see: the card plus the rest of the profile.
+  const friendCard = (u) => ({ ...publicCard(u), bio: u.bio, pronouns: u.pronouns, interests: u.interests });
   // What `owner` lets `viewer` (a friend) see. The Account page's master switch turns everything off.
   const shareLevel = (owner, viewerId) => (!owner.shareSchedule ? 'none' : owner.shareLevels[viewerId] || 'full');
   // Lunch letter for each day letter, for friends who see only lunch.
@@ -249,7 +283,53 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (typeof b.bio !== 'string') throw bad('Invalid bio');
       out.bio = cleanText(b.bio, 160);
     }
+    if (b.pronouns !== undefined) {
+      if (typeof b.pronouns !== 'string') throw bad('Invalid pronouns');
+      out.pronouns = cleanText(b.pronouns, 20);
+    }
+    if (b.interests !== undefined) {
+      if (!Array.isArray(b.interests) || b.interests.length > 10) throw bad('Invalid interests');
+      const seen = new Set();
+      out.interests = [];
+      for (const i of b.interests) {
+        const t = cleanText(i, 24);
+        if (!t || seen.has(t.toLowerCase())) continue;
+        seen.add(t.toLowerCase());
+        out.interests.push(t);
+      }
+      if (out.interests.length > 5) throw bad('Pick up to 5 interests');
+    }
+    if (b.avatar !== undefined) {
+      if (!isPlainObject(b.avatar)) throw bad('Invalid avatar');
+      out.avatar = avatars.clean(b.avatar);
+    }
     return out;
+  }
+  // Same class = same name, and the same teacher when both have one (like the pages' sameClass).
+  const normClass = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  function sameClass(a, b) {
+    if (!a || !b || normClass(a.name) !== normClass(b.name)) return false;
+    const ta = normClass(a.teacher), tb = normClass(b.teacher);
+    return !ta || !tb || ta === tb;
+  }
+  // Admin-managed links: validated like any user input; returns null for an invalid entry.
+  function cleanLink(l) {
+    if (!isPlainObject(l)) return null;
+    const title = cleanText(l.title, 80);
+    const url = typeof l.url === 'string' ? l.url.trim() : '';
+    let u;
+    try { u = new URL(url); } catch { return null; }
+    if (!title || url.length > 500 || (u.protocol !== 'https:' && u.protocol !== 'http:')) return null;
+    return {
+      id: typeof l.id === 'string' && /^[0-9a-f]{16}$/.test(l.id) ? l.id : randomId(),
+      title, url: u.href, category: cleanText(l.category, 40) || 'Other', description: cleanText(l.description, 160)
+    };
+  }
+  if (!Array.isArray(state.links)) {
+    state.links = DEFAULT_LINKS.map(([category, title, url, description]) => cleanLink({ category, title, url, description }));
+    db.save();
+  } else {
+    state.links = state.links.map(cleanLink).filter(Boolean).slice(0, MAX_LINKS);
   }
   // Lowercase, accents removed, only letters/digits: 'José O\'Neil' -> ['jose', 'oneil']
   const nameWords = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -277,10 +357,12 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         id: u.id, sub: u.sub, email: u.email, name: u.name, created: u.created, lastLogin: u.lastLogin,
         classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule, verified: u.verified === true,
         givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels,
-        grade: u.grade, bio: u.bio, profileLocked: u.profileLocked
+        grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
+        pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions
       })),
       events: state.events,
-      calendar: state.calendar
+      calendar: state.calendar,
+      links: state.links
     };
   }
   // Validates everything from the file as if it were fresh user input.
@@ -306,14 +388,23 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
         verified: u.verified === true, givenName: cleanText(u.givenName, 30), familyName: cleanText(u.familyName, 40),
         searchable: u.searchable !== false, grade: GRADES.includes(u.grade) ? u.grade : null, bio: cleanText(u.bio, 160),
-        profileLocked: u.profileLocked === true
+        profileLocked: u.profileLocked === true, adminGranted: u.adminGranted === true, avatar: avatars.clean(u.avatar)
       });
+      try {
+        Object.assign(users[u.id], cleanProfileFields({
+          pronouns: typeof u.pronouns === 'string' ? u.pronouns : '',
+          interests: Array.isArray(u.interests) ? u.interests.slice(0, 5) : []
+        }));
+      } catch { /* keep the defaults */ }
+      users[u.id].rawHidden = Array.isArray(u.hiddenSuggestions) ? u.hiddenSuggestions : [];
       users[u.id].rawLevels = isPlainObject(u.shareLevels) ? u.shareLevels : {};
     }
     for (const u of Object.values(users)) {
       u.friends = [...new Set(friendIds[u.id].filter((f) => typeof f === 'string' && f !== u.id && hasOwn(users, f)))].slice(0, MAX_FRIENDS);
       for (const f of u.friends) if (hasOwn(u.rawLevels, f) && ['lunch', 'none'].includes(u.rawLevels[f])) u.shareLevels[f] = u.rawLevels[f];
       delete u.rawLevels;
+      u.hiddenSuggestions = [...new Set(u.rawHidden.filter((f) => typeof f === 'string' && f !== u.id && hasOwn(users, f)))].slice(0, MAX_HIDDEN_SUGGESTIONS);
+      delete u.rawHidden;
       while (!u.friendCode) {
         const c = newFriendCode();
         if (!codes.has(c)) { codes.add(c); u.friendCode = c; }
@@ -332,6 +423,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     state.users = users;
     state.events = events;
     state.calendar = cal.cleanCalendar(data.calendar, today());
+    if (Array.isArray(data.links)) state.links = data.links.map(cleanLink).filter(Boolean).slice(0, MAX_LINKS);
     for (const [h, s] of Object.entries(state.sessions)) if (!hasOwn(users, s.userId)) delete state.sessions[h];
     db.save();
     return { users: data.users.length, events: events.length, droppedEvents: dropped };
@@ -391,6 +483,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     return { ...(await menu.day(date)), source: menu.pageUrl };
   });
 
+  route('GET', '/api/links', { auth: 'none' }, () => state.links);
+
   route('GET', '/api/classes', { auth: 'user' }, ({ user }) => user.classes);
   route('PUT', '/api/classes', { auth: 'user' }, ({ user, body }) => {
     user.classes = cleanClasses(body);
@@ -440,16 +534,16 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (o.friends.includes(user.id)) {
         const level = shareLevel(o, user.id);
         friends.push({
-          id: o.id, name: o.name, grade: o.grade, bio: o.bio,
+          ...friendCard(o),
           level, // what they share with you
           myLevel: user.shareLevels[o.id] || 'full', // what you share with them (before your master switch)
           classes: level === 'full' ? o.classes : null,
           lunches: level === 'lunch' ? lunchesOf(o) : null
         });
-      } else outgoing.push({ id: o.id, name: o.name });
+      } else outgoing.push(publicCard(o));
     }
     for (const o of Object.values(state.users)) {
-      if (o.friends.includes(user.id) && !user.friends.includes(o.id)) incoming.push({ id: o.id, name: o.name });
+      if (o.friends.includes(user.id) && !user.friends.includes(o.id)) incoming.push(publicCard(o));
     }
     const byName = (a, b) => a.name.localeCompare(b.name);
     return { friends: friends.sort(byName), incoming: incoming.sort(byName), outgoing: outgoing.sort(byName) };
@@ -473,7 +567,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       const names = nameWords(`${o.givenName} ${o.familyName} ${o.name}`);
       if (!words.every((w) => names.some((n) => n.startsWith(w)))) continue;
       const mine = user.friends.includes(o.id), theirs = o.friends.includes(user.id);
-      results.push({ id: o.id, name: o.name, grade: o.grade, status: mine && theirs ? 'friends' : mine ? 'requested' : theirs ? 'incoming' : null });
+      results.push({ ...publicCard(o), status: mine && theirs ? 'friends' : mine ? 'requested' : theirs ? 'incoming' : null });
     }
     results.sort((a, b) => a.name.localeCompare(b.name));
     return { results: results.slice(0, 20), more: results.length > 20 };
@@ -508,6 +602,33 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     }
     return { ok: true };
   });
+  // People you may know: friends of your friends, and people in your classes. Only people who allow
+  // name search are suggested, classes count only when that person shares their schedule, and the
+  // reason never says which class.
+  route('GET', '/api/friends/suggestions', { auth: 'user' }, ({ user }) => {
+    const confirmed = (u) => u.friends.filter((id) => { const o = getUser(id); return o && o.friends.includes(u.id); });
+    const myFriends = new Set(confirmed(user));
+    const out = [];
+    for (const o of Object.values(state.users)) {
+      if (o.id === user.id || !o.searchable || user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
+      const mutual = confirmed(o).filter((id) => myFriends.has(id)).length;
+      const shared = o.shareSchedule ? bell.BLOCK_KEYS.filter((k) => sameClass(user.classes[k], o.classes[k])).length : 0;
+      if (!mutual && !shared) continue;
+      out.push({ ...publicCard(o), mutual, sharedClasses: shared, score: mutual * 3 + shared * 2 });
+    }
+    out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    return { suggestions: out.slice(0, 8).map(({ score, ...s }) => s) };
+  });
+  route('POST', '/api/friends/suggestions/:id/hide', { auth: 'user' }, ({ user, params }) => {
+    if (!getUser(params.id)) throw new HttpError(404, 'That person can\'t be found');
+    if (!user.hiddenSuggestions.includes(params.id)) {
+      user.hiddenSuggestions.push(params.id);
+      if (user.hiddenSuggestions.length > MAX_HIDDEN_SUGGESTIONS) user.hiddenSuggestions.shift();
+      db.save();
+    }
+    return { ok: true };
+  });
+
   // What one friend may see of your schedule.
   route('PUT', '/api/friends/:id', { auth: 'user' }, ({ user, params, body }) => {
     if (!user.friends.includes(params.id)) throw new HttpError(404, 'Not on your friend list');
@@ -546,36 +667,55 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     .map((u) => ({
       id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u),
       verified: u.verified === true, friends: u.friends.length, fullName: `${u.givenName} ${u.familyName}`.trim(),
-      grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable
+      grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable,
+      owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar
     }))
     .sort((a, b) => b.lastLogin - a.lastLogin));
   // Admins can verify people, edit or reset anyone's profile, and lock a profile against changes.
   route('PUT', '/api/admin/users/:id', { auth: 'admin' }, ({ user, params, body }) => {
     const target = getUser(params.id);
     if (!target) throw new HttpError(404, 'No such user');
-    for (const k of ['verified', 'profileLocked']) if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
+    for (const k of ['verified', 'profileLocked', 'admin']) if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
     if (body.reset !== undefined && body.reset !== true) throw bad('Invalid setting');
+    if (body.admin !== undefined) {
+      if (isOwner(target)) throw bad('This person is an owner (in ADMIN_EMAILS); change that setting to remove them');
+      if (target.id === user.id) throw bad("You can't change your own admin role");
+    }
     const fields = body.reset
-      ? { name: nameFrom(target.givenName, target.familyName), grade: null, bio: '' }
+      ? { name: nameFrom(target.givenName, target.familyName), grade: null, bio: '', pronouns: '', interests: [], avatar: avatars.clean(null) }
       : cleanProfileFields(body);
-    const changed = [...Object.keys(fields), ...['verified', 'profileLocked'].filter((k) => body[k] !== undefined)];
+    const changed = [...Object.keys(fields), ...['verified', 'profileLocked', 'admin'].filter((k) => body[k] !== undefined)];
     if (!changed.length) throw bad('Nothing to change');
     Object.assign(target, fields);
     if (body.verified !== undefined) target.verified = body.verified;
     if (body.profileLocked !== undefined) target.profileLocked = body.profileLocked;
+    if (body.admin !== undefined) target.adminGranted = body.admin;
     log(`User ${target.id} ${body.reset ? 'profile reset' : `changed (${changed.join(', ')})`} by admin ${user.id}`);
     db.save();
     return {
-      ok: true, verified: target.verified === true, name: target.name, grade: target.grade, bio: target.bio, profileLocked: target.profileLocked
+      ok: true, verified: target.verified === true, name: target.name, grade: target.grade, bio: target.bio, profileLocked: target.profileLocked,
+      pronouns: target.pronouns, interests: target.interests, avatar: target.avatar, admin: isAdmin(target)
     };
   });
   route('DELETE', '/api/admin/users/:id', { auth: 'admin' }, ({ user, params }) => {
     const target = getUser(params.id);
     if (!target) throw new HttpError(404, 'No such user');
     if (target.id === user.id) throw bad('Use the Account page to delete your own account');
+    if (isOwner(target) && !isOwner(user)) throw new HttpError(403, 'Only an owner can remove an owner');
     log(`User ${target.id} removed by admin ${user.id}`);
     deleteUser(target.id);
     return { ok: true };
+  });
+  // The whole links list at once, in the order given.
+  route('PUT', '/api/admin/links', { auth: 'admin' }, ({ user, body }) => {
+    if (!Array.isArray(body.links) || body.links.length > MAX_LINKS) throw bad(`Send up to ${MAX_LINKS} links`);
+    const links = body.links.map(cleanLink);
+    const badAt = links.findIndex((l) => !l);
+    if (badAt >= 0) throw bad(`Link ${badAt + 1} needs a title and a web address starting with https://`);
+    state.links = links;
+    log(`Links updated by admin ${user.id} (${links.length})`);
+    db.save();
+    return state.links;
   });
   route('PUT', '/api/admin/calendar', { auth: 'admin' }, ({ body }) => {
     state.calendar = cal.cleanCalendar(body, today());

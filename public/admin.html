@@ -6,7 +6,8 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
   <title>Admin · MHS Hub</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/icon-167.png" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -53,10 +54,22 @@
 
       <div class="card">
         <h2>People</h2>
+        <p class="small muted">Owners come from the <code>ADMIN_EMAILS</code> setting and can't be changed here. Any admin can make someone else an admin, verify people so they can post events, and edit, reset or lock a profile.</p>
         <div class="table-wrap"><table>
           <thead><tr><th scope="col">Person</th><th scope="col">Google email</th><th scope="col">Last sign-in</th><th scope="col">Can post events</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody id="users"></tbody>
         </table></div>
+      </div>
+
+      <div class="card" id="links-card">
+        <h2>Important links</h2>
+        <p class="small muted">The <a href="links.html">Links</a> page shows these, grouped by category in this order. Web addresses must start with https:// (or http://).</p>
+        <div id="links-editor"></div>
+        <div class="row">
+          <button class="btn secondary small" type="button" id="link-add">Add a link</button>
+          <button class="btn small" type="button" id="links-save">Save links</button>
+          <span class="small muted" id="links-state" role="status"></span>
+        </div>
       </div>
 
       <div class="card">
@@ -73,6 +86,7 @@
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
   <script src="js/pages/admin.js"></script>
 </body>

@@ -6,7 +6,8 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
   <title>Friends · MHS Hub</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/icon-167.png" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -52,9 +53,15 @@
       <h2>Your friends</h2>
       <div id="friends"><p class="muted">Loading…</p></div>
     </div>
+    <div class="card" id="suggest-card" hidden>
+      <h2>People you may know</h2>
+      <p class="small muted">Friends of your friends and people in your classes who allow name search.</p>
+      <div id="suggestions"></div>
+    </div>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
   <script src="js/pages/friends.js"></script>
 </body>

@@ -14,7 +14,8 @@ function emptyState() {
     users: {},     // id -> { id, sub, email, name, created, lastLogin, classes, friends: [ids], friendCode, shareSchedule, verified }
     sessions: {},  // sha256(token) -> { userId, expires }
     events: [],    // { id, title, date, time, description, by (user id), created }
-    calendar: { anchorDate: null, anchorLetter: 'A', noSchool: {}, types: {}, weekdayTypes: {} }
+    calendar: { anchorDate: null, anchorLetter: 'A', noSchool: {}, types: {}, weekdayTypes: {} },
+    links: null    // [{ id, title, url, category, description }]; null = not set up yet (the app adds defaults)
   };
 }
 
@@ -37,6 +38,7 @@ function openDb(dataDir, log = () => {}) {
     if (parsed.version === VERSION) {
       for (const k of ['users', 'sessions', 'calendar']) if (isObj(parsed[k])) state[k] = parsed[k];
       if (Array.isArray(parsed.events)) state.events = parsed.events;
+      if (Array.isArray(parsed.links)) state.links = parsed.links;
     } else if (parsed.version > VERSION) {
       throw new Error(`${file} was written by a newer version of this app (format ${parsed.version}).`);
     } else {

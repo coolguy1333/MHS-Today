@@ -112,11 +112,11 @@ function renderNav(active) {
   if (!nav) return;
   const links = [
     ['index.html', 'Today', 'dashboard'], ['schedule.html', 'My Schedule', 'schedule'], ['events.html', 'Events', 'events'],
-    ['lunch.html', 'Lunch', 'lunch'], ['friends.html', 'Friends', 'friends'], ['tools.html', 'Tools', 'tools']
+    ['lunch.html', 'Lunch', 'lunch'], ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links'], ['tools.html', 'Tools', 'tools']
   ];
   const auth = h('span', { class: 'nav-auth' });
   fill(nav,
-    h('a', { href: 'index.html', class: 'brand' }, '\u{1F40E} MHS Hub'),
+    h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Hub'),
     h('nav', { 'aria-label': 'Main' },
       links.map(([href, label, key]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)),
       auth)
@@ -125,7 +125,7 @@ function renderNav(active) {
     if (me.user) {
       add(auth,
         me.user.admin ? h('a', { href: 'admin.html', class: active === 'admin' ? 'active' : null }, 'Admin') : null,
-        h('a', { href: 'account.html', class: active === 'account' ? 'active' : null }, me.user.name),
+        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : '') }, avatarEl(me.user, 22), me.user.name),
         h('button', {
           class: 'linklike', type: 'button',
           onclick: async () => { try { await api('POST', '/api/logout', {}); } finally { location.href = 'index.html'; } }
@@ -224,6 +224,32 @@ function friendNowText(friend, live) {
   }
   if (!friend.classes) return { text: 'Shares lunch only', muted: true };
   return friendClassText(friend, live.day.dayLetter, live.cur.period.hour);
+}
+// A round avatar: the person's emoji, or their initials, on their color.
+function avatarEl(person, size = 32) {
+  const a = MHSAvatars.clean(person && person.avatar);
+  return h('span', {
+    class: 'avatar', 'aria-hidden': 'true',
+    style: { background: MHSAvatars.COLORS[a.color], width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * (a.emoji ? 0.55 : 0.4))}px` }
+  }, a.emoji || MHSAvatars.initials(person && person.name));
+}
+const gradeText = (g) => (g ? `${g}th grade` : null);
+// A friend's profile in a pop-up: avatar, name, pronouns, grade, bio, interests.
+function showProfileCard(p) {
+  const close = h('button', { class: 'btn small secondary', type: 'button' }, 'Close');
+  const dlg = h('dialog', { class: 'profile-card', 'aria-label': `${p.name}'s profile` },
+    h('div', { class: 'profile-head' }, avatarEl(p, 64),
+      h('div', null, h('h2', null, p.name),
+        h('div', { class: 'muted' }, [p.pronouns, gradeText(p.grade)].filter(Boolean).join(' · ') || null))),
+    p.bio ? h('p', null, p.bio) : null,
+    p.interests && p.interests.length ? h('div', { class: 'chips' }, p.interests.map((i) => h('span', { class: 'chip' }, i))) : null,
+    !p.bio && !(p.interests && p.interests.length) ? h('p', { class: 'muted small' }, "They haven't filled in their profile yet.") : null,
+    h('div', { class: 'row' }, close));
+  close.addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // click outside the card
+  document.body.append(dlg);
+  dlg.showModal();
 }
 function colorDot(color) {
   const d = h('span', { class: 'dot', 'aria-hidden': 'true' });

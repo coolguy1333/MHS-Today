@@ -6,10 +6,11 @@ Schedule, events and friends for Mukwonago High School students.
 - **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D).
 - **Lunch**: today's high school lunch menu, pulled from the district's My School Menus page, with your lunch time and which friends share it. A short version is on the Today page.
 - **Events**: a shared board. Admins and people an admin has verified can add events, and admins can remove anything.
-- **Friends**: add people by searching their name, or with a private code or invite link. For each friend you choose what they see: classes + lunch, lunch only, or nothing. See what class they're in right now (or that they're at lunch), which classes you share, and whether you have the same lunch today. Friends only see your classes if you allow it.
+- **Links**: important links (event tickets, athletic schedules, Infinite Campus, counseling…), kept up to date by admins from the Admin page.
+- **Friends**: add people by searching their name, or with a private code or invite link, or from **People you may know** (friends of friends and classmates). For each friend you choose what they see: classes + lunch, lunch only, or nothing. See what class they're in right now (or that they're at lunch), which classes you share, and whether you have the same lunch today. Friends only see your classes if you allow it.
 - **Sign in with Google** only. No passwords are stored; you can limit sign-in to your school's Google Workspace domain.
-- **Profiles**: display name, grade and a short bio. Admins can edit or reset anyone's profile and lock it against changes.
-- **Admin page**: set the day letter and breaks, see setup problems, manage people (verify, edit, lock, remove), download or restore a backup.
+- **Profiles**: display name, avatar (an emoji or initials on a color), pronouns, grade, bio and up to 5 interests; friends can open your profile card. Admins can edit or reset anyone's profile and lock it against changes.
+- **Admin page**: set the day letter and breaks, see setup problems, manage people (make admins, verify, edit, lock, remove), edit the links, download or restore a backup.
 
 It is a small Node app with no dependencies (`server.js`, `src/`, pages in `public/`). All data is one file, `db.json`.
 
@@ -27,7 +28,7 @@ This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`), so [app ho
    |---|---|---|
    | `GOOGLE_CLIENT_ID` | yes | From step 2. |
    | `GOOGLE_CLIENT_SECRET` | yes | From step 2 (stored encrypted by WebManager). |
-   | `ADMIN_EMAILS` | yes | Comma-separated Google emails that are admins. |
+   | `ADMIN_EMAILS` | yes | Comma-separated Google emails of the owners: they are always admins. Owners and other admins can make more admins on the Admin page. |
    | `ALLOWED_DOMAINS` | no | Comma-separated Google Workspace domains allowed to sign in, e.g. `masd.k12.wi.us`. Empty = any Google account. Personal Gmail accounts can't pass a domain filter. |
    | `MENU_DISTRICT`, `MENU_ID` | no | The lunch menu on My School Menus (both numbers are in the menu page's address). Defaults: `2534` (Mukwonago Area School District) and `133305` (Mukwonago High School Lunch Menu). `MENU_ID=off` hides the menu. |
 | `EVENT_POSTING` | no | `verified` (default: admins and people an admin verifies on the Admin page), `everyone`, or `admins`. |

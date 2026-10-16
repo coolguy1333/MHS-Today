@@ -1,14 +1,35 @@
-// Account: profile (name, grade, bio), privacy switches, delete account.
+// Account: profile (name, avatar, pronouns, grade, bio, interests), privacy switches, delete account.
 (async function () {
   renderNav('account');
   const user = await requireLogin();
+  // Avatar picker: a color, and an emoji or "initials".
+  const { COLORS, EMOJIS } = MHSAvatars;
+  const choice = (group, value, label, face) => h('label', { title: label },
+    h('input', { type: 'radio', name: group, value, 'aria-label': label }), face);
+  add($('color-picker'), Object.entries(COLORS).map(([key, hex]) =>
+    choice('avatar-color', key, `${key[0].toUpperCase()}${key.slice(1)}`, h('span', { class: 'swatch', style: { background: hex } }))));
+  add($('emoji-picker'), choice('avatar-emoji', '', 'Initials', h('span', { class: 'emoji small' }, 'Aa')),
+    EMOJIS.map((e) => choice('avatar-emoji', e, e, h('span', { class: 'emoji' }, e))));
+  const picked = (group) => (document.querySelector(`input[name="${group}"]:checked`) || {}).value;
+  const currentAvatar = () => ({ color: picked('avatar-color') || 'blue', emoji: picked('avatar-emoji') || '' });
+  const preview = () => fill($('avatar-preview'), avatarEl({ name: $('name').value, avatar: currentAvatar() }, 48),
+    h('span', { class: 'muted small' }, 'This is how friends see you.'));
+  for (const id of ['color-picker', 'emoji-picker', 'name']) $(id).addEventListener('input', preview);
+  const interestsOf = (text) => text.split(',').map((s) => s.trim()).filter(Boolean);
+
   function showProfile(u) {
     $('name').value = u.name;
     $('grade').value = u.grade ? String(u.grade) : '';
     $('bio').value = u.bio || '';
+    $('pronouns').value = u.pronouns || '';
+    $('interests').value = (u.interests || []).join(', ');
+    const a = MHSAvatars.clean(u.avatar);
+    document.querySelector(`input[name="avatar-color"][value="${a.color}"]`).checked = true;
+    for (const r of document.querySelectorAll('input[name="avatar-emoji"]')) r.checked = r.value === a.emoji;
     $('locked-note').hidden = !u.profileLocked;
-    for (const id of ['name', 'grade', 'bio', 'profile-save']) $(id).disabled = !!u.profileLocked;
+    for (const el of $('profile-form').querySelectorAll('input, select, textarea, button')) el.disabled = !!u.profileLocked;
     countBio();
+    preview();
   }
   const countBio = () => { $('bio-count').textContent = `${Array.from($('bio').value).length}/160`; };
   $('bio').addEventListener('input', countBio);
@@ -20,7 +41,12 @@
   $('profile-form').addEventListener('submit', (e) => {
     e.preventDefault();
     busy(e.submitter, async () => {
-      const updated = await api('PUT', '/api/me', { name: $('name').value, grade: $('grade').value || null, bio: $('bio').value });
+      const interests = interestsOf($('interests').value);
+      if (interests.length > 5) throw new Error('Pick up to 5 interests.');
+      const updated = await api('PUT', '/api/me', {
+        name: $('name').value, grade: $('grade').value || null, bio: $('bio').value,
+        pronouns: $('pronouns').value, interests, avatar: currentAvatar()
+      });
       Object.assign(user, updated);
       showProfile(updated);
       renderNav('account');

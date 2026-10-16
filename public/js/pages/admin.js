@@ -138,9 +138,11 @@
   let editing = null; // id of the person whose profile editor is open
   const badge = (on, text) => (on ? [' ', h('span', { class: 'badge' }, text)] : null);
 
-  // Inline profile editor: name, grade, bio, lock, reset.
+  // Inline profile editor: name, pronouns, grade, bio, interests, lock, reset.
   function editorRow(u) {
     const name = h('input', { type: 'text', maxlength: '40', value: u.name, required: true });
+    const pronouns = h('input', { type: 'text', maxlength: '20', value: u.pronouns || '' });
+    const interests = h('input', { type: 'text', maxlength: '140', value: (u.interests || []).join(', ') });
     const grade = h('select', null, h('option', { value: '' }, 'Not set'), [9, 10, 11, 12].map((g) => h('option', { value: String(g), selected: u.grade === g }, `${g}th`)));
     const bio = h('textarea', { maxlength: '160', rows: '2' });
     bio.value = u.bio || '';
@@ -153,28 +155,35 @@
     });
     const form = h('form', { class: 'form-grid', 'aria-label': `Edit ${u.name}'s profile` },
       h('label', null, h('span', null, 'Display name'), name),
+      h('label', null, h('span', null, 'Pronouns'), pronouns),
       h('label', null, h('span', null, 'Grade'), grade),
       h('label', { class: 'wide' }, h('span', null, 'Bio'), bio),
-      h('label', { class: 'check wide' }, locked, h('span', null, "Lock profile (they can't change their name, grade or bio)")),
+      h('label', { class: 'wide' }, h('span', null, 'Interests (comma-separated, up to 5)'), interests),
+      h('label', { class: 'check wide' }, locked, h('span', null, "Lock profile (they can't change any of it, including their avatar)")),
       h('div', { class: 'wide row' },
         h('button', { class: 'btn small', type: 'submit' }, 'Save'),
         h('button', {
           class: 'btn small secondary', type: 'button',
-          onclick: (e) => { if (confirm(`Reset ${u.name}'s profile to their Google first name and last initial, with no grade or bio?`)) save(e, { reset: true, profileLocked: locked.checked }, 'Profile reset'); }
+          onclick: (e) => { if (confirm(`Reset ${u.name}'s profile to their Google first name and last initial, and clear their avatar, pronouns, grade, bio and interests?`)) save(e, { reset: true, profileLocked: locked.checked }, 'Profile reset'); }
         }, 'Reset profile'),
         h('button', { class: 'btn small secondary', type: 'button', onclick: () => { editing = null; renderUsers(); } }, 'Cancel')));
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      save({ currentTarget: e.submitter }, { name: name.value, grade: grade.value || null, bio: bio.value, profileLocked: locked.checked }, 'Profile saved');
+      const list = interests.value.split(',').map((s) => s.trim()).filter(Boolean);
+      save({ currentTarget: e.submitter }, {
+        name: name.value, pronouns: pronouns.value, grade: grade.value || null, bio: bio.value, interests: list, profileLocked: locked.checked
+      }, 'Profile saved');
     });
     return h('tr', { class: 'editor-row' }, h('td', { colspan: 5 }, form));
   }
 
   function renderUsers() {
     fill($('users'), users.map((u) => [h('tr', null,
-      h('td', null, u.name, badge(u.admin, 'admin'), badge(u.verified, 'verified'), badge(u.profileLocked, 'locked'),
-        h('div', { class: 'small muted' }, [u.fullName, u.grade ? `${u.grade}th grade` : null, u.searchable ? null : 'hidden from search'].filter(Boolean).join(' · ')),
-        u.bio ? h('div', { class: 'small' }, u.bio) : null),
+      h('td', null, h('div', { class: 'person' }, avatarEl(u, 32), h('div', null,
+        u.name, badge(u.owner, 'owner'), badge(u.admin && !u.owner, 'admin'), badge(u.verified, 'verified'), badge(u.profileLocked, 'locked'),
+        h('div', { class: 'small muted' }, [u.fullName, u.pronouns, u.grade ? `${u.grade}th grade` : null, u.searchable ? null : 'hidden from search'].filter(Boolean).join(' · ')),
+        u.bio ? h('div', { class: 'small' }, u.bio) : null,
+        u.interests && u.interests.length ? h('div', { class: 'small muted' }, `Interests: ${u.interests.join(', ')}`) : null))),
       h('td', { class: 'small' }, u.email),
       h('td', { class: 'small muted nowrap' }, fmtAgo(u.lastLogin)),
       h('td', null, u.admin ? h('span', { class: 'small muted' }, 'Admin') : h('button', {
@@ -190,7 +199,18 @@
           class: 'linklike', type: 'button', 'aria-label': `Edit ${u.name}'s profile`, 'aria-expanded': String(editing === u.id),
           onclick: () => { editing = editing === u.id ? null : u.id; renderUsers(); }
         }, 'Edit'),
-        u.id === me.id ? null : [' · ', h('button', {
+        u.owner || u.id === me.id ? null : [' · ', h('button', {
+          class: 'linklike', type: 'button', 'aria-label': `${u.admin ? 'Remove admin from' : 'Make admin:'} ${u.name}`,
+          onclick: (e) => {
+            if (!confirm(u.admin ? `Remove ${u.name}'s admin access?` : `Make ${u.name} an admin? They will be able to manage people, events, links, the calendar and backups.`)) return;
+            busy(e.currentTarget, async () => {
+              await api('PUT', `/api/admin/users/${u.id}`, { admin: !u.admin });
+              await reloadUsers();
+              toast(u.admin ? `${u.name} is no longer an admin` : `${u.name} is now an admin`);
+            });
+          }
+        }, u.admin ? 'Remove admin' : 'Make admin')],
+        u.id === me.id || (u.owner && !me.owner) ? null : [' · ', h('button', {
           class: 'linklike danger', type: 'button', 'aria-label': `Remove ${u.name}`,
           onclick: (e) => {
             if (!confirm(`Remove ${u.name} (${u.email})? This deletes their account, classes and events.`)) return;
@@ -198,6 +218,45 @@
           }
         }, 'Remove')])), editing === u.id ? editorRow(u) : null]));
   }
+
+  // ---- links
+  let links = [];
+  let linksDirty = false;
+  const linksState = (on) => { linksDirty = on; $('links-state').textContent = on ? 'Unsaved changes' : ''; };
+  function renderLinks() {
+    fill($('links-editor'), links.map((l, i) => {
+      const field = (key, label, attrs) => {
+        const el = h('input', { type: key === 'url' ? 'url' : 'text', 'aria-label': `Link ${i + 1} ${label}`, placeholder: label, ...attrs });
+        el.value = l[key] || '';
+        el.addEventListener('input', () => { l[key] = el.value; linksState(true); });
+        return el;
+      };
+      const move = (d) => () => { const j = i + d; if (j < 0 || j >= links.length) return; [links[i], links[j]] = [links[j], links[i]]; linksState(true); renderLinks(); };
+      return h('div', { class: 'link-edit' },
+        field('title', 'Title', { maxlength: '80' }),
+        field('url', 'https://…', { maxlength: '500' }),
+        field('category', 'Category', { maxlength: '40' }),
+        h('div', { class: 'row nowrap' },
+          h('button', { class: 'linklike', type: 'button', 'aria-label': `Move link ${i + 1} up`, onclick: move(-1), disabled: i === 0 }, '↑'),
+          h('button', { class: 'linklike', type: 'button', 'aria-label': `Move link ${i + 1} down`, onclick: move(1), disabled: i === links.length - 1 }, '↓'),
+          h('button', { class: 'linklike danger', type: 'button', 'aria-label': `Remove link ${i + 1}`, onclick: () => { links.splice(i, 1); linksState(true); renderLinks(); } }, 'Remove')),
+        h('div', { class: 'desc' }, field('description', 'Short description (optional)', { maxlength: '160' })));
+    }));
+  }
+  $('link-add').addEventListener('click', () => {
+    links.push({ title: '', url: 'https://', category: links.length ? links[links.length - 1].category : '', description: '' });
+    linksState(true);
+    renderLinks();
+    const inputs = $('links-editor').querySelectorAll('.link-edit:last-child input');
+    if (inputs[0]) inputs[0].focus();
+  });
+  $('links-save').addEventListener('click', (e) => busy(e.currentTarget, async () => {
+    links = await api('PUT', '/api/admin/links', { links });
+    linksState(false);
+    renderLinks();
+    toast('Links saved');
+  }));
+  window.addEventListener('beforeunload', (e) => { if (linksDirty) { e.preventDefault(); e.returnValue = ''; } });
 
   // ---- restore
   const fileInput = $('restore-file');
@@ -231,4 +290,5 @@
   renderSetup();
   renderCalendar();
   renderUsers();
+  try { links = await api('GET', '/api/links'); renderLinks(); } catch (e) { fill($('links-editor'), h('p', { class: 'notice error' }, e.message)); }
 })();
