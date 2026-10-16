@@ -175,13 +175,27 @@ function sameClass(a, b) {
   const ta = normClass(a.teacher), tb = normClass(b.teacher);
   return !ta || !tb || ta === tb;
 }
+// Classes are saved per color block; the day letter picks the block for each hour.
+function classAt(classes, letter, hour) {
+  const key = MHSBell.blockFor(letter, hour);
+  return key && classes && Object.prototype.hasOwnProperty.call(classes, key) ? classes[key] : null;
+}
 // What is a friend doing in `hour` on day `letter`? -> { text, muted }
 function friendClassText(friend, letter, hour) {
   if (!friend.classes) return { text: 'Schedule hidden', muted: true };
   if (hour === 'advisory') return { text: 'Advisory', muted: false };
-  const c = letter && friend.classes[`${letter}_${hour}`];
+  const c = classAt(friend.classes, letter, hour);
   if (!c) return { text: 'No class set', muted: true };
   return { text: c.name + (c.room ? ` · Rm ${c.room}` : ''), muted: false };
+}
+// "Same lunch as you (B)" etc. for a day letter, or null when either lunch is unknown.
+function sharedLunchText(myClasses, friend, letter) {
+  if (!friend.classes || !letter) return null;
+  const mine = MHSBell.lunchFor(myClasses, letter);
+  const theirs = MHSBell.lunchFor(friend.classes, letter);
+  if (!theirs) return null;
+  if (!mine) return { text: `${theirs} Lunch`, same: false };
+  return { text: mine === theirs ? `Same lunch as you (${theirs})` : `${theirs} Lunch`, same: mine === theirs };
 }
 // What is happening at school right now? -> { now, day, status, cur? }
 // status: 'no-school' | 'before-school' | 'in-class' | 'passing' | 'after-school'
@@ -198,6 +212,10 @@ function friendNowText(friend, live) {
   if (live.status === 'before-school') return { text: "School hasn't started", muted: true };
   if (live.status === 'after-school') return { text: "School's out", muted: true };
   if (live.status === 'passing') return { text: 'Passing period', muted: true };
+  if (live.cur.period.hour === MHSBell.LUNCH_HOUR) {
+    const lunch = MHSBell.lunchFor(friend.classes, live.day.dayLetter);
+    if (MHSBell.atLunch(live.day.scheduleType, lunch, live.now.minutes)) return { text: `At ${lunch} Lunch`, muted: false };
+  }
   return friendClassText(friend, live.day.dayLetter, live.cur.period.hour);
 }
 function colorDot(color) {

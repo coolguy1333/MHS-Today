@@ -2,10 +2,10 @@
 
 Schedule, events and friends for Mukwonago High School students.
 
-- **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown, your own classes, and what's next.
-- **My Schedule**: enter your classes once per rotation day.
+- **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown ("B Lunch · 12 min left" at lunch), your own classes, and what's next.
+- **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D).
 - **Events**: a shared board. Admins and people an admin has verified can add events, and admins can remove anything.
-- **Friends**: add people with a private code or invite link, see what class they're in right now, and see which classes you share. Friends only see your classes if you allow it.
+- **Friends**: add people with a private code or invite link, see what class they're in right now (or that they're at lunch), which classes you share, and whether you have the same lunch today. Friends only see your classes if you allow it.
 - **Sign in with Google** only. No passwords are stored; you can limit sign-in to your school's Google Workspace domain.
 - **Admin page**: set the day letter and breaks, see setup problems, manage people, download or restore a backup.
 

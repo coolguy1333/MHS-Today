@@ -4,6 +4,7 @@
   const user = await requireLogin();
   let myCode = user.friendCode;
   let data = { friends: [], incoming: [], outgoing: [] };
+  let myClasses = {};
   let info = null;
   let lastKey = '';
 
@@ -28,8 +29,10 @@
     fill($('friends'), data.friends.length
       ? data.friends.map((f) => {
         const t = friendNowText(f, live);
+        const lunch = live.day.schoolDay ? sharedLunchText(myClasses, f, live.day.dayLetter) : null;
         return h('div', { class: 'list-row' },
-          h('div', null, h('strong', null, f.name), h('div', { class: 'small' + (t.muted ? ' muted' : '') }, t.text)),
+          h('div', null, h('strong', null, f.name), h('div', { class: 'small' + (t.muted ? ' muted' : '') }, t.text),
+            lunch ? h('div', { class: 'small' + (lunch.same ? '' : ' muted') }, `Today: ${lunch.text}`) : null),
           h('button', {
             class: 'linklike danger', type: 'button', 'aria-label': `Remove ${f.name}`,
             onclick: (e) => { if (confirm(`Remove ${f.name} from your friends?`)) act(e, () => api('DELETE', `/api/friends/${f.id}`), `${f.name} removed`); }
@@ -39,10 +42,11 @@
   }
 
   async function load(force) {
-    const [d, i] = await Promise.all([api('GET', '/api/friends'), loadCalendar(true)]);
+    const [d, i, c] = await Promise.all([api('GET', '/api/friends'), loadCalendar(true), api('GET', '/api/classes')]);
     const live = liveState(i);
-    const key = JSON.stringify([d, live.status, live.cur && live.cur.period && live.cur.period.hour, live.day.dayLetter]);
-    data = d; info = i;
+    const lunchNow = live.status === 'in-class' && live.cur.period.hour === MHSBell.LUNCH_HOUR ? Math.floor(live.now.minutes) : null;
+    const key = JSON.stringify([d, c, live.status, live.cur && live.cur.period && live.cur.period.hour, live.day.dayLetter, lunchNow]);
+    data = d; info = i; myClasses = c;
     if (force || key !== lastKey) { lastKey = key; render(); } // skip identical refreshes so buttons keep keyboard focus
   }
   const act = (e, fn, message) => busy(e.currentTarget, async () => { await fn(); toast(message); await load(true); });

@@ -45,6 +45,66 @@
     }
   };
 
+  // Color blocks: every class belongs to one color, and the day letter decides
+  // which hour that color meets in (the "Daily Schedule" grid). Each day skips two colors.
+  const BLOCKS = [
+    { key: 'yellow', label: 'Yellow', color: '#ffe14d', ink: '#1f1f1f' },
+    { key: 'red', label: 'Red', color: '#e53935', ink: '#ffffff' },
+    { key: 'pink', label: 'Pink', color: '#c2189b', ink: '#ffffff' },
+    { key: 'green', label: 'Green', color: '#16a34a', ink: '#ffffff' },
+    { key: 'orange', label: 'Orange', color: '#ea6a1a', ink: '#ffffff' },
+    { key: 'purple', label: 'Purple', color: '#c7a6ff', ink: '#1f1f1f' },
+    { key: 'silver', label: 'Silver', color: '#8a8f98', ink: '#ffffff' },
+    { key: 'blue', label: 'Blue', color: '#2f6fbf', ink: '#ffffff' }
+  ];
+  // ROTATION[letter][hour - 1] = block key
+  const ROTATION = {
+    A: ['yellow', 'red', 'pink', 'green', 'purple', 'silver'],
+    B: ['blue', 'red', 'pink', 'orange', 'green', 'silver'],
+    C: ['yellow', 'blue', 'pink', 'orange', 'purple', 'green'],
+    D: ['yellow', 'red', 'blue', 'orange', 'purple', 'silver']
+  };
+  const BLOCK_KEYS = BLOCKS.map((b) => b.key);
+  const blockInfo = (key) => BLOCKS.find((b) => b.key === key) || null;
+  function blockFor(letter, hour) {
+    const row = Object.prototype.hasOwnProperty.call(ROTATION, letter) ? ROTATION[letter] : null;
+    return row && Number.isInteger(hour) ? row[hour - 1] || null : null;
+  }
+  // Which hours a block meets in: [{ letter, hour }]
+  function meetings(key) {
+    const out = [];
+    for (const [letter, row] of Object.entries(ROTATION)) row.forEach((k, i) => { if (k === key) out.push({ letter, hour: i + 1 }); });
+    return out;
+  }
+
+  // Lunch happens inside Hour 4, so it belongs to whichever class you have in Hour 4
+  // (Green on Day A, Orange on B-D). LUNCHES[scheduleKey][lunch] = { start, end }
+  const LUNCH_HOUR = 4;
+  const LUNCH_BLOCKS = [...new Set(Object.values(ROTATION).map((row) => row[LUNCH_HOUR - 1]))];
+  const LUNCH_NAMES = ['A', 'B', 'C'];
+  const LUNCHES = {
+    daily: { A: { start: '10:56', end: '11:21' }, B: { start: '11:31', end: '11:56' }, C: { start: '12:06', end: '12:31' } },
+    advisory: { A: { start: '11:11', end: '11:36' }, B: { start: '11:41', end: '12:06' }, C: { start: '12:16', end: '12:41' } },
+    early_release: { A: { start: '09:54', end: '10:19' }, B: { start: '10:19', end: '10:44' }, C: { start: '10:44', end: '11:09' } }
+  };
+  // Someone's lunch ('A' | 'B' | 'C' | null) on a day letter, from their classes.
+  function lunchFor(classes, letter) {
+    const key = blockFor(letter, LUNCH_HOUR);
+    const c = key && classes && Object.prototype.hasOwnProperty.call(classes, key) ? classes[key] : null;
+    return c && LUNCH_NAMES.includes(c.lunch) ? c.lunch : null;
+  }
+  function lunchTimes(scheduleKey, lunch) {
+    const day = LUNCHES[scheduleKey] || LUNCHES.daily;
+    return LUNCH_NAMES.includes(lunch) ? day[lunch] : null;
+  }
+  // Is `minutes` inside that lunch? -> { minutesLeft } or null
+  function atLunch(scheduleKey, lunch, minutes) {
+    const t = lunchTimes(scheduleKey, lunch);
+    if (!t) return null;
+    const start = timeToMinutes(t.start), end = timeToMinutes(t.end);
+    return minutes >= start && minutes < end ? { minutesLeft: end - minutes } : null;
+  }
+
   function timeToMinutes(hhmm) {
     const [h, m] = hhmm.split(':').map(Number);
     return h * 60 + m;
@@ -79,7 +139,11 @@
     return { status: 'after-school' };
   }
 
-  const api = { SCHEDULES, timeToMinutes, formatTime, getCurrentPeriod };
+  const api = {
+    SCHEDULES, timeToMinutes, formatTime, getCurrentPeriod,
+    BLOCKS, BLOCK_KEYS, ROTATION, blockInfo, blockFor, meetings,
+    LUNCH_HOUR, LUNCH_BLOCKS, LUNCH_NAMES, LUNCHES, lunchFor, lunchTimes, atLunch
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MHSBell = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -26,7 +26,11 @@ types         { 'YYYY-MM-DD': 'advisory' | 'early_release' | 'daily' }   one-day
 weekdayTypes  { '3': 'advisory' }   repeating pattern, 1 = Monday
 ```
 
-The letter advances one step per school day (a weekday not listed in `noSchool`). "Today" and the live period are computed in the school's time zone, using the server's clock so a wrong phone clock doesn't matter. Bell times are in `public/js/bellSchedule.js`.
+The letter advances one step per school day (a weekday not listed in `noSchool`). "Today" and the live period are computed in the school's time zone, using the server's clock so a wrong phone clock doesn't matter. Bell times, the color-block rotation and lunch times are in `public/js/bellSchedule.js`.
+
+## Color blocks and lunch
+
+Classes are saved per color block, not per day: `classes = { yellow: { name, teacher, room }, green: { name, teacher, room, lunch: 'A' }, ... }`. `ROTATION[letter][hour - 1]` (from the MHS Daily Schedule grid) says which block meets in each hour, so each class is entered once. Lunch is inside Hour 4, so it is stored on the blocks that meet in Hour 4 (`LUNCH_BLOCKS`: Green on Day A, Orange on B–D); `lunchFor(classes, letter)` gives someone's lunch for a day, and `LUNCHES` has the A/B/C times for each schedule type. Schedules saved by the first release (keys like `A_1`) are converted to blocks when the server starts and when they are sent to `PUT /api/classes`.
 
 ## Data (`$DATA_DIR/db.json`)
 

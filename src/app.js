@@ -6,6 +6,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const cal = require('../public/js/calendar.js');
+const bell = require('../public/js/bellSchedule.js');
 const { openDb } = require('./db');
 const { createGoogle, AuthError, newPkce } = require('./google');
 const {
@@ -169,19 +170,32 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   });
 
   // ---------- validation ----------
+  // Classes are keyed by color block: { yellow: { name, teacher, room }, green: { ..., lunch: 'A' } }.
+  // The first release keyed them by day and hour ('A_1'); those are moved to the block that meets
+  // then (a block that is already set wins, then the earliest day).
+  const LEGACY_KEY = /^[A-D]_[1-6]$/;
   function cleanClasses(input) {
     if (!isPlainObject(input)) throw bad('Invalid classes');
     const out = {};
-    for (const [key, c] of Object.entries(input)) {
-      if (!/^[A-D]_[1-6]$/.test(key) || !isPlainObject(c)) continue;
+    const keys = [...bell.BLOCK_KEYS.filter((k) => hasOwn(input, k)), ...Object.keys(input).filter((k) => LEGACY_KEY.test(k)).sort()];
+    for (const key of keys) {
+      const block = LEGACY_KEY.test(key) ? bell.blockFor(key[0], Number(key[2])) : key;
+      const c = input[key];
+      if (hasOwn(out, block) || !isPlainObject(c)) continue;
       const name = cleanText(c.name, 60);
-      if (!name) continue; // a blank name clears the slot
-      out[key] = {
-        name, teacher: cleanText(c.teacher, 60), room: cleanText(c.room, 20),
-        color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color.toLowerCase() : '#4f7cff'
-      };
+      if (!name) continue; // a blank name clears the block
+      out[block] = { name, teacher: cleanText(c.teacher, 60), room: cleanText(c.room, 20) };
+      if (bell.LUNCH_BLOCKS.includes(block) && bell.LUNCH_NAMES.includes(c.lunch)) out[block].lunch = c.lunch;
     }
     return out;
+  }
+  // Schedules saved by the first release are converted once, at startup.
+  {
+    let converted = 0;
+    for (const u of Object.values(state.users)) {
+      if (isPlainObject(u.classes) && Object.keys(u.classes).some((k) => LEGACY_KEY.test(k))) { u.classes = cleanClasses(u.classes); converted++; }
+    }
+    if (converted) { log(`Converted ${converted} saved schedule${converted === 1 ? '' : 's'} to color blocks`); db.save(); }
   }
   // Returns the cleaned event fields or throws 400. `daysBack` = how far in the past a date may be.
   function cleanEventFields(b, daysBack = 7) {

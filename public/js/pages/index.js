@@ -2,7 +2,7 @@
 (function () {
   renderNav('dashboard');
   const { dayInfo, nextSchoolDay } = MHSCalendar;
-  const { SCHEDULES, getCurrentPeriod, formatTime } = MHSBell;
+  const { SCHEDULES, getCurrentPeriod, formatTime, blockFor, blockInfo, LUNCH_HOUR, lunchFor, lunchTimes, atLunch } = MHSBell;
 
   // viewDate: null = automatic (today, or the next school day when there's no school today)
   const S = { info: null, me: null, classes: {}, friends: [], events: [], viewDate: null, lastDate: null, key: '' };
@@ -52,20 +52,32 @@
     );
   }
 
+  // Hour 4 also says which lunch you have and which friends share it.
+  function lunchLine(m) {
+    const lunch = lunchFor(S.classes, m.view.dayLetter);
+    if (!lunch) return S.me ? h('div', { class: 'small muted' }, 'Lunch not set. ', h('a', { href: 'schedule.html' }, 'Pick A, B or C')) : null;
+    const t = lunchTimes(m.view.scheduleType, lunch);
+    const buddies = S.friends.filter((f) => lunchFor(f.classes, m.view.dayLetter) === lunch).map((f) => f.name);
+    return h('div', { class: 'small muted' }, `${lunch} Lunch ${formatTime(t.start)} – ${formatTime(t.end)}`,
+      buddies.length ? h('span', { class: 'with' }, `Lunch with ${listNames(buddies)}`) : null);
+  }
+
   function classCell(p, cls, m, hasAny) {
     if (p.hour === 'advisory') return h('span', { class: 'muted' }, 'Advisory');
+    const block = blockInfo(blockFor(m.view.dayLetter, p.hour));
     if (cls) {
-      const key = `${m.view.dayLetter}_${p.hour}`;
-      const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[key], cls)).map((f) => f.name);
-      // line 1: the class; line 2: teacher and which friends are in it
-      const meta = [cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
+      const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[block.key], cls)).map((f) => f.name);
+      // line 1: the class; line 2: block, teacher and which friends are in it
+      const meta = [block.label, cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
       return [
-        h('div', null, colorDot(cls.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
-        meta.length ? h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))) : null
+        h('div', null, colorDot(block.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
+        h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))),
+        p.hour === LUNCH_HOUR ? lunchLine(m) : null
       ];
     }
-    if (S.me && hasAny && m.view.dayLetter) return h('span', { class: 'muted small' }, 'Not set. ', h('a', { href: 'schedule.html' }, 'Add it'));
-    return null;
+    if (!block) return null;
+    if (S.me && hasAny) return h('span', { class: 'muted small' }, colorDot(block.color), `${block.label}: not set. `, h('a', { href: 'schedule.html' }, 'Add it'));
+    return h('span', { class: 'muted small' }, colorDot(block.color), block.label);
   }
 
   function renderTable(m) {
@@ -86,7 +98,7 @@
     const schedule = SCHEDULES[m.view.scheduleType] || SCHEDULES.daily;
     for (const p of schedule.periods) {
       if (p.note) add(body, h('tr', { class: 'note-row' }, h('td', { colspan: 3 }, `${formatTime(p.note.start)} – ${formatTime(p.note.end)} · ${p.note.text}`)));
-      const cls = m.view.dayLetter ? S.classes[`${m.view.dayLetter}_${p.hour}`] : null;
+      const cls = classAt(S.classes, m.view.dayLetter, p.hour);
       add(body, h('tr', { class: 'period-row', dataset: { hour: String(p.hour) } },
         h('th', { scope: 'row' }, p.label),
         h('td', { class: 'time small muted' }, `${formatTime(p.start)} – ${formatTime(p.end)}`),
@@ -104,12 +116,19 @@
     const nameFor = (p) => {
       if (!p) return null;
       if (p.hour === 'advisory') return 'Advisory';
-      const c = v.dayLetter && S.classes[`${v.dayLetter}_${p.hour}`];
+      const c = classAt(S.classes, v.dayLetter, p.hour);
       return c ? c.name + (c.room ? ` (Rm ${c.room})` : '') : null;
     };
     const periodText = (p) => `${p.label}${nameFor(p) ? ` – ${nameFor(p)}` : ''}`;
     let title, detail = null;
-    if (cur.status === 'in-class') {
+    const lunch = cur.status === 'in-class' && cur.period.hour === LUNCH_HOUR ? lunchFor(S.classes, v.dayLetter) : null;
+    const eating = lunch && atLunch(v.scheduleType, lunch, m.now.minutes);
+    if (eating) {
+      title = `${lunch} Lunch · ${fmtMinutes(eating.minutesLeft)} left`;
+      detail = eating.minutesLeft < cur.minutesLeft
+        ? `Then back to ${periodText(cur.period)} until ${formatTime(cur.period.end)}`
+        : cur.next ? `Next: ${periodText(cur.next)} at ${formatTime(cur.next.start)}` : null;
+    } else if (cur.status === 'in-class') {
       title = `${cur.period.label} · ${fmtMinutes(cur.minutesLeft)} left`;
       const here = nameFor(cur.period);
       detail = [here, cur.next ? `Next: ${periodText(cur.next)} at ${formatTime(cur.next.start)}` : 'Last period of the day'].filter(Boolean).join(' · ');

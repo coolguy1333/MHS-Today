@@ -15,15 +15,21 @@
   <main class="container" id="main">
     <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
     <h1>My Schedule</h1>
-    <p class="muted">Enter your class for each hour on each rotation day. Tip: fill in one day, then use <strong>Copy to other days</strong> if your classes repeat.</p>
+    <p class="muted">Each class belongs to a color block. Enter each class once, and the day letter decides which hour it meets in.</p>
     <div class="card">
-      <div class="tabs" role="tablist" aria-label="Rotation day" id="tabs"></div>
-      <form id="schedule-form" autocomplete="off"><div id="panels"></div></form>
-      <div class="row" id="day-actions"></div>
+      <h2>Your classes</h2>
+      <form id="schedule-form" autocomplete="off"><div id="blocks"></div></form>
+      <p class="small muted" id="lunch-help"></p>
+      <div class="row"><button class="btn secondary small" type="button" id="clear-btn">Clear all</button></div>
     </div>
     <div class="row">
       <button class="btn" type="button" id="save-btn">Save schedule</button>
       <span class="small muted" id="save-state" role="status"></span>
+    </div>
+    <div class="card">
+      <h2>Rotation</h2>
+      <p class="small muted">Where each block meets on Days A–D. Today's day is outlined.</p>
+      <div class="table-wrap"><table class="rotation-table" id="rotation"></table></div>
     </div>
   </main>
   <script src="js/calendar.js"></script>
