@@ -229,6 +229,27 @@ dialog.profile-card::backdrop { background: rgba(0, 0, 0, 0.5); }
 .field-label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; }
 .picker .emoji.small { font-size: 0.8rem; font-weight: 700; }
 
+/* ---- classwork, groups, events ---- */
+.badge.kind-assignment { background: #2563eb; color: #fff; }
+.badge.kind-quiz { background: #d97706; color: #fff; }
+.badge.kind-test { background: #dc2626; color: #fff; }
+.badge.vis { background: var(--border); color: var(--text); }
+.faded { opacity: 0.6; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.due-line { display: block; font-size: 0.82rem; margin-top: 2px; }
+.group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.group-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.group-card h3 { margin: 0; font-size: 1.05rem; }
+.group-card h3 a { color: inherit; text-decoration: none; }
+.group-card h3 a:hover { text-decoration: underline; }
+.group-card .row { margin-top: auto; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.filters input[type=search] { flex: 1 1 200px; width: auto; }
+.filters select { flex: 0 0 auto; width: auto; }
+.checklist-box { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+.checklist-box label { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-weight: 400; }
+.signup-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+
 /* ---- links ---- */
 .link-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .link-card { display: block; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; text-decoration: none; color: inherit; background: var(--card); }

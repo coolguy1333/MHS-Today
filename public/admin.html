@@ -20,6 +20,12 @@
     <div id="admin-body" hidden>
       <div class="card"><h2>Setup check</h2><ul class="checklist" id="setup"></ul></div>
 
+      <div class="card" id="queue-card">
+        <h2>Needs attention</h2>
+        <p class="small muted">Groups waiting for approval, classwork students reported, and tool ideas.</p>
+        <div id="queue"><p class="muted small">Loading…</p></div>
+      </div>
+
       <div class="card">
         <h2>School calendar</h2>
         <p class="muted small">The day letter moves forward by one on every school day (weekdays that are not marked no-school below), so you only need to correct it if it drifts.</p>
@@ -66,9 +72,20 @@
         <p class="small muted">The <a href="links.html">Links</a> page shows these, grouped by category in this order. Web addresses must start with https:// (or http://).</p>
         <div id="links-editor"></div>
         <div class="row">
-          <button class="btn secondary small" type="button" id="link-add">Add a link</button>
+          <button class="btn secondary small" type="button" id="links-add">Add a link</button>
           <button class="btn small" type="button" id="links-save">Save links</button>
           <span class="small muted" id="links-state" role="status"></span>
+        </div>
+      </div>
+
+      <div class="card" id="tools-card">
+        <h2>Tools</h2>
+        <p class="small muted">Cards on the <a href="tools.html">Tools</a> page, in this order. A tool with no web address shows "Coming soon". Students' suggestions appear under <a href="#queue-card">Needs attention</a>.</p>
+        <div id="tools-editor"></div>
+        <div class="row">
+          <button class="btn secondary small" type="button" id="tools-add">Add a tool</button>
+          <button class="btn small" type="button" id="tools-save">Save tools</button>
+          <span class="small muted" id="tools-state" role="status"></span>
         </div>
       </div>
 

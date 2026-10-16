@@ -111,8 +111,9 @@ function renderNav(active) {
   const nav = $('site-nav');
   if (!nav) return;
   const links = [
-    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'My Schedule', 'schedule'], ['events.html', 'Events', 'events'],
-    ['lunch.html', 'Lunch', 'lunch'], ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links'], ['tools.html', 'Tools', 'tools']
+    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'Schedule', 'schedule'], ['classwork.html', 'Classwork', 'classwork'],
+    ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
+    ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links'], ['tools.html', 'Tools', 'tools']
   ];
   const auth = h('span', { class: 'nav-auth' });
   fill(nav,
@@ -165,6 +166,8 @@ function fmtMinutes(mins) {
   return hrs ? `${hrs} h ${n % 60} min` : `${n} min`;
 }
 const SCHEDULE_NAMES = { daily: 'Daily schedule', advisory: 'Advisory day', early_release: 'Early release' };
+const KIND_NAMES = { assignment: 'Assignment', quiz: 'Quiz', test: 'Test' };
+const GROUP_KINDS = { club: 'Club', sport: 'Sport', group: 'Student group' };
 
 // ---- classes and friends -------------------------------------------------------
 const normClass = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -225,6 +228,43 @@ function friendNowText(friend, live) {
   if (!friend.classes) return { text: 'Shares lunch only', muted: true };
   return friendClassText(friend, live.day.dayLetter, live.cur.period.hour);
 }
+// One event in a list: when, who can see it, its group, the sign-up list, and delete for organizers.
+// `reload` runs after a change.
+function eventRow(e, today, reload) {
+  const VIS = { group: 'Group members', private: 'Private' };
+  const s = e.signup;
+  const signupLine = s ? h('div', { class: 'signup-line small' },
+    h('span', { class: 'muted' }, s.limit ? `${s.count} of ${s.limit} signed up` : `${s.count} signed up`),
+    e.by === undefined ? h('a', { href: 'login.html?next=events.html' }, 'Sign in to sign up') : h('button', {
+      class: 'btn small' + (s.me ? ' secondary' : ''), type: 'button', disabled: !s.me && s.limit > 0 && s.count >= s.limit,
+      onclick: (ev) => busy(ev.currentTarget, async () => {
+        await api('POST', `/api/events/${e.id}/signup`, { on: !s.me });
+        toast(s.me ? 'Taken off the list' : "You're signed up");
+        await reload();
+      })
+    }, s.me ? 'Cancel my spot' : s.limit > 0 && s.count >= s.limit ? 'Full' : 'Sign up'),
+    s.people && s.people.length ? h('span', { class: 'muted' }, `· ${s.people.map((p) => p.name).join(', ')}`) : null) : null;
+  return h('div', { class: 'list-row' },
+    h('div', null,
+      h('strong', null, e.title), VIS[e.visibility] ? [' ', h('span', { class: 'badge vis' }, VIS[e.visibility])] : null,
+      h('div', { class: 'small muted' },
+        fmtRelativeDay(e.date, today) + (e.time ? ` · ${MHSBell.formatTime(e.time)}` : ''),
+        e.group ? [' · ', h('a', { href: `group.html?id=${encodeURIComponent(e.group.id)}` }, e.group.name)] : null,
+        e.by ? ` · added by ${e.by}` : ''),
+      e.description ? h('div', { class: 'small' }, e.description) : null,
+      e.invitees && e.invitees.length ? h('div', { class: 'small muted' }, `Invited: ${e.invitees.map((p) => p.name).join(', ')}`) : null,
+      signupLine),
+    e.mine ? h('button', {
+      class: 'linklike danger', type: 'button', 'aria-label': `Delete ${e.title}`,
+      onclick: (ev) => busy(ev.currentTarget, async () => {
+        if (!confirm(`Delete "${e.title}"?`)) return;
+        await api('DELETE', '/api/events/' + e.id);
+        toast('Event deleted');
+        await reload();
+      })
+    }, 'Delete') : null);
+}
+
 // A round avatar: the person's emoji, or their initials, on their color.
 function avatarEl(person, size = 32) {
   const a = MHSAvatars.clean(person && person.avatar);

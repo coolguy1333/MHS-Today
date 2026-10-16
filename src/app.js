@@ -20,7 +20,6 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MB = 1024 * 1024;
 const MAX_FRIENDS = 150;
 const MAX_SESSIONS_PER_USER = 10;
-const EVENT_KEEP_DAYS = 60; // events older than this are removed automatically
 // What a friend may see of your schedule: everything, only which lunch you have, or nothing.
 const SHARE_LEVELS = ['full', 'lunch', 'none'];
 const GRADES = [9, 10, 11, 12];
@@ -220,7 +219,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       delete u.shareLevels[id];
       u.hiddenSuggestions = u.hiddenSuggestions.filter((f) => f !== id);
     }
-    state.events = state.events.filter((e) => e.by !== id);
+    for (const f of features) f.forgetUser(id);
     db.save();
   }
   const profile = (u) => ({
@@ -230,6 +229,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   });
   // What anyone signed in may see of someone (search results, suggestions, requests).
   const publicCard = (u) => ({ id: u.id, name: u.name, grade: u.grade, avatar: u.avatar });
+  // Ids of people who are friends with `u` both ways.
+  const confirmedFriends = (u) => u.friends.filter((id) => { const o = getUser(id); return o && o.friends.includes(u.id); });
   // What friends see: the card plus the rest of the profile.
   const friendCard = (u) => ({ ...publicCard(u), bio: u.bio, pronouns: u.pronouns, interests: u.interests });
   // What `owner` lets `viewer` (a friend) see. The Account page's master switch turns everything off.
@@ -313,16 +314,21 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     return !ta || !tb || ta === tb;
   }
   // Admin-managed links: validated like any user input; returns null for an invalid entry.
+  // An http(s) address, normalized, or null.
+  function cleanUrl(v) {
+    const s = typeof v === 'string' ? v.trim() : '';
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    return s.length <= 500 && (u.protocol === 'https:' || u.protocol === 'http:') ? u.href : null;
+  }
   function cleanLink(l) {
     if (!isPlainObject(l)) return null;
     const title = cleanText(l.title, 80);
-    const url = typeof l.url === 'string' ? l.url.trim() : '';
-    let u;
-    try { u = new URL(url); } catch { return null; }
-    if (!title || url.length > 500 || (u.protocol !== 'https:' && u.protocol !== 'http:')) return null;
+    const url = cleanUrl(l.url);
+    if (!title || !url) return null;
     return {
       id: typeof l.id === 'string' && /^[0-9a-f]{16}$/.test(l.id) ? l.id : randomId(),
-      title, url: u.href, category: cleanText(l.category, 40) || 'Other', description: cleanText(l.description, 160)
+      title, url, category: cleanText(l.category, 40) || 'Other', description: cleanText(l.description, 160)
     };
   }
   if (!Array.isArray(state.links)) {
@@ -335,19 +341,6 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const nameWords = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
     .replace(/['\u2019.]/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
-  // Returns the cleaned event fields or throws 400. `daysBack` = how far in the past a date may be.
-  function cleanEventFields(b, daysBack = 7) {
-    const title = cleanText(b.title, 120);
-    if (!title) throw bad('Give the event a title');
-    const date = typeof b.date === 'string' ? b.date : '';
-    if (cal.parseDate(date) === null) throw bad('Pick a valid date');
-    const t = today();
-    if (date < cal.addDays(t, -daysBack) || date > cal.addDays(t, 365 * 3)) throw bad('That date is too far away');
-    const time = typeof b.time === 'string' ? b.time : '';
-    if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw bad('Invalid time');
-    return { title, date, time, description: cleanText(b.description, 500) };
-  }
-  const byDateTime = (a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
 
   // ---------- backup / restore ----------
   function exportData() {
@@ -362,7 +355,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       })),
       events: state.events,
       calendar: state.calendar,
-      links: state.links
+      links: state.links,
+      ...Object.assign({}, ...features.map((f) => f.exportData()))
     };
   }
   // Validates everything from the file as if it were fresh user input.
@@ -410,32 +404,33 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         if (!codes.has(c)) { codes.add(c); u.friendCode = c; }
       }
     }
-    const events = [];
-    let dropped = 0;
-    for (const e of Array.isArray(data.events) ? data.events.slice(0, config.maxEvents) : []) {
-      try {
-        if (!isPlainObject(e) || typeof e.id !== 'string' || !/^[0-9a-f]{16}$/.test(e.id)) throw bad('id');
-        const f = cleanEventFields(e, EVENT_KEEP_DAYS);
-        events.push({ id: e.id, ...f, by: hasOwn(users, e.by) ? e.by : null, created: num(e.created) });
-      } catch { dropped++; }
-    }
     db.snapshot('before-restore'); // the previous data stays recoverable
     state.users = users;
-    state.events = events;
+    const counts = Object.assign({ events: 0, droppedEvents: 0 }, ...features.map((f) => f.importData(data, users) || {}));
     state.calendar = cal.cleanCalendar(data.calendar, today());
     if (Array.isArray(data.links)) state.links = data.links.map(cleanLink).filter(Boolean).slice(0, MAX_LINKS);
     for (const [h, s] of Object.entries(state.sessions)) if (!hasOwn(users, s.userId)) delete state.sessions[h];
     db.save();
-    return { users: data.users.length, events: events.length, droppedEvents: dropped };
+    return { users: data.users.length, events: counts.events, droppedEvents: counts.droppedEvents };
   }
 
   // ---------- API routes ----------
   const routes = [];
+  const features = []; // classwork, groups (and events), tools: see below
   function route(method, pattern, opts, handler) {
     const names = [];
     const re = new RegExp('^' + pattern.replace(/:([a-z]+)/g, (_, n) => { names.push(n); return '([^/]+)'; }) + '$');
     routes.push({ method, re, names, auth: opts.auth, maxBody: opts.maxBody, handler });
   }
+
+  // Feature modules add their own routes and say how to back up, restore and tidy their data, and
+  // what to remove when someone deletes their account.
+  const shared = {
+    route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
+    today, cal, bell, sameClass, isPlainObject, hasOwn, num, publicCard, confirmedFriends
+  };
+  features.push(require('./classwork')(shared), require('./groups')(shared), require('./tools')(shared));
+  for (const f of features) if (f.upgrade) f.upgrade();
 
   route('GET', '/api/health', { auth: 'none' }, () => ({ ok: true }));
 
@@ -490,33 +485,6 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     user.classes = cleanClasses(body);
     db.save();
     return user.classes;
-  });
-
-  // Events: anyone can read; the author's name is only shown to signed-in viewers.
-  route('GET', '/api/events', { auth: 'none' }, ({ user }) => state.events.slice().sort(byDateTime).map((e) => ({
-    id: e.id, title: e.title, date: e.date, time: e.time, description: e.description,
-    by: user ? (getUser(e.by) ? getUser(e.by).name : 'Former student') : undefined,
-    mine: !!user && (e.by === user.id || isAdmin(user))
-  })));
-  route('POST', '/api/events', { auth: 'user' }, ({ user, body }) => {
-    if (!canPostEvents(user)) {
-      throw new HttpError(403, config.eventPosting === 'admins' ? 'Only admins can add events' : 'Only verified people can add events. Ask an admin to verify you.');
-    }
-    const fields = cleanEventFields(body);
-    if (state.events.length >= config.maxEvents) throw bad('The events board is full');
-    if (!isAdmin(user) && !limiter.hit(`event:${user.id}`, 10, 86400e3)) throw new HttpError(429, 'You can add up to 10 events a day');
-    const ev = { id: randomId(), ...fields, by: user.id, created: Date.now() };
-    state.events.push(ev);
-    db.save();
-    return { id: ev.id };
-  });
-  route('DELETE', '/api/events/:id', { auth: 'user' }, ({ user, params }) => {
-    const i = state.events.findIndex((e) => e.id === params.id);
-    if (i < 0) throw new HttpError(404, 'Event not found');
-    if (state.events[i].by !== user.id && !isAdmin(user)) throw new HttpError(403, 'You can only delete your own events');
-    state.events.splice(i, 1);
-    db.save();
-    return { ok: true };
   });
 
   // Friends: you add someone with their private code; they must add you back.
@@ -606,12 +574,11 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // name search are suggested, classes count only when that person shares their schedule, and the
   // reason never says which class.
   route('GET', '/api/friends/suggestions', { auth: 'user' }, ({ user }) => {
-    const confirmed = (u) => u.friends.filter((id) => { const o = getUser(id); return o && o.friends.includes(u.id); });
-    const myFriends = new Set(confirmed(user));
+    const myFriends = new Set(confirmedFriends(user));
     const out = [];
     for (const o of Object.values(state.users)) {
       if (o.id === user.id || !o.searchable || user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
-      const mutual = confirmed(o).filter((id) => myFriends.has(id)).length;
+      const mutual = confirmedFriends(o).filter((id) => myFriends.has(id)).length;
       const shared = o.shareSchedule ? bell.BLOCK_KEYS.filter((k) => sameClass(user.classes[k], o.classes[k])).length : 0;
       if (!mutual && !shared) continue;
       out.push({ ...publicCard(o), mutual, sharedClasses: shared, score: mutual * 3 + shared * 2 });
@@ -658,6 +625,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     eventPosting: config.eventPosting,
     users: userCount(),
     events: state.events.length,
+    ...Object.assign({}, ...features.map((f) => f.status())),
     lastSnapshot: db.lastSnapshot(),
     tz: config.tz,
     today: today(),
@@ -908,8 +876,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   function maintain() {
     const now = Date.now();
     for (const [h, s] of Object.entries(state.sessions)) if (s.expires < now) delete state.sessions[h];
-    const cutoff = cal.addDays(today(), -EVENT_KEEP_DAYS);
-    state.events = state.events.filter((e) => e.date >= cutoff);
+    for (const f of features) f.maintain();
     db.save();
     try { db.dailySnapshot(); } catch (e) { log(`Could not write the daily snapshot: ${e.message}`); }
   }

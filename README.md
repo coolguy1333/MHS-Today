@@ -4,8 +4,11 @@ Schedule, events and friends for Mukwonago High School students.
 
 - **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown ("B Lunch · 12 min left" at lunch), your own classes, and what's next.
 - **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D).
+- **Classwork**: classmates post assignments, quizzes and tests to a class; only people in that class see them, and they show next to the class on Today. Three reports hide a post until an admin checks it.
+- **Groups**: clubs, sports and student groups, each with its own page, links, members and events calendar. Anyone can start one; admins approve it before it's listed. Leaders accept members and post the group's events.
 - **Lunch**: today's high school lunch menu, pulled from the district's My School Menus page, with your lunch time and which friends share it. A short version is on the Today page.
-- **Events**: a shared board. Admins and people an admin has verified can add events, and admins can remove anything.
+- **Events**: for everyone (posted by admins, verified people and leaders of approved groups), for a group's members, or private for friends you invite. Any event can have a sign-up list with a limit. Admins can remove anything.
+- **Tools**: an admin-managed list; students can suggest tools for admins to add.
 - **Links**: important links (event tickets, athletic schedules, Infinite Campus, counseling…), kept up to date by admins from the Admin page.
 - **Friends**: add people by searching their name, or with a private code or invite link, or from **People you may know** (friends of friends and classmates). For each friend you choose what they see: classes + lunch, lunch only, or nothing. See what class they're in right now (or that they're at lunch), which classes you share, and whether you have the same lunch today. Friends only see your classes if you allow it.
 - **Sign in with Google** only. No passwords are stored; you can limit sign-in to your school's Google Workspace domain.

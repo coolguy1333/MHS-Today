@@ -10,6 +10,9 @@ src/google.js        Google OpenID Connect (code flow + PKCE, ID-token verificat
 src/db.js            db.json: atomic writes, daily snapshots, old-format archive
 src/util.js          text cleaning, cookies, rate limiter, friend codes
 src/menu.js          lunch menu from Health-e Pro (My School Menus), cached per month
+src/classwork.js     classwork posts (assignments, quizzes, tests) and reports
+src/groups.js        groups and events (visibility, invitations, sign-up lists)
+src/tools.js         the Tools list and students' tool suggestions
 public/              the pages; js/calendar.js, js/bellSchedule.js and js/avatars.js are shared with the server
 public/js/pages/     one script per page (no inline scripts anywhere)
 test/                node:test suites, a mock Google, and helpers
@@ -36,6 +39,16 @@ The letter advances one step per school day (a weekday not listed in `noSchool`)
 ## Friends: search and sharing levels
 
 Name search matches every typed word against the start of the person's Google first/last name or display name (accents and punctuation ignored), skips people who turned search off, and returns only display names and grades (120 searches an hour per person). `shareLevels` is what *you* let each friend see: missing = classes and lunch, `lunch` = only which lunch you have on each day letter (sent as `lunches: { A: 'B', ... }`), `none` = nothing. The Account page's "Let friends see my schedule" switch overrides every level.
+
+## Feature modules
+
+`src/classwork.js`, `src/groups.js` and `src/tools.js` each get a small toolkit from `createApp` (`route`, `state`, `db`, user helpers…), add their routes, and return `exportData`, `importData(data, users)`, `maintain()`, `forgetUser(id)` and `status()`, which backups, restores, the six-hourly cleanup, account deletion and the Admin status use.
+
+**Classwork** items are stored with the class's name and teacher; you see an item when one of your classes is the same class (same name, and the same teacher when both have one). Items go away 14 days after they're due. Three different reporters hide an item (its author and admins still see it) until an admin keeps or deletes it under *Needs attention*.
+
+**Groups**: `{ id, name, kind: club|sport|group, description, links, joinPolicy: open|approval, approved, members: { userId: 'leader'|'member' }, requests: [ids] }`. Unapproved groups are visible only to their members and admins. A group always keeps a leader; if the last person leaves or is deleted, the group and its events go too.
+
+**Events**: `visibility` is `public` (posting follows `EVENT_POSTING`, or the poster leads an approved group the event belongs to), `group` (members only; posted by its leaders) or `private` (the author and `invitees`, who must be their friends). `signup: { limit (0 = none), people }`; organizers (author, group leaders) and admins see names, everyone else the count.
 
 ## Admins, profiles and suggestions
 
@@ -65,10 +78,14 @@ State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: ap
 | `PUT /api/me`, `POST /api/me/friend-code`, `DELETE /api/me` | signed in | Name/privacy, new friend code, delete account |
 | `GET/PUT /api/classes` | signed in | Own classes |
 | `GET /api/lunch?date=` | anyone | Lunch menu for a day (today by default, up to 60 days either way) |
-| `GET /api/links` | anyone | The important links |
+| `GET /api/links`, `GET /api/tools` | anyone | The important links; the tools |
+| `GET/POST /api/classwork`, `DELETE /api/classwork/:id`, `POST /api/classwork/:id/report` | signed in (delete: author or admin) | Classwork for your classes |
+| `GET/POST /api/groups`, `GET/PUT/DELETE /api/groups/:id`, `POST /api/groups/:id/join` `leave`, `PUT /api/groups/:id/members/:uid` (`{ role: 'leader' \| 'member' \| null }`) | signed in (changes: leaders or admins) | Groups |
+| `GET /api/events?group=`, `POST /api/events` (`{ visibility, groupId, invitees, signup }`), `POST /api/events/:id/signup` (`{ on }`) | events you can see; posting rules below | Events |
+| `POST /api/tools/suggestions` | signed in | Suggest a tool |
 | `POST /api/events`, `DELETE /api/events/:id` | post: admins and verified people (see `EVENT_POSTING`); delete: owner or admin | Events |
 | `GET /api/friends`, `POST /api/friends/lookup`, `POST /api/friends/search` (`{ q }`), `POST /api/friends/request` (`{ code }` or `{ id }`), `POST /api/friends/:id/accept`, `PUT /api/friends/:id` (`{ level }`), `DELETE /api/friends/:id`, `GET /api/friends/suggestions`, `POST /api/friends/suggestions/:id/hide` | signed in | Friends |
-| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ admin, verified, name, pronouns, grade, bio, interests, avatar, profileLocked, reset }`), `PUT /api/admin/links` (`{ links }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
+| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ admin, verified, name, pronouns, grade, bio, interests, avatar, profileLocked, reset }`), `PUT /api/admin/links` (`{ links }`), `PUT /api/admin/tools` (`{ tools }`), `GET /api/admin/tool-suggestions`, `POST /api/admin/tool-suggestions/:id/accept`, `DELETE /api/admin/tool-suggestions/:id`, `GET /api/admin/classwork`, `POST /api/admin/classwork/:id/keep`, `PUT /api/admin/groups/:id` (`{ approved }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
 
 ## Security design
 

@@ -15,7 +15,11 @@ function emptyState() {
     sessions: {},  // sha256(token) -> { userId, expires }
     events: [],    // { id, title, date, time, description, by (user id), created }
     calendar: { anchorDate: null, anchorLetter: 'A', noSchool: {}, types: {}, weekdayTypes: {} },
-    links: null    // [{ id, title, url, category, description }]; null = not set up yet (the app adds defaults)
+    links: null,   // [{ id, title, url, category, description }]; null = not set up yet (the app adds defaults)
+    classwork: [], // see src/classwork.js
+    groups: [],    // see src/groups.js
+    tools: null,   // see src/tools.js; null = not set up yet
+    toolSuggestions: []
   };
 }
 
@@ -37,8 +41,7 @@ function openDb(dataDir, log = () => {}) {
     if (!isObj(parsed)) throw new Error(`${file} has an unexpected format.`);
     if (parsed.version === VERSION) {
       for (const k of ['users', 'sessions', 'calendar']) if (isObj(parsed[k])) state[k] = parsed[k];
-      if (Array.isArray(parsed.events)) state.events = parsed.events;
-      if (Array.isArray(parsed.links)) state.links = parsed.links;
+      for (const k of ['events', 'links', 'classwork', 'groups', 'tools', 'toolSuggestions']) if (Array.isArray(parsed[k])) state[k] = parsed[k];
     } else if (parsed.version > VERSION) {
       throw new Error(`${file} was written by a newer version of this app (format ${parsed.version}).`);
     } else {

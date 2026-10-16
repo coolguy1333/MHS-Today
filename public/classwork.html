@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
+  <title>Classwork · MHS Hub</title>
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/icon-167.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <h1>Classwork</h1>
+    <p class="muted">Assignments, quizzes and tests that classmates posted for your classes. Only people in the same class (same name and teacher) see them. Always double-check with your teacher.</p>
+    <div class="card">
+      <h2>Coming up</h2>
+      <div id="upcoming"><p class="muted">Loading…</p></div>
+    </div>
+    <div class="card" id="add-card" hidden>
+      <h2>Post for your class</h2>
+      <form id="add-form" class="form-grid">
+        <label><span>Class</span><select id="cw-block" required></select></label>
+        <label><span>Type</span>
+          <select id="cw-kind"><option value="assignment">Assignment</option><option value="quiz">Quiz</option><option value="test">Test</option></select></label>
+        <label class="wide"><span>Title</span><input type="text" id="cw-title" maxlength="100" required placeholder="Unit 3 quiz, Lab report…" /></label>
+        <label><span>Due</span><input type="date" id="cw-due" required /></label>
+        <label class="wide"><span>Notes (optional)</span><input type="text" id="cw-notes" maxlength="300" placeholder="Sections, pages, what to bring" /></label>
+        <div class="wide"><button class="btn" type="submit">Post</button></div>
+      </form>
+    </div>
+    <p class="card muted" id="no-classes" hidden>Add your classes on <a href="schedule.html">Schedule</a> to see and post classwork.</p>
+    <details class="card" id="past-card" hidden>
+      <summary>Recently due</summary>
+      <div id="past"></div>
+    </details>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/classwork.js"></script>
+</body>
+</html>

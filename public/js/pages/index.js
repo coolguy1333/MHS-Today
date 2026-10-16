@@ -5,7 +5,7 @@
   const { SCHEDULES, getCurrentPeriod, formatTime, blockFor, blockInfo, LUNCH_HOUR, lunchFor, lunchTimes, atLunch } = MHSBell;
 
   // viewDate: null = automatic (today, or the next school day when there's no school today)
-  const S = { info: null, me: null, classes: {}, friends: [], events: [], viewDate: null, lastDate: null, key: '' };
+  const S = { info: null, me: null, classes: {}, friends: [], events: [], classwork: [], viewDate: null, lastDate: null, key: '' };
 
   function model() {
     const cal = S.info.calendar;
@@ -69,10 +69,15 @@
       const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[block.key], cls)).map((f) => f.name);
       // line 1: the class; line 2: block, teacher and which friends are in it
       const meta = [block.label, cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
+      // classwork for this class due in the next week
+      const week = MHSCalendar.addDays(m.viewDate, 7);
+      const due = S.classwork.filter((i) => i.block === block.key && i.due >= m.viewDate && i.due <= week);
       return [
         h('div', null, colorDot(block.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
         h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))),
-        p.hour === LUNCH_HOUR ? lunchLine(m) : null
+        p.hour === LUNCH_HOUR ? lunchLine(m) : null,
+        due.map((i) => h('a', { class: 'due-line', href: 'classwork.html' },
+          h('span', { class: `badge kind-${i.kind}` }, KIND_NAMES[i.kind]), ` ${i.title} · ${fmtRelativeDay(i.due, m.viewDate)}`))
       ];
     }
     if (!block) return null;
@@ -213,17 +218,17 @@
   async function load() {
     try {
       const [info, me, events] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events')]);
-      let classes = {}, friends = [];
+      let classes = {}, friends = [], classwork = [];
       if (me.user) {
-        const [c, f] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends')]);
-        classes = c; friends = f.friends;
+        const [c, f, w] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'), api('GET', '/api/classwork')]);
+        classes = c; friends = f.friends; classwork = w;
       }
       S.info = info; // always keep the newest clock offset
-      const key = JSON.stringify([info.calendar, events, classes, friends, me.user && me.user.admin]);
+      const key = JSON.stringify([info.calendar, events, classes, friends, classwork, me.user && me.user.admin]);
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events });
+      Object.assign(S, { me: me.user, classes, friends, events, classwork });
       S.lastDate = schoolClock(info).date;
       renderAll();
     } catch (e) {

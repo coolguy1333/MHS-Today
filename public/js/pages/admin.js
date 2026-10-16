@@ -219,44 +219,87 @@
         }, 'Remove')])), editing === u.id ? editorRow(u) : null]));
   }
 
-  // ---- links
-  let links = [];
-  let linksDirty = false;
-  const linksState = (on) => { linksDirty = on; $('links-state').textContent = on ? 'Unsaved changes' : ''; };
-  function renderLinks() {
-    fill($('links-editor'), links.map((l, i) => {
-      const field = (key, label, attrs) => {
-        const el = h('input', { type: key === 'url' ? 'url' : 'text', 'aria-label': `Link ${i + 1} ${label}`, placeholder: label, ...attrs });
-        el.value = l[key] || '';
-        el.addEventListener('input', () => { l[key] = el.value; linksState(true); });
-        return el;
-      };
-      const move = (d) => () => { const j = i + d; if (j < 0 || j >= links.length) return; [links[i], links[j]] = [links[j], links[i]]; linksState(true); renderLinks(); };
-      return h('div', { class: 'link-edit' },
-        field('title', 'Title', { maxlength: '80' }),
-        field('url', 'https://…', { maxlength: '500' }),
-        field('category', 'Category', { maxlength: '40' }),
-        h('div', { class: 'row nowrap' },
-          h('button', { class: 'linklike', type: 'button', 'aria-label': `Move link ${i + 1} up`, onclick: move(-1), disabled: i === 0 }, '↑'),
-          h('button', { class: 'linklike', type: 'button', 'aria-label': `Move link ${i + 1} down`, onclick: move(1), disabled: i === links.length - 1 }, '↓'),
-          h('button', { class: 'linklike danger', type: 'button', 'aria-label': `Remove link ${i + 1}`, onclick: () => { links.splice(i, 1); linksState(true); renderLinks(); } }, 'Remove')),
-        h('div', { class: 'desc' }, field('description', 'Short description (optional)', { maxlength: '160' })));
+  // ---- editable lists (links, tools): rows of inputs, reorder, remove, add, save all at once
+  const dirtyLists = new Set();
+  function listEditor({ prefix, noun, fields, blank, path, key }) {
+    let items = [];
+    const setDirty = (on) => { if (on) dirtyLists.add(prefix); else dirtyLists.delete(prefix); $(`${prefix}-state`).textContent = on ? 'Unsaved changes' : ''; };
+    function render() {
+      fill($(`${prefix}-editor`), items.map((item, i) => {
+        const input = ([k, label, attrs]) => {
+          const el = h('input', { type: k === 'url' ? 'url' : 'text', 'aria-label': `${noun} ${i + 1} ${label}`, placeholder: label, ...attrs });
+          el.value = item[k] || '';
+          el.addEventListener('input', () => { item[k] = el.value; setDirty(true); });
+          return el;
+        };
+        const move = (d) => () => { const j = i + d; [items[i], items[j]] = [items[j], items[i]]; setDirty(true); render(); };
+        const [main, desc] = [fields.slice(0, -1), fields[fields.length - 1]];
+        return h('div', { class: 'link-edit' }, main.map(input),
+          h('div', { class: 'row nowrap' },
+            h('button', { class: 'linklike', type: 'button', 'aria-label': `Move ${noun} ${i + 1} up`, onclick: move(-1), disabled: i === 0 }, '↑'),
+            h('button', { class: 'linklike', type: 'button', 'aria-label': `Move ${noun} ${i + 1} down`, onclick: move(1), disabled: i === items.length - 1 }, '↓'),
+            h('button', { class: 'linklike danger', type: 'button', 'aria-label': `Remove ${noun} ${i + 1}`, onclick: () => { items.splice(i, 1); setDirty(true); render(); } }, 'Remove')),
+          h('div', { class: 'desc' }, input(desc)));
+      }));
+    }
+    $(`${prefix}-add`).addEventListener('click', () => {
+      items.push(blank(items));
+      setDirty(true);
+      render();
+      const first = $(`${prefix}-editor`).querySelector('.link-edit:last-child input');
+      if (first) first.focus();
+    });
+    $(`${prefix}-save`).addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      items = await api('PUT', path, { [key]: items });
+      setDirty(false);
+      render();
+      toast('Saved');
     }));
+    return { set(list) { items = list; render(); } };
   }
-  $('link-add').addEventListener('click', () => {
-    links.push({ title: '', url: 'https://', category: links.length ? links[links.length - 1].category : '', description: '' });
-    linksState(true);
-    renderLinks();
-    const inputs = $('links-editor').querySelectorAll('.link-edit:last-child input');
-    if (inputs[0]) inputs[0].focus();
+  window.addEventListener('beforeunload', (e) => { if (dirtyLists.size) { e.preventDefault(); e.returnValue = ''; } });
+  const linksEditor = listEditor({
+    prefix: 'links', noun: 'Link', path: '/api/admin/links', key: 'links',
+    fields: [['title', 'Title', { maxlength: '80' }], ['url', 'https://…', { maxlength: '500' }], ['category', 'Category', { maxlength: '40' }],
+      ['description', 'Short description (optional)', { maxlength: '160' }]],
+    blank: (list) => ({ title: '', url: 'https://', category: list.length ? list[list.length - 1].category : '', description: '' })
   });
-  $('links-save').addEventListener('click', (e) => busy(e.currentTarget, async () => {
-    links = await api('PUT', '/api/admin/links', { links });
-    linksState(false);
-    renderLinks();
-    toast('Links saved');
-  }));
-  window.addEventListener('beforeunload', (e) => { if (linksDirty) { e.preventDefault(); e.returnValue = ''; } });
+  const toolsEditor = listEditor({
+    prefix: 'tools', noun: 'Tool', path: '/api/admin/tools', key: 'tools',
+    fields: [['name', 'Name', { maxlength: '60' }], ['url', 'https://… (empty = coming soon)', { maxlength: '500' }],
+      ['description', 'What it does', { maxlength: '200' }]],
+    blank: () => ({ name: '', url: '', description: '' })
+  });
+
+  // ---- needs attention: groups to approve, reported classwork, tool suggestions
+  async function renderQueue() {
+    const [groups, reported, ideas] = await Promise.all([
+      api('GET', '/api/groups'), api('GET', '/api/admin/classwork'), api('GET', '/api/admin/tool-suggestions')]);
+    const pending = groups.filter((g) => !g.approved);
+    const act = (fn, message) => (e) => busy(e.currentTarget, async () => { await fn(); toast(message); await renderQueue(); });
+    const rows = [
+      ...pending.map((g) => h('div', { class: 'list-row' },
+        h('div', null, h('span', { class: 'badge vis' }, 'New group'), ' ', h('a', { href: `group.html?id=${encodeURIComponent(g.id)}` }, h('strong', null, g.name)),
+          h('div', { class: 'small muted' }, `${GROUP_KINDS[g.kind]}${g.description ? ` · ${g.description.slice(0, 120)}` : ''}`)),
+        h('div', { class: 'row nowrap' },
+          h('button', { class: 'btn small', type: 'button', onclick: act(() => api('PUT', `/api/admin/groups/${g.id}`, { approved: true }), `${g.name} approved`) }, 'Approve'),
+          h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm(`Delete the group ${g.name}?`)) act(() => api('DELETE', `/api/groups/${g.id}`), 'Group deleted')(e); } }, 'Delete')))),
+      ...reported.map((i) => h('div', { class: 'list-row' },
+        h('div', null, h('span', { class: `badge kind-${i.kind}` }, KIND_NAMES[i.kind]), ' ', h('strong', null, i.title),
+          h('div', { class: 'small muted' }, `${i.className}${i.teacher ? ` · ${i.teacher}` : ''} · due ${fmtShortDay(i.due)} · by ${i.by} · ${i.reports} report${i.reports === 1 ? '' : 's'}${i.hidden ? ' · hidden' : ''}`),
+          i.notes ? h('div', { class: 'small' }, i.notes) : null),
+        h('div', { class: 'row nowrap' },
+          h('button', { class: 'btn small secondary', type: 'button', onclick: act(() => api('POST', `/api/admin/classwork/${i.id}/keep`, {}), 'Kept') }, 'Keep'),
+          h('button', { class: 'linklike danger', type: 'button', onclick: act(() => api('DELETE', `/api/classwork/${i.id}`), 'Deleted') }, 'Delete')))),
+      ...ideas.map((t) => h('div', { class: 'list-row' },
+        h('div', null, h('span', { class: 'badge vis' }, 'Tool idea'), ' ', h('strong', null, t.name),
+          h('div', { class: 'small muted' }, [t.url, t.description, t.by ? `from ${t.by.name}` : null].filter(Boolean).join(' · '))),
+        h('div', { class: 'row nowrap' },
+          h('button', { class: 'btn small', type: 'button', onclick: act(async () => toolsEditor.set(await api('POST', `/api/admin/tool-suggestions/${t.id}/accept`, {})), 'Added to Tools') }, 'Add to Tools'),
+          h('button', { class: 'linklike danger', type: 'button', onclick: act(() => api('DELETE', `/api/admin/tool-suggestions/${t.id}`), 'Dismissed') }, 'Dismiss'))))
+    ];
+    fill($('queue'), rows.length ? rows : h('p', { class: 'muted small' }, 'Nothing waiting. 🎉'));
+  }
 
   // ---- restore
   const fileInput = $('restore-file');
@@ -290,5 +333,7 @@
   renderSetup();
   renderCalendar();
   renderUsers();
-  try { links = await api('GET', '/api/links'); renderLinks(); } catch (e) { fill($('links-editor'), h('p', { class: 'notice error' }, e.message)); }
+  try { linksEditor.set(await api('GET', '/api/links')); } catch (e) { fill($('links-editor'), h('p', { class: 'notice error' }, e.message)); }
+  try { toolsEditor.set(await api('GET', '/api/tools')); } catch (e) { fill($('tools-editor'), h('p', { class: 'notice error' }, e.message)); }
+  try { await renderQueue(); } catch (e) { fill($('queue'), h('p', { class: 'notice error' }, e.message)); }
 })();
