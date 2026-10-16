@@ -1,4 +1,5 @@
-// Friends: share a code, add by code (always confirmed first), accept requests, see where friends are.
+// Friends: share a code, add by code (always confirmed first) or by name search, accept requests,
+// see where friends are, and choose what each friend can see of your schedule.
 (async function () {
   renderNav('friends');
   const user = await requireLogin();
@@ -8,6 +9,8 @@
   let info = null;
   let lastKey = '';
 
+  const LEVELS = [['full', 'Classes + lunch'], ['lunch', 'Lunch only'], ['none', 'Nothing']];
+  const gradeText = (g) => (g ? `${g}th grade` : null);
   const pretty = (c) => `${c.slice(0, 5)}-${c.slice(5)}`;
   const inviteLink = () => `${location.origin}/friends.html?code=${myCode}`;
   const showCode = () => { $('my-code').textContent = pretty(myCode); };
@@ -30,13 +33,27 @@
       ? data.friends.map((f) => {
         const t = friendNowText(f, live);
         const lunch = live.day.schoolDay ? sharedLunchText(myClasses, f, live.day.dayLetter) : null;
-        return h('div', { class: 'list-row' },
-          h('div', null, h('strong', null, f.name), h('div', { class: 'small' + (t.muted ? ' muted' : '') }, t.text),
+        const level = h('select', { 'aria-label': `What ${f.name} can see of your schedule` },
+          LEVELS.map(([v, label]) => h('option', { value: v, selected: f.myLevel === v }, label)));
+        level.addEventListener('change', () => busy(level, async () => {
+          try {
+            await api('PUT', `/api/friends/${f.id}`, { level: level.value });
+            f.myLevel = level.value;
+            toast(`${f.name} can now see: ${LEVELS.find(([v]) => v === level.value)[1].toLowerCase()}`);
+          } catch (err) { level.value = f.myLevel; throw err; }
+        }));
+        return h('div', { class: 'list-row friend-row' },
+          h('div', null,
+            h('strong', null, f.name), gradeText(f.grade) ? h('span', { class: 'small muted' }, ` · ${gradeText(f.grade)}`) : null,
+            f.bio ? h('div', { class: 'small' }, f.bio) : null,
+            h('div', { class: 'small' + (t.muted ? ' muted' : '') }, t.text),
             lunch ? h('div', { class: 'small' + (lunch.same ? '' : ' muted') }, `Today: ${lunch.text}`) : null),
-          h('button', {
-            class: 'linklike danger', type: 'button', 'aria-label': `Remove ${f.name}`,
-            onclick: (e) => { if (confirm(`Remove ${f.name} from your friends?`)) act(e, () => api('DELETE', `/api/friends/${f.id}`), `${f.name} removed`); }
-          }, 'Remove'));
+          h('div', { class: 'friend-actions' },
+            h('label', { class: 'small muted' }, 'They can see', level),
+            h('button', {
+              class: 'linklike danger', type: 'button', 'aria-label': `Remove ${f.name}`,
+              onclick: (e) => { if (confirm(`Remove ${f.name} from your friends?`)) act(e, () => api('DELETE', `/api/friends/${f.id}`), `${f.name} removed`); }
+            }, 'Remove')));
       })
       : h('p', { class: 'muted' }, "No friends yet. Share your code, or enter a friend's code above."));
   }
@@ -87,6 +104,37 @@
     });
   }
   $('find-form').addEventListener('submit', (e) => { e.preventDefault(); find($('friend-code').value, e.submitter); });
+
+  // ---- add by name
+  let lastQuery = '';
+  function resultRow(r) {
+    const status = {
+      friends: h('span', { class: 'small muted' }, 'Friends'),
+      requested: h('span', { class: 'small muted' }, 'Request sent'),
+      incoming: h('button', { class: 'btn small', type: 'button', onclick: (e) => act(e, async () => { await api('POST', `/api/friends/${r.id}/accept`, {}); await runSearch(lastQuery); }, `You and ${r.name} are friends`) }, 'Accept'),
+      none: h('button', {
+        class: 'btn small secondary', type: 'button',
+        onclick: (e) => act(e, async () => { await api('POST', '/api/friends/request', { id: r.id }); await runSearch(lastQuery); }, `Request sent to ${r.name}`)
+      }, 'Add friend')
+    }[r.status || 'none'];
+    return h('div', { class: 'list-row' }, h('div', null, h('strong', null, r.name), gradeText(r.grade) ? h('span', { class: 'small muted' }, ` · ${gradeText(r.grade)}`) : null), status);
+  }
+  async function runSearch(q, button) {
+    lastQuery = q;
+    await busy(button, async () => {
+      const box = $('search-results');
+      try {
+        const r = await api('POST', '/api/friends/search', { q });
+        fill(box, r.results.length
+          ? [r.results.map(resultRow), r.more ? h('p', { class: 'small muted' }, 'More people match. Add a last name to narrow it down.') : null]
+          : h('p', { class: 'small muted' }, 'No one found. They may have turned off name search, so ask for their friend code.'));
+      } catch (e) {
+        if (e.status === 400 || e.status === 429) fill(box, h('p', { class: 'notice error' }, e.message));
+        else throw e;
+      }
+    });
+  }
+  $('search-form').addEventListener('submit', (e) => { e.preventDefault(); runSearch($('search-q').value, e.submitter); });
 
   try {
     info = await loadCalendar();

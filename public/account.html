@@ -17,16 +17,23 @@
     <h1>Account</h1>
     <div class="card">
       <h2>Profile</h2>
-      <form id="name-form" class="stack">
-        <label><span>Display name (shown to your friends and on events you add)</span>
-          <span class="inline-field"><input type="text" id="name" maxlength="40" required /><button class="btn" type="submit">Save</button></span>
-        </label>
+      <p class="notice" id="locked-note" hidden>An admin has locked your profile, so it can't be changed right now.</p>
+      <form id="profile-form" class="form-grid">
+        <label class="wide"><span>Display name (shown to your friends, in name search and on events you add)</span>
+          <input type="text" id="name" maxlength="40" required /></label>
+        <label><span>Grade</span>
+          <select id="grade"><option value="">Not set</option><option value="9">9th</option><option value="10">10th</option><option value="11">11th</option><option value="12">12th</option></select></label>
+        <label class="wide"><span>Bio (optional, shown to friends)</span>
+          <textarea id="bio" maxlength="160" rows="2" placeholder="Clubs, sports, what you're into…"></textarea></label>
+        <div class="wide row"><button class="btn" type="submit" id="profile-save">Save profile</button><span class="small muted" id="bio-count"></span></div>
       </form>
       <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students.</p>
     </div>
     <div class="card">
       <h2>Privacy</h2>
-      <label class="check"><input type="checkbox" id="share" /><span>Let friends see my classes and where I am right now</span></label>
+      <label class="check"><input type="checkbox" id="share" /><span>Let friends see my schedule (you can limit each friend on the Friends page)</span></label>
+      <label class="check"><input type="checkbox" id="searchable" /><span>Let people find me by searching my name</span></label>
+      <p class="small muted">Name search matches your first and last name from Google but only ever shows your display name.</p>
     </div>
     <div class="card" id="admin-card" hidden>
       <h2>Admin</h2>

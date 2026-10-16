@@ -135,9 +135,46 @@
     renderUsers();
     renderSetup();
   }
+  let editing = null; // id of the person whose profile editor is open
+  const badge = (on, text) => (on ? [' ', h('span', { class: 'badge' }, text)] : null);
+
+  // Inline profile editor: name, grade, bio, lock, reset.
+  function editorRow(u) {
+    const name = h('input', { type: 'text', maxlength: '40', value: u.name, required: true });
+    const grade = h('select', null, h('option', { value: '' }, 'Not set'), [9, 10, 11, 12].map((g) => h('option', { value: String(g), selected: u.grade === g }, `${g}th`)));
+    const bio = h('textarea', { maxlength: '160', rows: '2' });
+    bio.value = u.bio || '';
+    const locked = h('input', { type: 'checkbox', checked: u.profileLocked });
+    const save = (e, body, message) => busy(e.currentTarget, async () => {
+      await api('PUT', `/api/admin/users/${u.id}`, body);
+      editing = null;
+      await reloadUsers();
+      toast(message);
+    });
+    const form = h('form', { class: 'form-grid', 'aria-label': `Edit ${u.name}'s profile` },
+      h('label', null, h('span', null, 'Display name'), name),
+      h('label', null, h('span', null, 'Grade'), grade),
+      h('label', { class: 'wide' }, h('span', null, 'Bio'), bio),
+      h('label', { class: 'check wide' }, locked, h('span', null, "Lock profile (they can't change their name, grade or bio)")),
+      h('div', { class: 'wide row' },
+        h('button', { class: 'btn small', type: 'submit' }, 'Save'),
+        h('button', {
+          class: 'btn small secondary', type: 'button',
+          onclick: (e) => { if (confirm(`Reset ${u.name}'s profile to their Google first name and last initial, with no grade or bio?`)) save(e, { reset: true, profileLocked: locked.checked }, 'Profile reset'); }
+        }, 'Reset profile'),
+        h('button', { class: 'btn small secondary', type: 'button', onclick: () => { editing = null; renderUsers(); } }, 'Cancel')));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      save({ currentTarget: e.submitter }, { name: name.value, grade: grade.value || null, bio: bio.value, profileLocked: locked.checked }, 'Profile saved');
+    });
+    return h('tr', { class: 'editor-row' }, h('td', { colspan: 5 }, form));
+  }
+
   function renderUsers() {
-    fill($('users'), users.map((u) => h('tr', null,
-      h('td', null, u.name, u.admin ? [' ', h('span', { class: 'badge' }, 'admin')] : null, u.verified ? [' ', h('span', { class: 'badge' }, 'verified')] : null),
+    fill($('users'), users.map((u) => [h('tr', null,
+      h('td', null, u.name, badge(u.admin, 'admin'), badge(u.verified, 'verified'), badge(u.profileLocked, 'locked'),
+        h('div', { class: 'small muted' }, [u.fullName, u.grade ? `${u.grade}th grade` : null, u.searchable ? null : 'hidden from search'].filter(Boolean).join(' · ')),
+        u.bio ? h('div', { class: 'small' }, u.bio) : null),
       h('td', { class: 'small' }, u.email),
       h('td', { class: 'small muted nowrap' }, fmtAgo(u.lastLogin)),
       h('td', null, u.admin ? h('span', { class: 'small muted' }, 'Admin') : h('button', {
@@ -148,13 +185,18 @@
           toast(u.verified ? `${u.name} can no longer post events` : `${u.name} can now post events`);
         })
       }, u.verified ? 'Unverify' : 'Verify')),
-      h('td', null, u.id === me.id ? null : h('button', {
-        class: 'linklike danger', type: 'button', 'aria-label': `Remove ${u.name}`,
-        onclick: (e) => {
-          if (!confirm(`Remove ${u.name} (${u.email})? This deletes their account, classes and events.`)) return;
-          busy(e.currentTarget, async () => { await api('DELETE', `/api/admin/users/${u.id}`); await reloadUsers(); toast('Removed'); });
-        }
-      }, 'Remove')))));
+      h('td', { class: 'nowrap' },
+        h('button', {
+          class: 'linklike', type: 'button', 'aria-label': `Edit ${u.name}'s profile`, 'aria-expanded': String(editing === u.id),
+          onclick: () => { editing = editing === u.id ? null : u.id; renderUsers(); }
+        }, 'Edit'),
+        u.id === me.id ? null : [' · ', h('button', {
+          class: 'linklike danger', type: 'button', 'aria-label': `Remove ${u.name}`,
+          onclick: (e) => {
+            if (!confirm(`Remove ${u.name} (${u.email})? This deletes their account, classes and events.`)) return;
+            busy(e.currentTarget, async () => { await api('DELETE', `/api/admin/users/${u.id}`); await reloadUsers(); toast('Removed'); });
+          }
+        }, 'Remove')])), editing === u.id ? editorRow(u) : null]));
   }
 
   // ---- restore

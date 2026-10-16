@@ -197,7 +197,18 @@ tr.note-row td { padding: 4px 10px; font-size: 0.82rem; color: var(--muted); bor
   .slot-hour { display: flex; gap: 8px; align-items: baseline; }
 }
 
+/* ---- lunch ---- */
+.menu-section h3 { margin: 14px 0 4px; font-size: 1rem; }
+.menu-section:first-child h3 { margin-top: 0; }
+.menu-items { margin: 0; padding-left: 18px; }
+.menu-items li { padding: 1px 0; }
+.menu-items li.note { list-style: none; margin-left: -18px; color: var(--muted); font-style: italic; font-size: 0.9rem; }
+
 /* ---- friends ---- */
+.friend-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.friend-actions label { display: flex; flex-direction: column; gap: 2px; }
+.friend-actions select { padding: 4px 8px; }
+#search-results:not(:empty) { margin: 4px 0 12px; }
 .code-box { font-size: 1.6rem; letter-spacing: 0.12em; font-weight: 700; padding: 10px 14px; background: var(--bg); border: 1px dashed var(--border); border-radius: 10px; display: inline-block; }
 
 /* ---- tools ---- */
@@ -208,6 +219,7 @@ tr.note-row td { padding: 4px 10px; font-size: 0.82rem; color: var(--muted); bor
 a.tool-card:hover { border-color: var(--primary); }
 
 /* ---- admin ---- */
+.editor-row td { background: var(--bg); }
 .checklist { list-style: none; padding: 0; margin: 0; }
 .checklist li { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
 .checklist li:last-child { border-bottom: none; }

@@ -17,7 +17,7 @@ function freePort() {
 }
 
 // Starts the real app on a free port with a temp data dir, wired to the mock Google.
-async function startApp({ mock, env = {}, tweak } = {}) {
+async function startApp({ mock, env = {}, tweak, fetchFn } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mhs-test-'));
   const port = await freePort();
   const config = loadConfig({
@@ -29,7 +29,7 @@ async function startApp({ mock, env = {}, tweak } = {}) {
   if (mock) mock.configure(config);
   if (tweak) tweak(config);
   const logs = [];
-  const app = createApp(config, { log: (...a) => logs.push(a.join(' ')) });
+  const app = createApp(config, { log: (...a) => logs.push(a.join(' ')), fetchFn });
   await app.listen();
   let closed = false;
   const ctx = {

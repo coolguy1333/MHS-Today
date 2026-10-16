@@ -9,6 +9,7 @@ src/app.js           security headers, Google sign-in routes, JSON API, static f
 src/google.js        Google OpenID Connect (code flow + PKCE, ID-token verification)
 src/db.js            db.json: atomic writes, daily snapshots, old-format archive
 src/util.js          text cleaning, cookies, rate limiter, friend codes
+src/menu.js          lunch menu from Health-e Pro (My School Menus), cached per month
 public/              the pages; js/calendar.js and js/bellSchedule.js are shared with the server
 public/js/pages/     one script per page (no inline scripts anywhere)
 test/                node:test suites, a mock Google, and helpers
@@ -28,13 +29,21 @@ weekdayTypes  { '3': 'advisory' }   repeating pattern, 1 = Monday
 
 The letter advances one step per school day (a weekday not listed in `noSchool`). "Today" and the live period are computed in the school's time zone, using the server's clock so a wrong phone clock doesn't matter. Bell times, the color-block rotation and lunch times are in `public/js/bellSchedule.js`.
 
+## Lunch menu
+
+`src/menu.js` reads the public Health-e Pro API that myschoolmenus.com uses (`/api/organizations/<district>/menus/<menu>/year/<y>/month/<m>/date_overwrites`). Each month is fetched by the server, cached for an hour, and the last good copy is kept if the service is down, so pages never contact another site (the CSP stays `connect-src 'self'`). Counters ("Grab n Go ($3.85)") become sections; "Or" lines are kept as notes.
+
+## Friends: search and sharing levels
+
+Name search matches every typed word against the start of the person's Google first/last name or display name (accents and punctuation ignored), skips people who turned search off, and returns only display names and grades (120 searches an hour per person). `shareLevels` is what *you* let each friend see: missing = classes and lunch, `lunch` = only which lunch you have on each day letter (sent as `lunches: { A: 'B', ... }`), `none` = nothing. The Account page's "Let friends see my schedule" switch overrides every level.
+
 ## Color blocks and lunch
 
 Classes are saved per color block, not per day: `classes = { yellow: { name, teacher, room }, green: { name, teacher, room, lunch: 'A' }, ... }`. `ROTATION[letter][hour - 1]` (from the MHS Daily Schedule grid) says which block meets in each hour, so each class is entered once. Lunch is inside Hour 4, so it is stored on the blocks that meet in Hour 4 (`LUNCH_BLOCKS`: Green on Day A, Orange on B–D); `lunchFor(classes, letter)` gives someone's lunch for a day, and `LUNCHES` has the A/B/C times for each schedule type. Schedules saved by the first release (keys like `A_1`) are converted to blocks when the server starts and when they are sent to `PUT /api/classes`.
 
 ## Data (`$DATA_DIR/db.json`)
 
-Written atomically (temp file, fsync, rename), mode 0600. Shape: `users` (id → `{ sub, email, name, classes, friends: [ids], friendCode, shareSchedule, verified }`), `sessions` (SHA-256 of the cookie token → user and expiry), `events`, `calendar`. A friendship exists when both people list each other. An older password-based `db.json` (first release) is archived to `backups/db.old-format-*.json` and the app starts empty.
+Written atomically (temp file, fsync, rename), mode 0600. Shape: `users` (id → `{ sub, email, name, classes, friends: [ids], friendCode, shareSchedule, verified, givenName, familyName, searchable, shareLevels: { friendId: 'lunch' | 'none' }, grade, bio, profileLocked }`. `givenName`/`familyName` come from Google, are refreshed at each sign-in, and are only used for name search and shown to admins), `sessions` (SHA-256 of the cookie token → user and expiry), `events`, `calendar`. A friendship exists when both people list each other. An older password-based `db.json` (first release) is archived to `backups/db.old-format-*.json` and the app starts empty.
 
 ## API
 
@@ -47,9 +56,10 @@ State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: ap
 | `POST /api/logout` | anyone | End the session |
 | `PUT /api/me`, `POST /api/me/friend-code`, `DELETE /api/me` | signed in | Name/privacy, new friend code, delete account |
 | `GET/PUT /api/classes` | signed in | Own classes |
+| `GET /api/lunch?date=` | anyone | Lunch menu for a day (today by default, up to 60 days either way) |
 | `POST /api/events`, `DELETE /api/events/:id` | post: admins and verified people (see `EVENT_POSTING`); delete: owner or admin | Events |
-| `GET /api/friends`, `POST /api/friends/lookup`, `POST /api/friends/request`, `POST /api/friends/:id/accept`, `DELETE /api/friends/:id` | signed in | Friends |
-| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ verified }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
+| `GET /api/friends`, `POST /api/friends/lookup`, `POST /api/friends/search` (`{ q }`), `POST /api/friends/request` (`{ code }` or `{ id }`), `POST /api/friends/:id/accept`, `PUT /api/friends/:id` (`{ level }`), `DELETE /api/friends/:id` | signed in | Friends |
+| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ verified, name, grade, bio, profileLocked, reset }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
 
 ## Security design
 

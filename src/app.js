@@ -9,6 +9,7 @@ const cal = require('../public/js/calendar.js');
 const bell = require('../public/js/bellSchedule.js');
 const { openDb } = require('./db');
 const { createGoogle, AuthError, newPkce } = require('./google');
+const { createMenu } = require('./menu');
 const {
   cleanText, randomId, sha256hex, safeEqual, hasOwn, newFriendCode, normalizeFriendCode,
   parseCookies, serializeCookie, RateLimiter
@@ -19,6 +20,9 @@ const MB = 1024 * 1024;
 const MAX_FRIENDS = 150;
 const MAX_SESSIONS_PER_USER = 10;
 const EVENT_KEEP_DAYS = 60; // events older than this are removed automatically
+// What a friend may see of your schedule: everything, only which lunch you have, or nothing.
+const SHARE_LEVELS = ['full', 'lunch', 'none'];
+const GRADES = [9, 10, 11, 12];
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -59,6 +63,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     'X-Robots-Tag': 'noindex, nofollow' // a school's events and pages are not for search engines
   };
   if (config.secure) SECURITY_HEADERS['Strict-Transport-Security'] = 'max-age=15552000';
+  const menu = createMenu({ district: config.menu.district, menuId: config.menu.id, fetchFn, log });
 
   // ---------- small helpers ----------
   const today = () => cal.schoolNow(config.tz).date;
@@ -135,39 +140,68 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (!Object.values(state.users).some((u) => u.friendCode === code)) return code;
     }
   }
-  function defaultName(claims) {
-    const given = cleanText(claims.given_name, 30);
-    const family = cleanText(claims.family_name, 30);
-    if (given) return family ? `${given} ${Array.from(family)[0].toUpperCase()}.` : given;
-    return cleanText(claims.name, 30).split(' ')[0] || 'Student';
+  // First and last name from Google. They are private: only name search and admins use them.
+  function googleNames(claims) {
+    let given = cleanText(claims.given_name, 30);
+    let family = cleanText(claims.family_name, 40);
+    if (!given) {
+      const [first = '', ...rest] = cleanText(claims.name, 70).split(' ');
+      given = first; family = rest.join(' ');
+    }
+    return { givenName: cleanText(given, 30), familyName: cleanText(family, 40) };
   }
+  // Display name: first name + last initial ("Ann L.").
+  function nameFrom(given, family) {
+    if (given) return family ? `${given} ${Array.from(family)[0].toUpperCase()}.` : given;
+    return 'Student';
+  }
+  // Fields added after the first release get their defaults (old db.json files, backups).
+  function fillUserDefaults(u) {
+    if (typeof u.givenName !== 'string') u.givenName = '';
+    if (typeof u.familyName !== 'string') u.familyName = '';
+    if (typeof u.searchable !== 'boolean') u.searchable = true;
+    if (!isPlainObject(u.shareLevels)) u.shareLevels = {};
+    if (!GRADES.includes(u.grade)) u.grade = null;
+    if (typeof u.bio !== 'string') u.bio = '';
+    if (typeof u.profileLocked !== 'boolean') u.profileLocked = false;
+    return u;
+  }
+  for (const u of Object.values(state.users)) fillUserDefaults(u);
+
   function upsertUser(claims) {
     const email = claims.email.toLowerCase();
     let user = Object.values(state.users).find((u) => u.sub === claims.sub);
     const isNew = !user;
+    const names = googleNames(claims);
     if (!user) {
       if (userCount() >= config.maxUsers) throw new AuthError('user limit reached', 'full');
-      user = {
-        id: randomId(), sub: claims.sub, email, name: defaultName(claims), created: Date.now(), lastLogin: 0,
+      user = fillUserDefaults({
+        id: randomId(), sub: claims.sub, email, name: nameFrom(names.givenName, names.familyName), created: Date.now(), lastLogin: 0,
         classes: {}, friends: [], friendCode: uniqueFriendCode(), shareSchedule: true, verified: false
-      };
+      });
       state.users[user.id] = user;
     }
     user.email = email; // follows the Google account if the address changes
+    Object.assign(user, names);
     user.lastLogin = Date.now();
     return { user, isNew };
   }
   function deleteUser(id) {
     delete state.users[id];
     for (const [h, s] of Object.entries(state.sessions)) if (s.userId === id) delete state.sessions[h];
-    for (const u of Object.values(state.users)) u.friends = u.friends.filter((f) => f !== id);
+    for (const u of Object.values(state.users)) { u.friends = u.friends.filter((f) => f !== id); delete u.shareLevels[id]; }
     state.events = state.events.filter((e) => e.by !== id);
     db.save();
   }
   const profile = (u) => ({
     id: u.id, name: u.name, admin: isAdmin(u), verified: u.verified === true, canPostEvents: canPostEvents(u),
-    friendCode: u.friendCode, shareSchedule: u.shareSchedule
+    friendCode: u.friendCode, shareSchedule: u.shareSchedule, searchable: u.searchable,
+    grade: u.grade, bio: u.bio, profileLocked: u.profileLocked
   });
+  // What `owner` lets `viewer` (a friend) see. The Account page's master switch turns everything off.
+  const shareLevel = (owner, viewerId) => (!owner.shareSchedule ? 'none' : owner.shareLevels[viewerId] || 'full');
+  // Lunch letter for each day letter, for friends who see only lunch.
+  const lunchesOf = (u) => Object.fromEntries(cal.LETTERS.map((l) => [l, bell.lunchFor(u.classes, l)]).filter(([, v]) => v));
 
   // ---------- validation ----------
   // Classes are keyed by color block: { yellow: { name, teacher, room }, green: { ..., lunch: 'A' } }.
@@ -197,6 +231,30 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     }
     if (converted) { log(`Converted ${converted} saved schedule${converted === 1 ? '' : 's'} to color blocks`); db.save(); }
   }
+  function cleanGrade(v) {
+    if (v === null || v === '') return null;
+    const g = typeof v === 'string' && /^\d{1,2}$/.test(v) ? Number(v) : v;
+    if (!GRADES.includes(g)) throw bad('Pick a grade from 9 to 12');
+    return g;
+  }
+  // Profile fields anyone may send (name, grade, bio). Returns only the ones present.
+  function cleanProfileFields(b) {
+    const out = {};
+    if (b.name !== undefined) {
+      out.name = cleanText(b.name, 40);
+      if (!out.name) throw bad('Enter a name');
+    }
+    if (b.grade !== undefined) out.grade = cleanGrade(b.grade);
+    if (b.bio !== undefined) {
+      if (typeof b.bio !== 'string') throw bad('Invalid bio');
+      out.bio = cleanText(b.bio, 160);
+    }
+    return out;
+  }
+  // Lowercase, accents removed, only letters/digits: 'José O\'Neil' -> ['jose', 'oneil']
+  const nameWords = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    .replace(/['\u2019.]/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
   // Returns the cleaned event fields or throws 400. `daysBack` = how far in the past a date may be.
   function cleanEventFields(b, daysBack = 7) {
     const title = cleanText(b.title, 120);
@@ -217,7 +275,9 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       app: 'mhs-hub', version: 2, exportedAt: new Date().toISOString(),
       users: Object.values(state.users).map((u) => ({
         id: u.id, sub: u.sub, email: u.email, name: u.name, created: u.created, lastLogin: u.lastLogin,
-        classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule, verified: u.verified === true
+        classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule, verified: u.verified === true,
+        givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels,
+        grade: u.grade, bio: u.bio, profileLocked: u.profileLocked
       })),
       events: state.events,
       calendar: state.calendar
@@ -241,14 +301,19 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (code && codes.has(code)) code = null;
       if (code) codes.add(code);
       friendIds[u.id] = Array.isArray(u.friends) ? u.friends : [];
-      users[u.id] = {
+      users[u.id] = fillUserDefaults({
         id: u.id, sub, email, name: cleanText(u.name, 40) || 'Student', created: num(u.created), lastLogin: num(u.lastLogin),
         classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
-        verified: u.verified === true
-      };
+        verified: u.verified === true, givenName: cleanText(u.givenName, 30), familyName: cleanText(u.familyName, 40),
+        searchable: u.searchable !== false, grade: GRADES.includes(u.grade) ? u.grade : null, bio: cleanText(u.bio, 160),
+        profileLocked: u.profileLocked === true
+      });
+      users[u.id].rawLevels = isPlainObject(u.shareLevels) ? u.shareLevels : {};
     }
     for (const u of Object.values(users)) {
       u.friends = [...new Set(friendIds[u.id].filter((f) => typeof f === 'string' && f !== u.id && hasOwn(users, f)))].slice(0, MAX_FRIENDS);
+      for (const f of u.friends) if (hasOwn(u.rawLevels, f) && ['lunch', 'none'].includes(u.rawLevels[f])) u.shareLevels[f] = u.rawLevels[f];
+      delete u.rawLevels;
       while (!u.friendCode) {
         const c = newFriendCode();
         if (!codes.has(c)) { codes.add(c); u.friendCode = c; }
@@ -287,15 +352,14 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     config: { signIn: !!google, allowedDomains: config.allowedDomains, eventPosting: config.eventPosting, tz: config.tz }
   }));
   route('PUT', '/api/me', { auth: 'user' }, ({ user, body }) => {
-    if (body.name !== undefined) {
-      const name = cleanText(body.name, 40);
-      if (!name) throw bad('Enter a name');
-      user.name = name;
+    const fields = cleanProfileFields(body);
+    if (Object.keys(fields).length && user.profileLocked) throw new HttpError(403, 'An admin has locked your profile, so it can\'t be changed right now');
+    for (const k of ['shareSchedule', 'searchable']) {
+      if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
     }
-    if (body.shareSchedule !== undefined) {
-      if (typeof body.shareSchedule !== 'boolean') throw bad('Invalid setting');
-      user.shareSchedule = body.shareSchedule;
-    }
+    Object.assign(user, fields);
+    if (body.shareSchedule !== undefined) user.shareSchedule = body.shareSchedule;
+    if (body.searchable !== undefined) user.searchable = body.searchable;
     db.save();
     return profile(user);
   });
@@ -318,6 +382,14 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   });
 
   route('GET', '/api/calendar', { auth: 'none' }, () => ({ tz: config.tz, serverTime: Date.now(), calendar: state.calendar }));
+
+  // Lunch menu for a day (default today). The server fetches it so pages never talk to other sites.
+  route('GET', '/api/lunch', { auth: 'none' }, async ({ url }) => {
+    const t = today();
+    const date = url.searchParams.get('date') || t;
+    if (cal.parseDate(date) === null || date < cal.addDays(t, -60) || date > cal.addDays(t, 60)) throw bad('Pick a date within two months');
+    return { ...(await menu.day(date)), source: menu.pageUrl };
+  });
 
   route('GET', '/api/classes', { auth: 'user' }, ({ user }) => user.classes);
   route('PUT', '/api/classes', { auth: 'user' }, ({ user, body }) => {
@@ -365,8 +437,16 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     for (const id of user.friends) {
       const o = getUser(id);
       if (!o) continue;
-      if (o.friends.includes(user.id)) friends.push({ id: o.id, name: o.name, classes: o.shareSchedule ? o.classes : null });
-      else outgoing.push({ id: o.id, name: o.name });
+      if (o.friends.includes(user.id)) {
+        const level = shareLevel(o, user.id);
+        friends.push({
+          id: o.id, name: o.name, grade: o.grade, bio: o.bio,
+          level, // what they share with you
+          myLevel: user.shareLevels[o.id] || 'full', // what you share with them (before your master switch)
+          classes: level === 'full' ? o.classes : null,
+          lunches: level === 'lunch' ? lunchesOf(o) : null
+        });
+      } else outgoing.push({ id: o.id, name: o.name });
     }
     for (const o of Object.values(state.users)) {
       if (o.friends.includes(user.id) && !user.friends.includes(o.id)) incoming.push({ id: o.id, name: o.name });
@@ -381,11 +461,36 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (other.id === user.id) throw bad("That's your own code");
     return { name: other.name };
   });
+  // Name search: every word typed must start one of the person's names. Only people who allow it
+  // are found, and results show the display name, never the full name or email.
+  route('POST', '/api/friends/search', { auth: 'user' }, ({ user, body }) => {
+    const words = nameWords(cleanText(body.q, 60)).slice(0, 4);
+    if (words.join('').length < 2) throw bad('Type at least two letters of a name');
+    if (!limiter.hit(`fsearch:${user.id}`, 120, 3600e3)) throw new HttpError(429, 'Too many searches. Wait a bit and try again.');
+    const results = [];
+    for (const o of Object.values(state.users)) {
+      if (o.id === user.id || !o.searchable) continue;
+      const names = nameWords(`${o.givenName} ${o.familyName} ${o.name}`);
+      if (!words.every((w) => names.some((n) => n.startsWith(w)))) continue;
+      const mine = user.friends.includes(o.id), theirs = o.friends.includes(user.id);
+      results.push({ id: o.id, name: o.name, grade: o.grade, status: mine && theirs ? 'friends' : mine ? 'requested' : theirs ? 'incoming' : null });
+    }
+    results.sort((a, b) => a.name.localeCompare(b.name));
+    return { results: results.slice(0, 20), more: results.length > 20 };
+  });
+  // Send a request by friend code, or by id for someone found in name search.
   route('POST', '/api/friends/request', { auth: 'user' }, ({ user, body }) => {
     if (!limiter.hit(`freq:${user.id}`, 30, 3600e3)) throw new HttpError(429, 'Too many requests. Wait a bit and try again.');
-    const other = findByCode(body.code);
-    if (!other) throw new HttpError(404, 'No one has that code');
-    if (other.id === user.id) throw bad("That's your own code");
+    let other;
+    if (body.id !== undefined) {
+      other = getUser(body.id);
+      if (!other || !(other.searchable || other.friends.includes(user.id))) throw new HttpError(404, 'That person can\'t be found');
+      if (other.id === user.id) throw bad("That's you");
+    } else {
+      other = findByCode(body.code);
+      if (!other) throw new HttpError(404, 'No one has that code');
+      if (other.id === user.id) throw bad("That's your own code");
+    }
     if (!user.friends.includes(other.id)) {
       if (user.friends.length >= MAX_FRIENDS) throw bad('Your friend list is full');
       user.friends.push(other.id);
@@ -403,11 +508,21 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     }
     return { ok: true };
   });
+  // What one friend may see of your schedule.
+  route('PUT', '/api/friends/:id', { auth: 'user' }, ({ user, params, body }) => {
+    if (!user.friends.includes(params.id)) throw new HttpError(404, 'Not on your friend list');
+    if (!SHARE_LEVELS.includes(body.level)) throw bad('Invalid setting');
+    if (body.level === 'full') delete user.shareLevels[params.id];
+    else user.shareLevels[params.id] = body.level;
+    db.save();
+    return { ok: true, level: body.level };
+  });
   // Unfriend, decline a request, or cancel one you sent.
   route('DELETE', '/api/friends/:id', { auth: 'user' }, ({ user, params }) => {
     const other = getUser(params.id);
     user.friends = user.friends.filter((f) => f !== params.id);
-    if (other) other.friends = other.friends.filter((f) => f !== user.id);
+    if (hasOwn(user.shareLevels, params.id)) delete user.shareLevels[params.id];
+    if (other) { other.friends = other.friends.filter((f) => f !== user.id); delete other.shareLevels[user.id]; }
     db.save();
     return { ok: true };
   });
@@ -430,17 +545,29 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   route('GET', '/api/admin/users', { auth: 'admin' }, () => Object.values(state.users)
     .map((u) => ({
       id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u),
-      verified: u.verified === true, friends: u.friends.length
+      verified: u.verified === true, friends: u.friends.length, fullName: `${u.givenName} ${u.familyName}`.trim(),
+      grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable
     }))
     .sort((a, b) => b.lastLogin - a.lastLogin));
+  // Admins can verify people, edit or reset anyone's profile, and lock a profile against changes.
   route('PUT', '/api/admin/users/:id', { auth: 'admin' }, ({ user, params, body }) => {
     const target = getUser(params.id);
     if (!target) throw new HttpError(404, 'No such user');
-    if (typeof body.verified !== 'boolean') throw bad('Invalid setting');
-    target.verified = body.verified;
-    log(`User ${target.id} ${body.verified ? 'verified' : 'unverified'} by admin ${user.id}`);
+    for (const k of ['verified', 'profileLocked']) if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
+    if (body.reset !== undefined && body.reset !== true) throw bad('Invalid setting');
+    const fields = body.reset
+      ? { name: nameFrom(target.givenName, target.familyName), grade: null, bio: '' }
+      : cleanProfileFields(body);
+    const changed = [...Object.keys(fields), ...['verified', 'profileLocked'].filter((k) => body[k] !== undefined)];
+    if (!changed.length) throw bad('Nothing to change');
+    Object.assign(target, fields);
+    if (body.verified !== undefined) target.verified = body.verified;
+    if (body.profileLocked !== undefined) target.profileLocked = body.profileLocked;
+    log(`User ${target.id} ${body.reset ? 'profile reset' : `changed (${changed.join(', ')})`} by admin ${user.id}`);
     db.save();
-    return { ok: true, verified: target.verified };
+    return {
+      ok: true, verified: target.verified === true, name: target.name, grade: target.grade, bio: target.bio, profileLocked: target.profileLocked
+    };
   });
   route('DELETE', '/api/admin/users/:id', { auth: 'admin' }, ({ user, params }) => {
     const target = getUser(params.id);

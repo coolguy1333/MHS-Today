@@ -57,7 +57,7 @@
     const lunch = lunchFor(S.classes, m.view.dayLetter);
     if (!lunch) return S.me ? h('div', { class: 'small muted' }, 'Lunch not set. ', h('a', { href: 'schedule.html' }, 'Pick A, B or C')) : null;
     const t = lunchTimes(m.view.scheduleType, lunch);
-    const buddies = S.friends.filter((f) => lunchFor(f.classes, m.view.dayLetter) === lunch).map((f) => f.name);
+    const buddies = S.friends.filter((f) => friendLunch(f, m.view.dayLetter) === lunch).map((f) => f.name);
     return h('div', { class: 'small muted' }, `${lunch} Lunch ${formatTime(t.start)} – ${formatTime(t.end)}`,
       buddies.length ? h('span', { class: 'with' }, `Lunch with ${listNames(buddies)}`) : null);
   }
@@ -161,6 +161,26 @@
     }
   }
 
+  // A short version of the day's menu: each counter and its first few dishes.
+  async function renderLunchMenu(m) {
+    const box = $('lunch-preview');
+    const date = m.view && m.view.schoolDay ? m.viewDate : null;
+    if (!date) { fill(box, h('p', { class: 'muted small' }, 'No school, no lunch.')); return; }
+    if (S.menuDate === date) return;
+    S.menuDate = date;
+    try {
+      const data = await api('GET', `/api/lunch?date=${date}`);
+      if (S.menuDate !== date) return;
+      if (!data.available) { fill(box, h('p', { class: 'muted small' }, data.error === 'not-configured' ? 'Lunch menu not set up.' : 'No menu posted.')); return; }
+      fill(box, data.sections.slice(0, 4).map((s) => h('div', { class: 'list-row' }, h('div', null,
+        s.title ? h('strong', null, s.title) : null,
+        h('div', { class: 'small muted' }, s.items.filter((i) => i.kind === 'food').slice(0, 3).map((i) => i.name).join(', '))))));
+    } catch (e) {
+      S.menuDate = null;
+      fill(box, h('p', { class: 'muted small' }, e.message));
+    }
+  }
+
   function renderFriends() {
     const box = clear($('friends-preview'));
     if (!S.me) { add(box, h('p', { class: 'muted small' }, h('a', { href: 'login.html' }, 'Sign in'), ' to see where your friends are.')); return; }
@@ -179,6 +199,7 @@
     updateLive(m);
     renderEvents(m);
     renderFriends();
+    renderLunchMenu(m);
   }
 
   function tick() {

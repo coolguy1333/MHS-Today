@@ -112,7 +112,7 @@ function renderNav(active) {
   if (!nav) return;
   const links = [
     ['index.html', 'Today', 'dashboard'], ['schedule.html', 'My Schedule', 'schedule'], ['events.html', 'Events', 'events'],
-    ['friends.html', 'Friends', 'friends'], ['tools.html', 'Tools', 'tools']
+    ['lunch.html', 'Lunch', 'lunch'], ['friends.html', 'Friends', 'friends'], ['tools.html', 'Tools', 'tools']
   ];
   const auth = h('span', { class: 'nav-auth' });
   fill(nav,
@@ -188,11 +188,17 @@ function friendClassText(friend, letter, hour) {
   if (!c) return { text: 'No class set', muted: true };
   return { text: c.name + (c.room ? ` · Rm ${c.room}` : ''), muted: false };
 }
+// A friend's lunch ('A' | 'B' | 'C' | null) on a day letter. Friends who share only their lunch
+// send `lunches` ({ A: 'B', ... }) instead of their classes.
+function friendLunch(friend, letter) {
+  if (friend.lunches) return Object.prototype.hasOwnProperty.call(friend.lunches, letter) ? friend.lunches[letter] : null;
+  return MHSBell.lunchFor(friend.classes, letter);
+}
 // "Same lunch as you (B)" etc. for a day letter, or null when either lunch is unknown.
 function sharedLunchText(myClasses, friend, letter) {
-  if (!friend.classes || !letter) return null;
+  if (!letter) return null;
   const mine = MHSBell.lunchFor(myClasses, letter);
-  const theirs = MHSBell.lunchFor(friend.classes, letter);
+  const theirs = friendLunch(friend, letter);
   if (!theirs) return null;
   if (!mine) return { text: `${theirs} Lunch`, same: false };
   return { text: mine === theirs ? `Same lunch as you (${theirs})` : `${theirs} Lunch`, same: mine === theirs };
@@ -207,15 +213,16 @@ function liveState(info) {
   return { now, day, cur, status: cur.status };
 }
 function friendNowText(friend, live) {
-  if (!friend.classes) return { text: 'Schedule hidden', muted: true };
+  if (!friend.classes && !friend.lunches) return { text: 'Schedule hidden', muted: true };
   if (live.status === 'no-school') return { text: 'No school today', muted: true };
   if (live.status === 'before-school') return { text: "School hasn't started", muted: true };
   if (live.status === 'after-school') return { text: "School's out", muted: true };
   if (live.status === 'passing') return { text: 'Passing period', muted: true };
   if (live.cur.period.hour === MHSBell.LUNCH_HOUR) {
-    const lunch = MHSBell.lunchFor(friend.classes, live.day.dayLetter);
+    const lunch = friendLunch(friend, live.day.dayLetter);
     if (MHSBell.atLunch(live.day.scheduleType, lunch, live.now.minutes)) return { text: `At ${lunch} Lunch`, muted: false };
   }
+  if (!friend.classes) return { text: 'Shares lunch only', muted: true };
   return friendClassText(friend, live.day.dayLetter, live.cur.period.hour);
 }
 function colorDot(color) {
