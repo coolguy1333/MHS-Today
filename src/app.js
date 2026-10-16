@@ -62,6 +62,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // ---------- small helpers ----------
   const today = () => cal.schoolNow(config.tz).date;
   const isAdmin = (u) => !!u && config.adminEmails.has(u.email);
+  // Events go on a board everyone sees, so by default only people an admin has verified may post.
+  const canPostEvents = (u) => !!u && (isAdmin(u) || config.eventPosting === 'everyone' || (config.eventPosting === 'verified' && u.verified === true));
   const getUser = (id) => (typeof id === 'string' && hasOwn(state.users, id) ? state.users[id] : null);
   const userCount = () => Object.keys(state.users).length;
 
@@ -146,7 +148,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (userCount() >= config.maxUsers) throw new AuthError('user limit reached', 'full');
       user = {
         id: randomId(), sub: claims.sub, email, name: defaultName(claims), created: Date.now(), lastLogin: 0,
-        classes: {}, friends: [], friendCode: uniqueFriendCode(), shareSchedule: true
+        classes: {}, friends: [], friendCode: uniqueFriendCode(), shareSchedule: true, verified: false
       };
       state.users[user.id] = user;
     }
@@ -161,7 +163,10 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     state.events = state.events.filter((e) => e.by !== id);
     db.save();
   }
-  const profile = (u) => ({ id: u.id, name: u.name, admin: isAdmin(u), friendCode: u.friendCode, shareSchedule: u.shareSchedule });
+  const profile = (u) => ({
+    id: u.id, name: u.name, admin: isAdmin(u), verified: u.verified === true, canPostEvents: canPostEvents(u),
+    friendCode: u.friendCode, shareSchedule: u.shareSchedule
+  });
 
   // ---------- validation ----------
   function cleanClasses(input) {
@@ -198,7 +203,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       app: 'mhs-hub', version: 2, exportedAt: new Date().toISOString(),
       users: Object.values(state.users).map((u) => ({
         id: u.id, sub: u.sub, email: u.email, name: u.name, created: u.created, lastLogin: u.lastLogin,
-        classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule
+        classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule, verified: u.verified === true
       })),
       events: state.events,
       calendar: state.calendar
@@ -224,7 +229,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       friendIds[u.id] = Array.isArray(u.friends) ? u.friends : [];
       users[u.id] = {
         id: u.id, sub, email, name: cleanText(u.name, 40) || 'Student', created: num(u.created), lastLogin: num(u.lastLogin),
-        classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false
+        classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
+        verified: u.verified === true
       };
     }
     for (const u of Object.values(users)) {
@@ -313,7 +319,9 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     mine: !!user && (e.by === user.id || isAdmin(user))
   })));
   route('POST', '/api/events', { auth: 'user' }, ({ user, body }) => {
-    if (config.eventPosting === 'admins' && !isAdmin(user)) throw new HttpError(403, 'Only admins can add events');
+    if (!canPostEvents(user)) {
+      throw new HttpError(403, config.eventPosting === 'admins' ? 'Only admins can add events' : 'Only verified people can add events. Ask an admin to verify you.');
+    }
     const fields = cleanEventFields(body);
     if (state.events.length >= config.maxEvents) throw bad('The events board is full');
     if (!isAdmin(user) && !limiter.hit(`event:${user.id}`, 10, 86400e3)) throw new HttpError(429, 'You can add up to 10 events a day');
@@ -406,8 +414,20 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     secureCookies: config.secure
   }));
   route('GET', '/api/admin/users', { auth: 'admin' }, () => Object.values(state.users)
-    .map((u) => ({ id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u), friends: u.friends.length }))
+    .map((u) => ({
+      id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u),
+      verified: u.verified === true, friends: u.friends.length
+    }))
     .sort((a, b) => b.lastLogin - a.lastLogin));
+  route('PUT', '/api/admin/users/:id', { auth: 'admin' }, ({ user, params, body }) => {
+    const target = getUser(params.id);
+    if (!target) throw new HttpError(404, 'No such user');
+    if (typeof body.verified !== 'boolean') throw bad('Invalid setting');
+    target.verified = body.verified;
+    log(`User ${target.id} ${body.verified ? 'verified' : 'unverified'} by admin ${user.id}`);
+    db.save();
+    return { ok: true, verified: target.verified };
+  });
   route('DELETE', '/api/admin/users/:id', { auth: 'admin' }, ({ user, params }) => {
     const target = getUser(params.id);
     if (!target) throw new HttpError(404, 'No such user');

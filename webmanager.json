@@ -25,9 +25,9 @@
     },
     {
       "name": "EVENT_POSTING",
-      "description": "Who can add events to the shared events board.",
-      "default": "everyone",
-      "choices": ["everyone", "admins"]
+      "description": "Who can add events to the shared events board: verified (admins and people an admin verifies on the Admin page), everyone, or admins.",
+      "default": "verified",
+      "choices": ["verified", "everyone", "admins"]
     }
   ]
 }

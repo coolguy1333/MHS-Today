@@ -256,6 +256,38 @@ test('events: 10 a day per student, admins exempt; posting can be limited to adm
   assert.equal((await kid.get('/api/me')).data.config.eventPosting, 'admins');
 });
 
+test('events: by default only admins and verified people can post, and admins verify people', async () => {
+  const ctx = await startApp({ mock, env: { EVENT_POSTING: undefined } });
+  const kid = await as(ctx, 1);
+  const other = await as(ctx, 2);
+  const boss = await as(ctx, 7, { email: 'admin@school.test' });
+  assert.equal((await kid.get('/api/me')).data.config.eventPosting, 'verified');
+  let me = await kid.me();
+  assert.equal(me.verified, false); assert.equal(me.canPostEvents, false);
+  const denied = await kid.post('/api/events', { title: 'x', date: soon() });
+  assert.equal(denied.status, 403); assert.match(denied.data.error, /verified/);
+  assert.equal((await boss.me()).canPostEvents, true);
+  assert.equal((await boss.post('/api/events', { title: 'From admin', date: soon() })).status, 200);
+
+  // students can't verify themselves or anyone else
+  assert.equal((await kid.put('/api/me', { verified: true })).status, 200);
+  assert.equal((await kid.me()).verified, false);
+  assert.equal((await other.put(`/api/admin/users/${me.id}`, { verified: true })).status, 403);
+
+  assert.equal((await boss.put(`/api/admin/users/${me.id}`, { verified: 'yes' })).status, 400);
+  assert.equal((await boss.put('/api/admin/users/0123456789abcdef', { verified: true })).status, 404);
+  assert.equal((await boss.put(`/api/admin/users/${me.id}`, { verified: true })).status, 200);
+  me = await kid.me();
+  assert.equal(me.verified, true); assert.equal(me.canPostEvents, true);
+  assert.equal((await kid.post('/api/events', { title: 'Club meeting', date: soon() })).status, 200);
+  assert.equal((await other.post('/api/events', { title: 'x', date: soon() })).status, 403);
+  assert.equal((await boss.get('/api/admin/users')).data.find((u) => u.id === me.id).verified, true);
+
+  assert.equal((await boss.put(`/api/admin/users/${me.id}`, { verified: false })).status, 200);
+  assert.equal((await kid.post('/api/events', { title: 'x', date: soon() })).status, 403);
+  assert.equal((await kid.get('/api/events')).data.length, 2, 'unverifying keeps events already posted');
+});
+
 test('events: admins can delete anyone\'s, the board has a size cap', async () => {
   const ctx = await startApp({ mock, tweak: (cfg) => { cfg.maxEvents = 3; } });
   const kid = await as(ctx, 1);

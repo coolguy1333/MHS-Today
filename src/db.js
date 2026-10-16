@@ -11,7 +11,7 @@ const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 function emptyState() {
   return {
     version: VERSION,
-    users: {},     // id -> { id, sub, email, name, created, lastLogin, classes, friends: [ids], friendCode, shareSchedule }
+    users: {},     // id -> { id, sub, email, name, created, lastLogin, classes, friends: [ids], friendCode, shareSchedule, verified }
     sessions: {},  // sha256(token) -> { userId, expires }
     events: [],    // { id, title, date, time, description, by (user id), created }
     calendar: { anchorDate: null, anchorLetter: 'A', noSchool: {}, types: {}, weekdayTypes: {} }

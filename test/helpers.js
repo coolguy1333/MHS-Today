@@ -22,7 +22,9 @@ async function startApp({ mock, env = {}, tweak } = {}) {
   const port = await freePort();
   const config = loadConfig({
     PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, PUBLIC_URL: `http://127.0.0.1:${port}`, TRUST_PROXY: 'true',
-    ADMIN_EMAILS: 'admin@school.test', GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-secret', ...env
+    ADMIN_EMAILS: 'admin@school.test', GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-secret',
+    EVENT_POSTING: 'everyone', // most tests post as plain students; the verified default has its own test
+    ...env
   });
   if (mock) mock.configure(config);
   if (tweak) tweak(config);

@@ -10,6 +10,7 @@
   }
   const { addDays, dayInfo, nextSchoolDay, emptyCalendar } = MHSCalendar;
   const TYPE_NAMES = { daily: 'Regular daily', advisory: 'Advisory day', early_release: 'Early release' };
+  const POSTING_NAMES = { verified: 'admins and verified people', everyone: 'any signed-in student', admins: 'admins only' };
   const WEEKDAYS = [['1', 'Monday'], ['2', 'Tuesday'], ['3', 'Wednesday'], ['4', 'Thursday'], ['5', 'Friday']];
   let info, status, users;
 
@@ -48,7 +49,7 @@
       cal.anchorDate ? item('ok', `Day letter rotation is set (anchored ${fmtShortDay(cal.anchorDate)}).`) : item('warn', 'The day letter has not been set. Use "Day letter" below.'),
       status.secureCookies ? item('ok', 'Cookies are HTTPS-only.') : item('warn', 'PUBLIC_URL is not https, so cookies are not marked Secure. Use https in production.'),
       status.lastSnapshot ? item('ok', `Latest automatic snapshot: ${status.lastSnapshot.replace(/^db-|\.json$/g, '')}.`) : item('warn', 'No automatic snapshot yet.'),
-      item('info', `${status.users} ${status.users === 1 ? 'person' : 'people'}, ${status.events} event${status.events === 1 ? '' : 's'}. Event posting: ${status.eventPosting === 'admins' ? 'admins only' : 'any signed-in student'}. School time zone: ${status.tz}.`));
+      item('info', `${status.users} ${status.users === 1 ? 'person' : 'people'}, ${status.events} event${status.events === 1 ? '' : 's'}. Event posting: ${POSTING_NAMES[status.eventPosting]}. School time zone: ${status.tz}.`));
   }
 
   // ---- calendar
@@ -129,16 +130,29 @@
   });
 
   // ---- people
+  async function reloadUsers() {
+    [users, status] = await Promise.all([api('GET', '/api/admin/users'), api('GET', '/api/admin/status')]);
+    renderUsers();
+    renderSetup();
+  }
   function renderUsers() {
     fill($('users'), users.map((u) => h('tr', null,
-      h('td', null, u.name, u.admin ? [' ', h('span', { class: 'badge' }, 'admin')] : null),
+      h('td', null, u.name, u.admin ? [' ', h('span', { class: 'badge' }, 'admin')] : null, u.verified ? [' ', h('span', { class: 'badge' }, 'verified')] : null),
       h('td', { class: 'small' }, u.email),
       h('td', { class: 'small muted nowrap' }, fmtAgo(u.lastLogin)),
+      h('td', null, u.admin ? h('span', { class: 'small muted' }, 'Admin') : h('button', {
+        class: 'linklike', type: 'button', 'aria-label': `${u.verified ? 'Unverify' : 'Verify'} ${u.name}`,
+        onclick: (e) => busy(e.currentTarget, async () => {
+          await api('PUT', `/api/admin/users/${u.id}`, { verified: !u.verified });
+          await reloadUsers();
+          toast(u.verified ? `${u.name} can no longer post events` : `${u.name} can now post events`);
+        })
+      }, u.verified ? 'Unverify' : 'Verify')),
       h('td', null, u.id === me.id ? null : h('button', {
         class: 'linklike danger', type: 'button', 'aria-label': `Remove ${u.name}`,
         onclick: (e) => {
           if (!confirm(`Remove ${u.name} (${u.email})? This deletes their account, classes and events.`)) return;
-          busy(e.currentTarget, async () => { await api('DELETE', `/api/admin/users/${u.id}`); users = await api('GET', '/api/admin/users'); status = await api('GET', '/api/admin/status'); renderUsers(); renderSetup(); toast('Removed'); });
+          busy(e.currentTarget, async () => { await api('DELETE', `/api/admin/users/${u.id}`); await reloadUsers(); toast('Removed'); });
         }
       }, 'Remove')))));
   }

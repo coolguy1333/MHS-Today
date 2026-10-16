@@ -55,12 +55,14 @@
 
   try {
     const me = await getMe();
-    const canPost = me.user && (me.config.eventPosting === 'everyone' || me.user.admin);
+    const canPost = !!me.user && me.user.canPostEvents;
     $('add-card').hidden = !canPost;
     if (!me.user) $('signin-card').hidden = false;
     else if (!canPost) {
       $('signin-card').hidden = false;
-      fill($('signin-card'), h('p', { class: 'muted' }, 'Only admins can add events right now.'));
+      fill($('signin-card'), h('p', { class: 'muted' }, me.config.eventPosting === 'admins'
+        ? 'Only admins can add events right now.'
+        : 'Only verified people can add events. Ask an admin to verify your account.'));
     }
   } catch (e) { /* the list below reports problems */ }
   await load();

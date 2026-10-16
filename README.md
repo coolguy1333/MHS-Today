@@ -4,7 +4,7 @@ Schedule, events and friends for Mukwonago High School students.
 
 - **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown, your own classes, and what's next.
 - **My Schedule**: enter your classes once per rotation day.
-- **Events**: a shared board (students add, admins can remove anything).
+- **Events**: a shared board. Admins and people an admin has verified can add events, and admins can remove anything.
 - **Friends**: add people with a private code or invite link, see what class they're in right now, and see which classes you share. Friends only see your classes if you allow it.
 - **Sign in with Google** only. No passwords are stored; you can limit sign-in to your school's Google Workspace domain.
 - **Admin page**: set the day letter and breaks, see setup problems, manage people, download or restore a backup.
@@ -27,7 +27,7 @@ This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`), so [app ho
    | `GOOGLE_CLIENT_SECRET` | yes | From step 2 (stored encrypted by WebManager). |
    | `ADMIN_EMAILS` | yes | Comma-separated Google emails that are admins. |
    | `ALLOWED_DOMAINS` | no | Comma-separated Google Workspace domains allowed to sign in, e.g. `masd.k12.wi.us`. Empty = any Google account. Personal Gmail accounts can't pass a domain filter. |
-   | `EVENT_POSTING` | no | `everyone` (default) or `admins`. |
+   | `EVENT_POSTING` | no | `verified` (default: admins and people an admin verifies on the Admin page), `everyone`, or `admins`. |
 
 4. **First sign-in**: open the site, sign in with an admin email, open **Admin**, and set the day letter ("this date is Day B"), the weekday pattern if some weekdays are always Advisory/Early Release, and your no-school dates. The day letter then advances by itself on every school day. The **Setup check** at the top of the Admin page points out anything missing.
 

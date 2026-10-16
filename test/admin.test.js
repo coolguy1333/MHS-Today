@@ -94,6 +94,7 @@ async function populate(ctx) {
   await b.put('/api/me', { shareSchedule: false });
   await a.post('/api/friends/request', { code: (await b.me()).friendCode });
   await b.post(`/api/friends/${(await a.me()).id}/accept`);
+  await boss.put(`/api/admin/users/${(await a.me()).id}`, { verified: true });
   await a.post('/api/events', { title: 'Game night', date: cal.addDays(today(), 4), time: '19:00', description: 'Bring snacks' });
   await boss.put('/api/admin/calendar', { anchorDate: today(), anchorLetter: 'D', noSchool: { [cal.addDays(today(), 9)]: 'Break' } });
   return { boss, a, b };
@@ -137,6 +138,7 @@ test('restore: a backup rebuilds an empty server exactly, and sign-in finds the 
   const annAfter = await ann.me();
   assert.equal(annAfter.id, annBefore.id);
   assert.equal(annAfter.friendCode, annBefore.friendCode);
+  assert.equal(annAfter.verified, true, 'verification survived');
   assert.deepEqual((await ann.get('/api/classes')).data, { A_1: { name: 'Math', teacher: 'Smith', room: '1', color: '#112233' } });
   const friendsAfter = (await ann.get('/api/friends')).data;
   assert.deepEqual(friendsAfter.friends.map((f) => [f.id, f.name, f.classes]), friendsBefore.friends.map((f) => [f.id, f.name, f.classes]));

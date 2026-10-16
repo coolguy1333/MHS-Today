@@ -30,7 +30,7 @@ The letter advances one step per school day (a weekday not listed in `noSchool`)
 
 ## Data (`$DATA_DIR/db.json`)
 
-Written atomically (temp file, fsync, rename), mode 0600. Shape: `users` (id → `{ sub, email, name, classes, friends: [ids], friendCode, shareSchedule }`), `sessions` (SHA-256 of the cookie token → user and expiry), `events`, `calendar`. A friendship exists when both people list each other. An older password-based `db.json` (first release) is archived to `backups/db.old-format-*.json` and the app starts empty.
+Written atomically (temp file, fsync, rename), mode 0600. Shape: `users` (id → `{ sub, email, name, classes, friends: [ids], friendCode, shareSchedule, verified }`), `sessions` (SHA-256 of the cookie token → user and expiry), `events`, `calendar`. A friendship exists when both people list each other. An older password-based `db.json` (first release) is archived to `backups/db.old-format-*.json` and the app starts empty.
 
 ## API
 
@@ -43,9 +43,9 @@ State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: ap
 | `POST /api/logout` | anyone | End the session |
 | `PUT /api/me`, `POST /api/me/friend-code`, `DELETE /api/me` | signed in | Name/privacy, new friend code, delete account |
 | `GET/PUT /api/classes` | signed in | Own classes |
-| `POST /api/events`, `DELETE /api/events/:id` | signed in (delete: owner or admin) | Events |
+| `POST /api/events`, `DELETE /api/events/:id` | post: admins and verified people (see `EVENT_POSTING`); delete: owner or admin | Events |
 | `GET /api/friends`, `POST /api/friends/lookup`, `POST /api/friends/request`, `POST /api/friends/:id/accept`, `DELETE /api/friends/:id` | signed in | Friends |
-| `GET /api/admin/status` `users`, `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
+| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ verified }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
 
 ## Security design
 

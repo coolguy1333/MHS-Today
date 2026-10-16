@@ -36,7 +36,8 @@ function loadConfig(env = process.env) {
     },
     adminEmails: new Set(list(env.ADMIN_EMAILS)),
     allowedDomains: list(env.ALLOWED_DOMAINS).map((d) => d.replace(/^@/, '')),
-    eventPosting: env.EVENT_POSTING === 'admins' ? 'admins' : 'everyone',
+    // verified (default): admins and people an admin has verified; everyone: any signed-in student; admins: admins only.
+    eventPosting: ['everyone', 'admins'].includes(env.EVENT_POSTING) ? env.EVENT_POSTING : 'verified',
     sessionDays: 60,
     maxUsers: 5000,
     maxEvents: 3000
