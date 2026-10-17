@@ -34,6 +34,8 @@ test('security headers are on every kind of response', async () => {
     assert.match(csp, /script-src 'self'(;|$)/);        // no 'unsafe-inline' / 'unsafe-eval'
     assert.match(csp, /style-src 'self'(;|$)/);
     assert.match(csp, /frame-ancestors 'none'/);
+    assert.match(csp, /manifest-src 'self'/);   // the installable app's manifest must be allowed
+    assert.match(csp, /worker-src 'self'/);
     assert.match(csp, /base-uri 'none'/);
     assert.doesNotMatch(csp, /unsafe/);
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff', p);

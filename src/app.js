@@ -71,7 +71,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
 
   const SECURITY_HEADERS = {
     'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
-      "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      "manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'same-origin',

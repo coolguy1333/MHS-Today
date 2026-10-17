@@ -169,7 +169,9 @@
     e.preventDefault();
     if (confirmBox.value.trim().toUpperCase() !== 'DELETE') return;
     busy($('delete-btn'), async () => {
+      await forgetThisDevice();
       await api('DELETE', '/api/me');
+      await clearOfflineCopy(); // the device's offline copy has this person's schedule and friends
       location.href = 'index.html';
     });
   });

@@ -351,3 +351,11 @@ test('push: evening classwork reminders and an hour-before reminders, each sent 
     Date.now = realNow;
   }
 });
+
+test('word filter: harmless look-alikes pass, disguised admin words are caught', () => {
+  const f = createFilter(() => ['h8er', 'B00B']);
+  for (const ok of ['Shiitake mushrooms', 'a niggling doubt', 'assessment', 'Scunthorpe', 'hater']) assert.equal(f.find(ok), null, ok);
+  assert.equal(f.find('what a h8er'), 'hber');
+  assert.equal(f.find('boob'), 'boob');
+  assert.equal(f.find('b00b'), 'boob');
+});

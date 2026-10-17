@@ -130,6 +130,7 @@ function renderNav(active) {
         h('button', {
           class: 'linklike', type: 'button',
           onclick: async () => {
+            await forgetThisDevice(); // before signing out: removing the subscription needs the session
             try { await api('POST', '/api/logout', {}); } finally {
               await clearOfflineCopy();
               location.href = 'index.html';
@@ -170,6 +171,17 @@ function renderBanner(nav) {
 // The service worker keeps an offline copy of the pages (and your schedule) and shows push notifications.
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
+// Stops this device's push notifications for the signed-in person (so a shared phone doesn't keep
+// getting someone else's reminders after they sign out).
+async function forgetThisDevice() {
+  try {
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    const sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+    if (!sub) return;
+    await api('DELETE', '/api/push/subscribe?endpoint=' + encodeURIComponent(sub.endpoint)).catch(() => {});
+    await sub.unsubscribe();
+  } catch { /* push isn't available here */ }
 }
 async function clearOfflineCopy() {
   try { if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k); } catch { /* nothing cached */ }

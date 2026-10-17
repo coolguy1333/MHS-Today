@@ -9,6 +9,8 @@ const STEMS = ['fuck', 'shit', 'cunt', 'nigg', 'faggot', 'motherf'];
 // Words that are blocked on their own or with a common ending only (so "cocktail" or "dickens" pass).
 const WORDS = ['ass', 'asshole', 'bitch', 'bastard', 'dick', 'cock', 'pussy', 'slut', 'whore', 'fag', 'retard', 'twat', 'wanker', 'jackass', 'dumbass', 'dipshit', 'piss'];
 const ENDINGS = ['', 's', 'es', 'ed', 'er', 'ers', 'ing', 'in', 'y', 'ie', 'ies', 'head', 'heads', 'face', 'hole', 'holes', 'wad'];
+// Harmless words that happen to start with a blocked stem.
+const ALLOW = new Set(['shiitake', 'shitake', 'niggle', 'niggles', 'niggled', 'niggling', 'nigglier']);
 const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', '@': 'a', $: 's' };
 
 // Text -> lowercase words with disguises undone. Runs of single letters ("f u c k") are joined.
@@ -33,9 +35,11 @@ function createFilter(extra = () => []) {
   const blockedWord = (w, list) => list.some((b) => b && (w === b || ENDINGS.some((e) => e && w === b + e)));
   // Returns the first problem word found in any of the texts, or null.
   function find(...texts) {
-    const custom = extra().map((x) => String(x).toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean);
+    // words() lists each word as typed and with repeats squeezed; keep the as-typed form
+    const custom = extra().map((x) => words(x).filter((_, i) => i % 2 === 0).join('')).filter(Boolean);
     for (const t of texts.flat()) {
       for (const w of words(t)) {
+        if (ALLOW.has(w)) continue;
         if (STEMS.some((s) => w.startsWith(s)) || blockedWord(w, WORDS) || blockedWord(w, custom)) return w;
       }
     }
