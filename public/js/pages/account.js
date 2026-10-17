@@ -71,6 +71,98 @@
   autoSave('share', 'shareSchedule', 'Friends can see your schedule', 'Your schedule is hidden from all friends');
   autoSave('searchable', 'searchable', 'People can find you by name', 'You no longer show up in name search');
 
+  // ---- notifications (per device)
+  const b64ToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
+  async function currentSub() {
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+  async function renderNotify() {
+    const body = $('notify-body');
+    const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    if (!supported) {
+      $('notify-prefs').hidden = true;
+      fill(body, isIos() && !isInstalled()
+        ? [h('p', null, 'On iPhone, notifications work once MHS Hub is on your home screen:'),
+          h('ol', { class: 'small' }, h('li', null, 'In Safari, tap the Share button (the square with an arrow).'),
+            h('li', null, 'Tap ', h('strong', null, 'Add to Home Screen'), ', then ', h('strong', null, 'Add'), '.'),
+            h('li', null, 'Open MHS Hub from your home screen and come back to this page.'))]
+        : h('p', { class: 'muted' }, "This browser can't show notifications from websites."));
+      return;
+    }
+    const info = await api('GET', '/api/push');
+    const sub = await currentSub();
+    const on = !!sub && Notification.permission === 'granted';
+    $('notify-prefs').hidden = !info.devices;
+    for (const box of $('notify-prefs').querySelectorAll('input')) box.checked = info.prefs[box.dataset.kind];
+    fill(body,
+      h('p', null, on ? 'Notifications are on for this device.' : Notification.permission === 'denied'
+        ? 'Notifications are blocked for this site. Allow them in your browser or phone settings, then come back.'
+        : 'Get reminders on this device.'),
+      info.devices && !on ? h('p', { class: 'small muted' }, `On for ${info.devices} other device${info.devices === 1 ? '' : 's'}.`) : null,
+      h('div', { class: 'row' },
+        on ? null : h('button', {
+          class: 'btn small', type: 'button', disabled: Notification.permission === 'denied',
+          onclick: (e) => busy(e.currentTarget, async () => {
+            if (await Notification.requestPermission() !== 'granted') throw new Error('Notifications were not allowed.');
+            const reg = await navigator.serviceWorker.ready;
+            const s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(info.publicKey) });
+            await api('POST', '/api/push/subscribe', s.toJSON());
+            toast('Notifications are on');
+            await renderNotify();
+          })
+        }, 'Turn on notifications'),
+        on ? h('button', {
+          class: 'btn small secondary', type: 'button',
+          onclick: (e) => busy(e.currentTarget, async () => { await api('POST', '/api/push/test', {}); toast('Sent. It should show up in a few seconds.'); })
+        }, 'Send a test') : null,
+        on ? h('button', {
+          class: 'linklike', type: 'button',
+          onclick: (e) => busy(e.currentTarget, async () => {
+            await api('DELETE', `/api/push/subscribe?endpoint=${encodeURIComponent(sub.endpoint)}`);
+            await sub.unsubscribe();
+            toast('Notifications are off for this device');
+            await renderNotify();
+          })
+        }, 'Turn off on this device') : null));
+  }
+  for (const box of $('notify-prefs').querySelectorAll('input')) {
+    box.addEventListener('change', () => busy(box, async () => {
+      try { await api('PUT', '/api/push/prefs', { [box.dataset.kind]: box.checked }); } catch (err) { box.checked = !box.checked; throw err; }
+    }));
+  }
+  renderNotify().catch((e) => fill($('notify-body'), h('p', { class: 'notice error' }, e.message)));
+
+  // ---- calendar sync
+  async function renderCalendar(url) {
+    const box = $('cal-body');
+    if (!url) {
+      fill(box, h('button', {
+        class: 'btn small', type: 'button',
+        onclick: (e) => busy(e.currentTarget, async () => renderCalendar((await api('POST', '/api/me/calendar', {})).url))
+      }, 'Get my calendar link'));
+      return;
+    }
+    const webcal = url.replace(/^https?:/, 'webcal:');
+    const field = h('input', { type: 'text', readonly: true, value: url, 'aria-label': 'Your private calendar link' });
+    fill(box,
+      h('div', { class: 'row' },
+        h('a', { class: 'btn small', href: webcal }, 'Add to iPhone / Mac calendar'),
+        h('a', { class: 'btn small secondary', href: `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`, target: '_blank', rel: 'noopener noreferrer' }, 'Add to Google Calendar')),
+      h('label', { class: 'stack small' }, h('span', null, 'Or copy the link into any calendar app ("subscribe" or "add from URL"):'),
+        h('span', { class: 'inline-field' }, field, h('button', { class: 'btn small secondary', type: 'button', onclick: () => copyText(url) }, 'Copy'))),
+      h('p', { class: 'small muted' }, 'Keep this link private: anyone with it can see what is in it. ',
+        h('button', {
+          class: 'linklike', type: 'button',
+          onclick: (e) => { if (confirm('Make a new link? The old one stops working, so calendars using it stop updating.')) busy(e.currentTarget, async () => renderCalendar((await api('POST', '/api/me/calendar', {})).url)); }
+        }, 'Make a new link'), ' · ',
+        h('button', {
+          class: 'linklike danger', type: 'button',
+          onclick: (e) => busy(e.currentTarget, async () => { await api('DELETE', '/api/me/calendar'); toast('Calendar link turned off'); renderCalendar(null); })
+        }, 'Turn off')));
+  }
+  api('GET', '/api/me/calendar').then((r) => renderCalendar(r.url)).catch((e) => fill($('cal-body'), h('p', { class: 'notice error' }, e.message)));
+
   const confirmBox = $('confirm-delete');
   confirmBox.addEventListener('input', () => { $('delete-btn').disabled = confirmBox.value.trim().toUpperCase() !== 'DELETE'; });
   $('delete-form').addEventListener('submit', (e) => {

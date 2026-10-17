@@ -7,7 +7,11 @@
   <meta name="theme-color" content="#1e3a8a" />
   <title>Group · MHS Hub</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
-  <link rel="apple-touch-icon" href="/icon-167.png" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -36,8 +40,31 @@
             </form>
           </details>
         </div>
+        <div class="card" id="board-card" hidden>
+          <h2>Board</h2>
+          <form id="post-form" class="stack">
+            <label><span class="sr-only">Write a post</span><textarea id="post-text" rows="2" maxlength="1000" placeholder="Write something to the group…" required></textarea></label>
+            <div class="row">
+              <button class="btn small" type="submit">Post</button>
+              <label class="check" id="announce-field" hidden><input type="checkbox" id="post-announce" /><span>Announcement (notifies members)</span></label>
+            </div>
+          </form>
+          <div id="posts"></div>
+        </div>
       </div>
       <div>
+        <div class="card" id="polls-card" hidden>
+          <h2>Polls</h2>
+          <div id="polls"></div>
+          <details id="poll-add" hidden>
+            <summary>Start a poll</summary>
+            <form id="poll-form" class="stack">
+              <label><span>Question</span><input type="text" id="poll-q" maxlength="200" required /></label>
+              <label><span>Choices, one per line (2 to 8)</span><textarea id="poll-options" rows="4" required></textarea></label>
+              <div><button class="btn small" type="submit">Start poll</button></div>
+            </form>
+          </details>
+        </div>
         <div class="card" id="requests-card" hidden>
           <h2>Join requests</h2>
           <div id="requests"></div>

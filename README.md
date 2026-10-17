@@ -4,8 +4,12 @@ Schedule, events and friends for Mukwonago High School students.
 
 - **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown ("B Lunch · 12 min left" at lunch), your own classes, and what's next.
 - **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D).
-- **Classwork**: classmates post assignments, quizzes and tests to a class; only people in that class see them, and they show next to the class on Today. Three reports hide a post until an admin checks it.
-- **Groups**: clubs, sports and student groups, each with its own page, links, members and events calendar. Anyone can start one; admins approve it before it's listed. Leaders accept members and post the group's events.
+- **Classwork**: classmates post assignments, quizzes and tests to a class; only people in that class see them, and they show next to the class on Today. Three reports hide a post until an admin checks it. Classmates can also plan **study sessions** (for the class or one quiz/test) and say they're going.
+- **Reminders and the app**: add MHS Hub to your phone's home screen (on iPhone: Safari → Share → Add to Home Screen) to use it like an app, offline included, and turn on notifications on the Account page: classwork due tomorrow, an hour before your events and study sessions, and group announcements.
+- **Calendar sync**: a private link that puts your classwork, events, study sessions and no-school days into your iPhone or Google calendar.
+- **Announcements and countdowns**: admins put a banner on every page (snow day, spirit week) and countdowns on Today (finals, winter break).
+- **Word filter** on everything students type, plus words admins add.
+- **Groups**: clubs, sports and student groups, each with its own page, links, members, events calendar, a members-only board (posts, replies, announcements) and polls. Anyone can start one; admins approve it before it's listed. Leaders accept members and post the group's events.
 - **Lunch**: today's high school lunch menu, pulled from the district's My School Menus page, with your lunch time and which friends share it. A short version is on the Today page.
 - **Events**: for everyone (posted by admins, verified people and leaders of approved groups), for a group's members, or private for friends you invite. Any event can have a sign-up list with a limit. Admins can remove anything.
 - **Tools**: an admin-managed list; students can suggest tools for admins to add.
@@ -39,6 +43,8 @@ This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`), so [app ho
 4. **First sign-in**: open the site, sign in with an admin email, open **Admin**, and set the day letter ("this date is Day B"), the weekday pattern if some weekdays are always Advisory/Early Release, and your no-school dates. The day letter then advances by itself on every school day. The **Setup check** at the top of the Admin page points out anything missing.
 
 Sign-in works on the app's main address (the one you chose in step 1), not on extra domain aliases.
+
+Notifications need the site on **https** (iPhones also need it added to the home screen). The keys that sign notifications are made on first start and kept in `db.json`; they are not in downloaded backups, so after restoring onto a new server people turn notifications on again.
 
 ## Backup and restore
 

@@ -7,7 +7,11 @@
   <meta name="theme-color" content="#1e3a8a" />
   <title>Admin · MHS Hub</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
-  <link rel="apple-touch-icon" href="/icon-167.png" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -65,6 +69,31 @@
           <thead><tr><th scope="col">Person</th><th scope="col">Google email</th><th scope="col">Last sign-in</th><th scope="col">Can post events</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody id="users"></tbody>
         </table></div>
+      </div>
+
+      <div class="card" id="notices-card">
+        <h2>Announcements</h2>
+        <p class="small muted">A banner at the top of every page from the start date to the end date (for example a snow day or spirit week). People can close it on their device.</p>
+        <div id="ann-editor"></div>
+        <div class="row">
+          <button class="btn secondary small" type="button" id="ann-add">Add an announcement</button>
+          <button class="btn small" type="button" id="ann-save">Save announcements</button>
+          <span class="small muted" id="ann-state" role="status"></span>
+        </div>
+        <h3>Countdowns</h3>
+        <p class="small muted">Shown on the Today page until the date passes (finals, prom, winter break…).</p>
+        <div id="cd-editor"></div>
+        <div class="row">
+          <button class="btn secondary small" type="button" id="cd-add">Add a countdown</button>
+          <button class="btn small" type="button" id="cd-save">Save countdowns</button>
+          <span class="small muted" id="cd-state" role="status"></span>
+        </div>
+        <h3>Blocked words</h3>
+        <p class="small muted">Added to the built-in filter for names, bios, events, classwork, groups, posts and polls. One word per line; whole words only.</p>
+        <form id="words-form" class="stack">
+          <textarea id="words" rows="4" aria-label="Blocked words, one per line"></textarea>
+          <div><button class="btn small" type="submit">Save words</button></div>
+        </form>
       </div>
 
       <div class="card" id="links-card">

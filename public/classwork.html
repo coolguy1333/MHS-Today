@@ -7,7 +7,11 @@
   <meta name="theme-color" content="#1e3a8a" />
   <title>Classwork · MHS Hub</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
-  <link rel="apple-touch-icon" href="/icon-167.png" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -32,6 +36,24 @@
         <label class="wide"><span>Notes (optional)</span><input type="text" id="cw-notes" maxlength="300" placeholder="Sections, pages, what to bring" /></label>
         <div class="wide"><button class="btn" type="submit">Post</button></div>
       </form>
+    </div>
+    <div class="card" id="study-card" hidden>
+      <h2>Study sessions</h2>
+      <p class="small muted">Classmates studying together. Only people in the same class see these.</p>
+      <div id="sessions"></div>
+      <details id="study-add">
+        <summary>Plan a study session</summary>
+        <form id="study-form" class="form-grid">
+          <label><span>Class</span><select id="st-block" required></select></label>
+          <label><span>For (optional)</span><select id="st-for"></select></label>
+          <label class="wide"><span>Title</span><input type="text" id="st-title" maxlength="100" required placeholder="Unit 3 review" /></label>
+          <label><span>Date</span><input type="date" id="st-date" required /></label>
+          <label><span>Time (optional)</span><input type="time" id="st-time" /></label>
+          <label><span>Where</span><input type="text" id="st-place" maxlength="60" placeholder="Library, Rm 204, online…" /></label>
+          <label><span>Notes (optional)</span><input type="text" id="st-notes" maxlength="300" /></label>
+          <div class="wide"><button class="btn" type="submit">Plan it</button></div>
+        </form>
+      </details>
     </div>
     <p class="card muted" id="no-classes" hidden>Add your classes on <a href="schedule.html">Schedule</a> to see and post classwork.</p>
     <details class="card" id="past-card" hidden>

@@ -19,7 +19,11 @@ function emptyState() {
     classwork: [], // see src/classwork.js
     groups: [],    // see src/groups.js
     tools: null,   // see src/tools.js; null = not set up yet
-    toolSuggestions: []
+    toolSuggestions: [],
+    announcements: [], countdowns: [], blockedWords: [], // see src/notices.js
+    studySessions: [], // see src/classwork.js
+    vapid: null,       // push notification keys (src/push.js); made on first start
+    sentReminders: {}  // reminder key -> expiry, so each reminder goes out once
   };
 }
 
@@ -40,8 +44,10 @@ function openDb(dataDir, log = () => {}) {
     }
     if (!isObj(parsed)) throw new Error(`${file} has an unexpected format.`);
     if (parsed.version === VERSION) {
-      for (const k of ['users', 'sessions', 'calendar']) if (isObj(parsed[k])) state[k] = parsed[k];
-      for (const k of ['events', 'links', 'classwork', 'groups', 'tools', 'toolSuggestions']) if (Array.isArray(parsed[k])) state[k] = parsed[k];
+      for (const k of ['users', 'sessions', 'calendar', 'vapid', 'sentReminders']) if (isObj(parsed[k])) state[k] = parsed[k];
+      for (const k of ['events', 'links', 'classwork', 'groups', 'tools', 'toolSuggestions', 'announcements', 'countdowns', 'blockedWords', 'studySessions']) {
+        if (Array.isArray(parsed[k])) state[k] = parsed[k];
+      }
     } else if (parsed.version > VERSION) {
       throw new Error(`${file} was written by a newer version of this app (format ${parsed.version}).`);
     } else {

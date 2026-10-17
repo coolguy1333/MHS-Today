@@ -129,14 +129,53 @@ function renderNav(active) {
         h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : '') }, avatarEl(me.user, 22), me.user.name),
         h('button', {
           class: 'linklike', type: 'button',
-          onclick: async () => { try { await api('POST', '/api/logout', {}); } finally { location.href = 'index.html'; } }
+          onclick: async () => {
+            try { await api('POST', '/api/logout', {}); } finally {
+              await clearOfflineCopy();
+              location.href = 'index.html';
+            }
+          }
         }, 'Sign out')
       );
     } else {
       add(auth, h('a', { href: 'login.html' }, 'Sign in'));
     }
   }).catch(() => {});
+  renderBanner(nav);
 }
+
+// Admins' announcements, under the nav on every page. A closed one stays closed on this device.
+function renderBanner(nav) {
+  let closed = [];
+  try { closed = JSON.parse(localStorage.getItem('mhs-closed-notices') || '[]'); } catch { /* storage blocked */ }
+  api('GET', '/api/notices').then(({ announcements }) => {
+    const show = announcements.filter((a) => !closed.includes(a.id));
+    if (!show.length) return;
+    const box = h('div', { class: 'banners', role: 'region', 'aria-label': 'Announcements' }, show.map((a) => {
+      const el = h('div', { class: 'banner' + (a.urgent ? ' urgent' : '') }, h('span', null, a.text),
+        h('button', {
+          class: 'linklike', type: 'button', 'aria-label': 'Hide this announcement',
+          onclick: () => {
+            el.remove();
+            try { localStorage.setItem('mhs-closed-notices', JSON.stringify([...closed, a.id].slice(-50))); } catch { /* storage blocked */ }
+          }
+        }, '×'));
+      return el;
+    }));
+    nav.after(box);
+  }).catch(() => {});
+}
+
+// ---- installable app ----------------------------------------------------------------
+// The service worker keeps an offline copy of the pages (and your schedule) and shows push notifications.
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
+async function clearOfflineCopy() {
+  try { if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k); } catch { /* nothing cached */ }
+}
+const isInstalled = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 // ---- calendar and time ---------------------------------------------------------
 let calendarPromise = null;

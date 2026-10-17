@@ -8,7 +8,7 @@ const DEFAULT_TOOLS = [
 ];
 
 module.exports = function tools(app) {
-  const { route, state, db, log, HttpError, bad, getUser, cleanText, cleanUrl, randomId, limiter, isPlainObject, hasOwn, num, publicCard } = app;
+  const { route, state, db, log, HttpError, bad, getUser, cleanText, cleanUrl, randomId, limiter, isPlainObject, hasOwn, num, publicCard, checkWords } = app;
 
   // Untrusted -> { id, name, url, description } or null. An empty url is allowed ("Coming soon").
   function cleanTool(t) {
@@ -28,6 +28,7 @@ module.exports = function tools(app) {
   route('POST', '/api/tools/suggestions', { auth: 'user' }, ({ user, body }) => {
     const t = cleanTool(body);
     if (!t) throw bad('Give the tool a name, and a web address starting with https:// if it has one');
+    checkWords(t.name, t.description);
     if (state.toolSuggestions.length >= MAX_SUGGESTIONS) throw bad('There are too many suggestions waiting. Try again later.');
     if (!limiter.hit(`toolidea:${user.id}`, 5, 86400e3)) throw new HttpError(429, 'You can suggest up to 5 tools a day');
     state.toolSuggestions.push({ ...t, id: randomId(), by: user.id, created: Date.now() });

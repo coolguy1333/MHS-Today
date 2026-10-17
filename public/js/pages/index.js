@@ -5,7 +5,7 @@
   const { SCHEDULES, getCurrentPeriod, formatTime, blockFor, blockInfo, LUNCH_HOUR, lunchFor, lunchTimes, atLunch } = MHSBell;
 
   // viewDate: null = automatic (today, or the next school day when there's no school today)
-  const S = { info: null, me: null, classes: {}, friends: [], events: [], classwork: [], viewDate: null, lastDate: null, key: '' };
+  const S = { info: null, me: null, classes: {}, friends: [], events: [], classwork: [], notices: {}, viewDate: null, lastDate: null, key: '' };
 
   function model() {
     const cal = S.info.calendar;
@@ -186,6 +186,21 @@
     }
   }
 
+  // Days until the dates admins picked (school days in brackets).
+  function renderCountdowns(m) {
+    const list = (S.notices.countdowns || []).filter((c) => c.date >= m.now.date);
+    $('countdown-card').hidden = !list.length;
+    fill($('countdowns'), list.map((c) => {
+      const days = Math.round((MHSCalendar.parseDate(c.date) - MHSCalendar.parseDate(m.now.date)) / 86400000);
+      let school = 0;
+      for (let d = m.now.date; d < c.date && school < 400; d = MHSCalendar.addDays(d, 1)) if (MHSCalendar.dayInfo(m.cal, d).schoolDay) school++;
+      return h('div', { class: 'countdown' },
+        h('span', { class: 'big' }, days === 0 ? 'Today' : String(days)),
+        h('span', null, days === 0 ? c.title : `day${days === 1 ? '' : 's'} until ${c.title}`),
+        days > 1 ? h('div', { class: 'small muted' }, `${school} school day${school === 1 ? '' : 's'}`) : null);
+    }));
+  }
+
   function renderFriends() {
     const box = clear($('friends-preview'));
     if (!S.me) { add(box, h('p', { class: 'muted small' }, h('a', { href: 'login.html' }, 'Sign in'), ' to see where your friends are.')); return; }
@@ -205,6 +220,7 @@
     renderEvents(m);
     renderFriends();
     renderLunchMenu(m);
+    renderCountdowns(m);
   }
 
   function tick() {
@@ -217,18 +233,18 @@
 
   async function load() {
     try {
-      const [info, me, events] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events')]);
+      const [info, me, events, notices] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events'), api('GET', '/api/notices')]);
       let classes = {}, friends = [], classwork = [];
       if (me.user) {
         const [c, f, w] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'), api('GET', '/api/classwork')]);
         classes = c; friends = f.friends; classwork = w;
       }
       S.info = info; // always keep the newest clock offset
-      const key = JSON.stringify([info.calendar, events, classes, friends, classwork, me.user && me.user.admin]);
+      const key = JSON.stringify([info.calendar, events, classes, friends, classwork, notices, me.user && me.user.admin]);
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events, classwork });
+      Object.assign(S, { me: me.user, classes, friends, events, classwork, notices });
       S.lastDate = schoolClock(info).date;
       renderAll();
     } catch (e) {

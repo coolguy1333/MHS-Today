@@ -10,6 +10,9 @@
 //   private  only the person who made it and the friends they invited
 // Any event can have a sign-up list (optionally limited). Everyone who can see the event sees how
 // many signed up; organizers (the author, the group's leaders) and admins see who.
+//
+// Each group also has a board for its members: posts with replies (leaders can mark a post as an
+// announcement, which notifies members) and polls (leaders ask, members vote once, may change it).
 const KINDS = ['club', 'sport', 'group'];
 const VISIBILITY = ['public', 'group', 'private'];
 const EVENT_KEEP_DAYS = 60;   // events are removed this long after their date
@@ -18,11 +21,14 @@ const MAX_MEMBERS = 1000;
 const MAX_GROUP_LINKS = 10;
 const MAX_INVITEES = 100;
 const MAX_SIGNUP = 500;
+const MAX_POSTS = 300;
+const MAX_REPLIES = 100;
+const MAX_POLLS = 50;
 
 module.exports = function groups(app) {
   const {
     route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
-    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends
+    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, notify
   } = app;
   if (!Array.isArray(state.groups)) state.groups = [];
   const isId = (v) => typeof v === 'string' && /^[0-9a-f]{16}$/.test(v);
@@ -107,10 +113,11 @@ module.exports = function groups(app) {
 
   route('POST', '/api/groups', { auth: 'user' }, ({ user, body }) => {
     const f = cleanGroupFields(body, false);
+    checkWords(f.name, f.description, f.links.map((l) => l.title));
     if (nameTaken(f.name)) throw new HttpError(409, 'There is already a group with that name');
     if (state.groups.length >= MAX_GROUPS) throw bad('There are too many groups');
     if (!isAdmin(user) && !limiter.hit(`group:${user.id}`, 3, 86400e3)) throw new HttpError(429, 'You can start up to 3 groups a day');
-    const g = { id: randomId(), ...f, approved: isAdmin(user), members: { [user.id]: 'leader' }, requests: [], by: user.id, created: Date.now() };
+    const g = { id: randomId(), ...f, approved: isAdmin(user), members: { [user.id]: 'leader' }, requests: [], posts: [], polls: [], by: user.id, created: Date.now() };
     state.groups.push(g);
     log(`Group ${g.id} created by ${user.id}${g.approved ? '' : ' (waiting for approval)'}`);
     db.save();
@@ -121,6 +128,7 @@ module.exports = function groups(app) {
     const g = groupOr404(params.id, user);
     if (!canManage(g, user)) throw new HttpError(403, 'Only leaders can change the group');
     const f = cleanGroupFields(body, true);
+    checkWords(f.name, f.description, (f.links || []).map((l) => l.title));
     if (f.name && nameTaken(f.name, g.id)) throw new HttpError(409, 'There is already a group with that name');
     Object.assign(g, f);
     if (f.joinPolicy === 'open' && g.requests.length) {
@@ -192,6 +200,131 @@ module.exports = function groups(app) {
     log(`Group ${g.id} ${g.approved ? 'approved' : 'unapproved'} by admin ${user.id}`);
     db.save();
     return groupDetail(g, user);
+  });
+
+  // ---------- the board: posts, replies, polls ----------
+  const card = (id) => (getUser(id) ? publicCard(getUser(id)) : { id: null, name: 'Former student', grade: null, avatar: null });
+  const boardOr403 = (id, user) => {
+    const g = groupOr404(id, user);
+    if (!roleIn(g, user) && !isAdmin(user)) throw new HttpError(403, 'Join the group to see its board');
+    return g;
+  };
+  const canRemove = (g, user, authorId) => authorId === user.id || canManage(g, user);
+  function boardView(g, user) {
+    return {
+      posts: g.posts.slice().sort((a, b) => (b.announcement - a.announcement) || b.created - a.created).map((p) => ({
+        id: p.id, text: p.text, announcement: p.announcement, created: p.created, by: card(p.by), canDelete: canRemove(g, user, p.by),
+        replies: p.replies.map((r) => ({ id: r.id, text: r.text, created: r.created, by: card(r.by), canDelete: canRemove(g, user, r.by) }))
+      })),
+      polls: g.polls.slice().sort((a, b) => b.created - a.created).map((p) => {
+        const counts = p.options.map(() => 0);
+        for (const v of Object.values(p.votes)) if (counts[v] !== undefined) counts[v]++;
+        return {
+          id: p.id, question: p.question, options: p.options, counts, closed: p.closed, created: p.created, by: card(p.by),
+          myVote: hasOwn(p.votes, user.id) ? p.votes[user.id] : null, canManage: canManage(g, user)
+        };
+      })
+    };
+  }
+  const postText = (t) => {
+    // each line is cleaned on its own so line breaks survive; at most one blank line in a row
+    const lines = (typeof t === 'string' ? t.split(/\r?\n/) : []).map((l) => cleanText(l, 1000));
+    const text = Array.from(lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()).slice(0, 1000).join('').trim();
+    if (!text) throw bad('Write something first');
+    checkWords(text);
+    return text;
+  };
+
+  route('GET', '/api/groups/:id/board', { auth: 'user' }, ({ user, params }) => boardView(boardOr403(params.id, user), user));
+
+  route('POST', '/api/groups/:id/posts', { auth: 'user' }, ({ user, params, body }) => {
+    const g = boardOr403(params.id, user);
+    const announcement = body.announcement === true;
+    if (announcement && !canManage(g, user)) throw new HttpError(403, 'Only leaders can post announcements');
+    const text = postText(body.text);
+    if (!isAdmin(user) && !limiter.hit(`post:${user.id}`, 30, 3600e3)) throw new HttpError(429, 'Slow down a little');
+    g.posts.push({ id: randomId(), by: user.id, text, announcement, created: Date.now(), replies: [] });
+    if (g.posts.length > MAX_POSTS) { // drop the oldest ordinary post
+      const i = g.posts.findIndex((p) => !p.announcement);
+      g.posts.splice(i >= 0 ? i : 0, 1);
+    }
+    db.save();
+    if (announcement) {
+      notify(Object.keys(g.members).filter((id) => id !== user.id), 'groups',
+        { title: `${g.name}: announcement`, body: text.slice(0, 180), url: `/group.html?id=${g.id}` });
+    }
+    return boardView(g, user);
+  });
+  route('POST', '/api/groups/:id/posts/:pid/replies', { auth: 'user' }, ({ user, params, body }) => {
+    const g = boardOr403(params.id, user);
+    const p = g.posts.find((x) => x.id === params.pid);
+    if (!p) throw new HttpError(404, 'Post not found');
+    if (p.replies.length >= MAX_REPLIES) throw bad('This post has too many replies');
+    const text = postText(body.text);
+    if (!isAdmin(user) && !limiter.hit(`post:${user.id}`, 30, 3600e3)) throw new HttpError(429, 'Slow down a little');
+    p.replies.push({ id: randomId(), by: user.id, text, created: Date.now() });
+    db.save();
+    return boardView(g, user);
+  });
+  route('DELETE', '/api/groups/:id/posts/:pid', { auth: 'user' }, ({ user, params }) => {
+    const g = boardOr403(params.id, user);
+    const i = g.posts.findIndex((x) => x.id === params.pid);
+    if (i < 0) throw new HttpError(404, 'Post not found');
+    if (!canRemove(g, user, g.posts[i].by)) throw new HttpError(403, 'You can only delete your own posts');
+    g.posts.splice(i, 1);
+    db.save();
+    return boardView(g, user);
+  });
+  route('DELETE', '/api/groups/:id/posts/:pid/replies/:rid', { auth: 'user' }, ({ user, params }) => {
+    const g = boardOr403(params.id, user);
+    const p = g.posts.find((x) => x.id === params.pid);
+    const i = p ? p.replies.findIndex((r) => r.id === params.rid) : -1;
+    if (i < 0) throw new HttpError(404, 'Reply not found');
+    if (!canRemove(g, user, p.replies[i].by)) throw new HttpError(403, 'You can only delete your own replies');
+    p.replies.splice(i, 1);
+    db.save();
+    return boardView(g, user);
+  });
+
+  route('POST', '/api/groups/:id/polls', { auth: 'user' }, ({ user, params, body }) => {
+    const g = boardOr403(params.id, user);
+    if (!canManage(g, user)) throw new HttpError(403, 'Only leaders can start polls');
+    const question = cleanText(body.question, 200);
+    if (!question) throw bad('Ask a question');
+    const options = Array.isArray(body.options) ? [...new Set(body.options.map((o) => cleanText(o, 80)).filter(Boolean))] : [];
+    if (options.length < 2 || options.length > 8) throw bad('Give 2 to 8 different choices');
+    checkWords(question, options);
+    if (g.polls.length >= MAX_POLLS) g.polls.shift();
+    g.polls.push({ id: randomId(), by: user.id, question, options, votes: {}, closed: false, created: Date.now() });
+    db.save();
+    return boardView(g, user);
+  });
+  route('POST', '/api/groups/:id/polls/:pid/vote', { auth: 'user' }, ({ user, params, body }) => {
+    const g = boardOr403(params.id, user);
+    const p = g.polls.find((x) => x.id === params.pid);
+    if (!p) throw new HttpError(404, 'Poll not found');
+    if (p.closed) throw bad('This poll is closed');
+    if (!Number.isInteger(body.choice) || body.choice < 0 || body.choice >= p.options.length) throw bad('Pick one of the choices');
+    p.votes[user.id] = body.choice;
+    db.save();
+    return boardView(g, user);
+  });
+  route('PUT', '/api/groups/:id/polls/:pid', { auth: 'user' }, ({ user, params, body }) => {
+    const g = boardOr403(params.id, user);
+    const p = g.polls.find((x) => x.id === params.pid);
+    if (!p) throw new HttpError(404, 'Poll not found');
+    if (!canManage(g, user)) throw new HttpError(403, 'Only leaders can close polls');
+    if (typeof body.closed !== 'boolean') throw bad('Invalid setting');
+    p.closed = body.closed;
+    db.save();
+    return boardView(g, user);
+  });
+  route('DELETE', '/api/groups/:id/polls/:pid', { auth: 'user' }, ({ user, params }) => {
+    const g = boardOr403(params.id, user);
+    if (!canManage(g, user)) throw new HttpError(403, 'Only leaders can delete polls');
+    g.polls = g.polls.filter((x) => x.id !== params.pid);
+    db.save();
+    return boardView(g, user);
   });
 
   // ---------- events ----------
@@ -278,6 +411,7 @@ module.exports = function groups(app) {
       if (!invitees.every((id) => friends.has(id))) throw bad('You can only invite your friends');
     }
     const fields = cleanEventFields(body);
+    checkWords(fields.title, fields.description);
     const signup = cleanSignup(body.signup);
     if (state.events.length >= config.maxEvents) throw bad('The events board is full');
     if (!isAdmin(user) && !limiter.hit(`event:${user.id}`, 10, 86400e3)) throw new HttpError(429, 'You can add up to 10 events a day');
@@ -311,7 +445,19 @@ module.exports = function groups(app) {
   });
 
   // ---------- backup, cleanup ----------
+  // Events for someone's calendar feed: theirs, ones they signed up for or were invited to, and their groups'.
+  const mineForCalendar = (e, user) => e.by === user.id || e.invitees.includes(user.id) || (e.signup && e.signup.people.includes(user.id))
+    || (e.groupId && !!findGroup(e.groupId) && !!roleIn(findGroup(e.groupId), user));
   return {
+    // timed events and who to remind: the author, people signed up, people invited
+    eventsForReminders: () => state.events.filter((e) => e.time).map((e) => ({
+      id: e.id, date: e.date, time: e.time, title: e.title,
+      people: [...new Set([e.by, ...e.invitees, ...(e.signup ? e.signup.people : [])].filter(Boolean))]
+    })),
+    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && mineForCalendar(e, user)).map((e) => {
+      const g = e.groupId ? findGroup(e.groupId) : null;
+      return { uid: `ev-${e.id}`, date: e.date, time: e.time || null, title: e.title, description: [g ? g.name : '', e.description].filter(Boolean).join(': ') };
+    }),
     status: () => ({ groups: state.groups.length, pendingGroups: state.groups.filter((g) => !g.approved).length }),
     exportData: () => ({ groups: state.groups }),
     importData(data, users) {
@@ -328,10 +474,22 @@ module.exports = function groups(app) {
           const ids = Object.keys(members);
           if (!ids.length) continue;
           if (!ids.some((id) => members[id] === 'leader')) members[ids[0]] = 'leader';
+          const text = (t) => cleanText(t, 1000);
+          const posts = (Array.isArray(g.posts) ? g.posts : []).filter((p) => isPlainObject(p) && isId(p.id) && text(p.text)).slice(-MAX_POSTS).map((p) => ({
+            id: p.id, by: hasOwn(users, p.by) ? p.by : null, text: text(p.text), announcement: p.announcement === true, created: num(p.created),
+            replies: (Array.isArray(p.replies) ? p.replies : []).filter((r) => isPlainObject(r) && isId(r.id) && text(r.text)).slice(-MAX_REPLIES)
+              .map((r) => ({ id: r.id, by: hasOwn(users, r.by) ? r.by : null, text: text(r.text), created: num(r.created) }))
+          }));
+          const polls = (Array.isArray(g.polls) ? g.polls : []).filter((p) => isPlainObject(p) && isId(p.id) && Array.isArray(p.options)).slice(-MAX_POLLS).map((p) => {
+            const options = p.options.map((o) => cleanText(o, 80)).filter(Boolean).slice(0, 8);
+            const votes = {};
+            for (const [id, v] of Object.entries(isPlainObject(p.votes) ? p.votes : {})) if (hasOwn(users, id) && Number.isInteger(v) && v >= 0 && v < options.length) votes[id] = v;
+            return { id: p.id, by: hasOwn(users, p.by) ? p.by : null, question: cleanText(p.question, 200) || 'Poll', options, votes, closed: p.closed === true, created: num(p.created) };
+          }).filter((p) => p.options.length >= 2);
           out.push({
             id: g.id, ...f, approved: g.approved === true, members,
             requests: Array.isArray(g.requests) ? [...new Set(g.requests.filter((id) => hasOwn(users, id) && !hasOwn(members, id)))] : [],
-            by: hasOwn(users, g.by) ? g.by : null, created: num(g.created)
+            posts, polls, by: hasOwn(users, g.by) ? g.by : null, created: num(g.created)
           });
         } catch { /* skip invalid groups */ }
       }
@@ -371,6 +529,9 @@ module.exports = function groups(app) {
       }
       for (const g of [...state.groups]) {
         g.requests = g.requests.filter((x) => x !== id);
+        g.posts = g.posts.filter((p) => p.by !== id);
+        for (const p of g.posts) p.replies = p.replies.filter((r) => r.by !== id);
+        for (const p of g.polls) delete p.votes[id];
         if (!hasOwn(g.members, id)) continue;
         delete g.members[id];
         const ids = Object.keys(g.members);
@@ -380,6 +541,10 @@ module.exports = function groups(app) {
     },
     // Events saved before groups existed are public, with no group, invitees or sign-up list.
     upgrade() {
+      for (const g of state.groups) {
+        if (!Array.isArray(g.posts)) g.posts = [];
+        if (!Array.isArray(g.polls)) g.polls = [];
+      }
       for (const e of state.events) {
         if (!VISIBILITY.includes(e.visibility)) e.visibility = 'public';
         if (e.groupId === undefined) e.groupId = null;

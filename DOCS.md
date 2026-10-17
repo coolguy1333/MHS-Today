@@ -13,6 +13,12 @@ src/menu.js          lunch menu from Health-e Pro (My School Menus), cached per 
 src/classwork.js     classwork posts (assignments, quizzes, tests) and reports
 src/groups.js        groups and events (visibility, invitations, sign-up lists)
 src/tools.js         the Tools list and students' tool suggestions
+src/notices.js       announcement banners, countdowns, admin-added blocked words
+src/wordfilter.js    the word filter (whole words, common disguises undone)
+src/icalendar.js     private calendar feeds (/cal/<token>.ics)
+src/push.js          notification settings, subscriptions and reminders (every 5 minutes)
+src/webpush.js       Web Push without dependencies: VAPID (RFC 8292) and aes128gcm encryption (RFC 8291)
+public/sw.js, public/manifest.webmanifest   installable app: offline copy and showing notifications
 public/              the pages; js/calendar.js, js/bellSchedule.js and js/avatars.js are shared with the server
 public/js/pages/     one script per page (no inline scripts anywhere)
 test/                node:test suites, a mock Google, and helpers
@@ -50,6 +56,16 @@ Name search matches every typed word against the start of the person's Google fi
 
 **Events**: `visibility` is `public` (posting follows `EVENT_POSTING`, or the poster leads an approved group the event belongs to), `group` (members only; posted by its leaders) or `private` (the author and `invitees`, who must be their friends). `signup: { limit (0 = none), people }`; organizers (author, group leaders) and admins see names, everyone else the count.
 
+## Reminders, calendar sync and the installable app
+
+**Push**: each device that turns notifications on sends its subscription (endpoint + keys); endpoints must belong to a real browser push service (Apple, Google, Mozilla, Microsoft). Messages are encrypted for the device and signed with the server's VAPID key (`state.vapid`, made on first start, never exported). A 404/410 from the push service removes that device. Reminders run every five minutes: between 6 and 9 pm school time, one message per person listing what's due tomorrow in their classes; and about an hour before any timed event they made, signed up for or were invited to, or a study session they're going to. `state.sentReminders` makes each go out once. Group announcements notify members straight away. People choose the kinds on the Account page.
+
+**Calendar feed**: `/cal/<48 hex>.ics` (calendar apps can't sign in, so the token is the key; it can be replaced or turned off). Timed items are converted from school time to UTC; lines are folded at 75 bytes.
+
+**Installable**: `manifest.webmanifest` plus `sw.js`, which goes to the network first and falls back to its copy offline (pages, scripts, and a few API answers such as your classes and the calendar). Signing out deletes the copy.
+
+**Word filter**: whole words only (so "assess" passes), with common disguises undone (`sh1t`, `$hit`, `f u c k`, `fuuuck`); a few words also catch any ending (`fucking`). It runs on what students type: profiles, events, classwork, study sessions, groups, posts, polls and tool ideas.
+
 ## Admins, profiles and suggestions
 
 Owners are the `ADMIN_EMAILS`; they are always admins and can't be demoted or removed in the app (except an owner removing another owner's account). Any admin can promote someone (`adminGranted`) or demote another non-owner admin, but not themselves.
@@ -83,9 +99,14 @@ State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: ap
 | `GET/POST /api/groups`, `GET/PUT/DELETE /api/groups/:id`, `POST /api/groups/:id/join` `leave`, `PUT /api/groups/:id/members/:uid` (`{ role: 'leader' \| 'member' \| null }`) | signed in (changes: leaders or admins) | Groups |
 | `GET /api/events?group=`, `POST /api/events` (`{ visibility, groupId, invitees, signup }`), `POST /api/events/:id/signup` (`{ on }`) | events you can see; posting rules below | Events |
 | `POST /api/tools/suggestions` | signed in | Suggest a tool |
+| `GET /api/notices` | anyone | Today's announcements and upcoming countdowns |
+| `GET/POST/DELETE /api/me/calendar`, `GET /cal/<token>.ics` | signed in; the feed needs only its token | Private calendar link (make, replace, turn off) and the feed |
+| `GET /api/push`, `POST/DELETE /api/push/subscribe`, `PUT /api/push/prefs`, `POST /api/push/test` | signed in | Notifications per device and which kinds |
+| `GET/POST /api/study`, `POST /api/study/:id/going`, `DELETE /api/study/:id` | signed in | Study sessions for your classes |
+| `GET /api/groups/:id/board`, `POST /api/groups/:id/posts` (`{ text, announcement }`), `POST …/posts/:pid/replies`, `DELETE …/posts/:pid[/replies/:rid]`, `POST /api/groups/:id/polls`, `POST …/polls/:pid/vote` (`{ choice }`), `PUT/DELETE …/polls/:pid` | members (announcements, polls: leaders) | Group board |
 | `POST /api/events`, `DELETE /api/events/:id` | post: admins and verified people (see `EVENT_POSTING`); delete: owner or admin | Events |
 | `GET /api/friends`, `POST /api/friends/lookup`, `POST /api/friends/search` (`{ q }`), `POST /api/friends/request` (`{ code }` or `{ id }`), `POST /api/friends/:id/accept`, `PUT /api/friends/:id` (`{ level }`), `DELETE /api/friends/:id`, `GET /api/friends/suggestions`, `POST /api/friends/suggestions/:id/hide` | signed in | Friends |
-| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ admin, verified, name, pronouns, grade, bio, interests, avatar, profileLocked, reset }`), `PUT /api/admin/links` (`{ links }`), `PUT /api/admin/tools` (`{ tools }`), `GET /api/admin/tool-suggestions`, `POST /api/admin/tool-suggestions/:id/accept`, `DELETE /api/admin/tool-suggestions/:id`, `GET /api/admin/classwork`, `POST /api/admin/classwork/:id/keep`, `PUT /api/admin/groups/:id` (`{ approved }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
+| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ admin, verified, name, pronouns, grade, bio, interests, avatar, profileLocked, reset }`), `PUT /api/admin/links` (`{ links }`), `PUT /api/admin/tools` (`{ tools }`), `GET /api/admin/tool-suggestions`, `POST /api/admin/tool-suggestions/:id/accept`, `DELETE /api/admin/tool-suggestions/:id`, `GET /api/admin/classwork`, `POST /api/admin/classwork/:id/keep`, `PUT /api/admin/groups/:id` (`{ approved }`), `GET/PUT /api/admin/notices` (`{ announcements, countdowns, blockedWords }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
 
 ## Security design
 

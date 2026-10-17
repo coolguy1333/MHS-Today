@@ -221,7 +221,7 @@
 
   // ---- editable lists (links, tools): rows of inputs, reorder, remove, add, save all at once
   const dirtyLists = new Set();
-  function listEditor({ prefix, noun, fields, blank, path, key }) {
+  function listEditor({ prefix, noun, fields, blank, path, key, pick }) {
     let items = [];
     const setDirty = (on) => { if (on) dirtyLists.add(prefix); else dirtyLists.delete(prefix); $(`${prefix}-state`).textContent = on ? 'Unsaved changes' : ''; };
     function render() {
@@ -250,7 +250,8 @@
       if (first) first.focus();
     });
     $(`${prefix}-save`).addEventListener('click', (e) => busy(e.currentTarget, async () => {
-      items = await api('PUT', path, { [key]: items });
+      const saved = await api('PUT', path, { [key]: items });
+      items = pick ? saved[key] : saved;
       setDirty(false);
       render();
       toast('Saved');
@@ -269,6 +270,25 @@
     fields: [['name', 'Name', { maxlength: '60' }], ['url', 'https://… (empty = coming soon)', { maxlength: '500' }],
       ['description', 'What it does', { maxlength: '200' }]],
     blank: () => ({ name: '', url: '', description: '' })
+  });
+
+  const annEditor = listEditor({
+    prefix: 'ann', noun: 'Announcement', path: '/api/admin/notices', key: 'announcements', pick: true,
+    fields: [['start', 'Start date', { type: 'date' }], ['end', 'End date', { type: 'date' }], ['text', 'What it says', { maxlength: '200' }]],
+    blank: () => ({ text: '', start: today(), end: today() })
+  });
+  const cdEditor = listEditor({
+    prefix: 'cd', noun: 'Countdown', path: '/api/admin/notices', key: 'countdowns', pick: true,
+    fields: [['date', 'Date', { type: 'date' }], ['title', 'What it counts down to', { maxlength: '60' }]],
+    blank: () => ({ title: '', date: addDays(today(), 30) })
+  });
+  $('words-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      const r = await api('PUT', '/api/admin/notices', { blockedWords: $('words').value.split(/[\n,]/).map((w) => w.trim()).filter(Boolean) });
+      $('words').value = r.blockedWords.join('\n');
+      toast('Words saved');
+    });
   });
 
   // ---- needs attention: groups to approve, reported classwork, tool suggestions
@@ -336,4 +356,10 @@
   try { linksEditor.set(await api('GET', '/api/links')); } catch (e) { fill($('links-editor'), h('p', { class: 'notice error' }, e.message)); }
   try { toolsEditor.set(await api('GET', '/api/tools')); } catch (e) { fill($('tools-editor'), h('p', { class: 'notice error' }, e.message)); }
   try { await renderQueue(); } catch (e) { fill($('queue'), h('p', { class: 'notice error' }, e.message)); }
+  try {
+    const n = await api('GET', '/api/admin/notices');
+    annEditor.set(n.announcements);
+    cdEditor.set(n.countdowns);
+    $('words').value = n.blockedWords.join('\n');
+  } catch (e) { fill($('ann-editor'), h('p', { class: 'notice error' }, e.message)); }
 })();

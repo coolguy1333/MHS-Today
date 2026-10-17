@@ -68,6 +68,74 @@
     await load();
   });
 
+  // ---- board: posts, replies, polls (members and admins)
+  const ago = (ms) => {
+    const m = Math.floor((Date.now() - ms) / 60000);
+    return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.floor(m / 60)} h ago` : new Date(ms).toLocaleDateString();
+  };
+  const multiline = (text) => text.split('\n').flatMap((line, i) => (i ? [h('br'), line] : [line]));
+  function renderBoard(b) {
+    fill($('posts'), b.posts.length ? b.posts.map((p) => h('div', { class: 'post' + (p.announcement ? ' announcement' : '') },
+      h('div', { class: 'person' }, avatarEl(p.by, 30), h('div', null,
+        h('strong', null, p.by.name), p.announcement ? [' ', h('span', { class: 'badge' }, 'Announcement')] : null,
+        h('div', { class: 'small muted' }, ago(p.created)))),
+      h('p', null, multiline(p.text)),
+      p.replies.map((r) => h('div', { class: 'reply' },
+        h('div', { class: 'small' }, h('strong', null, r.by.name), h('span', { class: 'muted' }, ` · ${ago(r.created)}`),
+          r.canDelete ? [' · ', h('button', { class: 'linklike danger', type: 'button', onclick: (e) => boardAct(e, 'DELETE', `posts/${p.id}/replies/${r.id}`) }, 'Delete')] : null),
+        h('div', { class: 'small' }, multiline(r.text)))),
+      replyForm(p),
+      p.canDelete ? h('button', { class: 'linklike danger small', type: 'button', onclick: (e) => { if (confirm('Delete this post and its replies?')) boardAct(e, 'DELETE', `posts/${p.id}`); } }, 'Delete post') : null))
+      : h('p', { class: 'muted small' }, 'No posts yet. Say hi!'));
+    $('polls-card').hidden = !b.polls.length && !g.canManage;
+    fill($('polls'), b.polls.length ? b.polls.map((p) => {
+      const total = p.counts.reduce((a, c) => a + c, 0);
+      return h('div', { class: 'poll' },
+        h('strong', null, p.question), p.closed ? h('span', { class: 'small muted' }, ' · closed') : null,
+        p.options.map((o, i) => h('button', {
+          class: 'poll-option' + (p.myVote === i ? ' mine' : ''), type: 'button', disabled: p.closed, 'aria-pressed': String(p.myVote === i),
+          onclick: (e) => boardAct(e, 'POST', `polls/${p.id}/vote`, { choice: i })
+        }, h('span', { class: 'poll-bar', style: { width: `${total ? Math.round((p.counts[i] / total) * 100) : 0}%` } }),
+        h('span', { class: 'poll-label' }, o), h('span', { class: 'poll-count' }, String(p.counts[i])))),
+        h('div', { class: 'small muted' }, `${total} vote${total === 1 ? '' : 's'}`, p.myVote === null || p.closed ? '' : ' · tap another choice to change your vote',
+          p.canManage ? [' · ', h('button', { class: 'linklike', type: 'button', onclick: (e) => boardAct(e, 'PUT', `polls/${p.id}`, { closed: !p.closed }) }, p.closed ? 'Reopen' : 'Close'),
+            ' · ', h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm('Delete this poll?')) boardAct(e, 'DELETE', `polls/${p.id}`); } }, 'Delete')] : null));
+    }) : h('p', { class: 'muted small' }, 'No polls yet.'));
+  }
+  function replyForm(p) {
+    const input = h('input', { type: 'text', maxlength: '1000', placeholder: 'Reply…', 'aria-label': `Reply to ${p.by.name}` });
+    const form = h('form', { class: 'inline-field reply-form' }, input, h('button', { class: 'btn small secondary', type: 'submit' }, 'Reply'));
+    form.addEventListener('submit', (e) => { e.preventDefault(); boardAct({ currentTarget: e.submitter }, 'POST', `posts/${p.id}/replies`, { text: input.value }); });
+    return form;
+  }
+  const boardAct = (e, method, path, body) => busy(e.currentTarget, async () => renderBoard(await api(method, `/api/groups/${g.id}/${path}`, body)));
+  async function loadBoard() {
+    const member = g.myRole === 'leader' || g.myRole === 'member';
+    $('board-card').hidden = !member && !me.admin;
+    if ($('board-card').hidden) { $('polls-card').hidden = true; return; }
+    $('announce-field').hidden = !g.canManage;
+    $('poll-add').hidden = !g.canManage;
+    renderBoard(await api('GET', `/api/groups/${g.id}/board`));
+  }
+  $('post-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      renderBoard(await api('POST', `/api/groups/${g.id}/posts`, { text: $('post-text').value, announcement: $('post-announce').checked }));
+      e.target.reset();
+      toast('Posted');
+    });
+  });
+  $('poll-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      const options = $('poll-options').value.split('\n').map((s) => s.trim()).filter(Boolean);
+      renderBoard(await api('POST', `/api/groups/${g.id}/polls`, { question: $('poll-q').value, options }));
+      e.target.reset();
+      $('poll-add').open = false;
+      toast('Poll started');
+    });
+  });
+
   async function loadEvents() {
     const events = await api('GET', `/api/events?group=${encodeURIComponent(g.id)}`);
     const today = schoolClock(info).date;
@@ -98,7 +166,7 @@
     $('edit-card').hidden = !g.canManage;
     $('ev-visibility').querySelector('option[value="public"]').disabled = !g.approved;
     if (g.canManage) fillEditForm();
-    await loadEvents();
+    await Promise.all([loadEvents(), loadBoard()]);
   }
 
   $('ev-signup').addEventListener('change', () => { $('ev-limit').disabled = !$('ev-signup').checked; });

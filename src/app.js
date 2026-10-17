@@ -11,6 +11,7 @@ const avatars = require('../public/js/avatars.js');
 const { openDb } = require('./db');
 const { createGoogle, AuthError, newPkce } = require('./google');
 const { createMenu } = require('./menu');
+const { createFilter } = require('./wordfilter');
 const {
   cleanText, randomId, sha256hex, safeEqual, hasOwn, newFriendCode, normalizeFriendCode,
   parseCookies, serializeCookie, RateLimiter
@@ -51,7 +52,7 @@ const num = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
-  '.txt': 'text/plain; charset=utf-8'
+  '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8'
 };
 
 function createApp(config, { log = (...a) => console.log(new Date().toISOString(), ...a), fetchFn } = {}) {
@@ -81,6 +82,12 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   };
   if (config.secure) SECURITY_HEADERS['Strict-Transport-Security'] = 'max-age=15552000';
   const menu = createMenu({ district: config.menu.district, menuId: config.menu.id, fetchFn, log });
+  const filter = createFilter(() => state.blockedWords || []);
+  // Throws 400 if anything a student typed has a word that doesn't belong on a school site.
+  function checkWords(...texts) {
+    const w = filter.find(...texts);
+    if (w) throw bad(`Please keep it school-appropriate ("${w}" isn't allowed here)`);
+  }
 
   // ---------- small helpers ----------
   const today = () => cal.schoolNow(config.tz).date;
@@ -351,7 +358,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule, verified: u.verified === true,
         givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels,
         grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
-        pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions
+        pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions,
+        calendarToken: u.calendarToken
       })),
       events: state.events,
       calendar: state.calendar,
@@ -390,6 +398,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
           interests: Array.isArray(u.interests) ? u.interests.slice(0, 5) : []
         }));
       } catch { /* keep the defaults */ }
+      if (typeof u.calendarToken === 'string' && /^[0-9a-f]{48}$/.test(u.calendarToken)) users[u.id].calendarToken = u.calendarToken;
       users[u.id].rawHidden = Array.isArray(u.hiddenSuggestions) ? u.hiddenSuggestions : [];
       users[u.id].rawLevels = isPlainObject(u.shareLevels) ? u.shareLevels : {};
     }
@@ -427,9 +436,15 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // what to remove when someone deletes their account.
   const shared = {
     route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
-    today, cal, bell, sameClass, isPlainObject, hasOwn, num, publicCard, confirmedFriends
+    today, cal, bell, sameClass, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, features, fetchFn,
+    // notify(userIds, kind, { title, body, url }): push notifications (set up by src/push.js below)
+    notify: (...a) => (push ? push.notify(...a) : undefined)
   };
-  features.push(require('./classwork')(shared), require('./groups')(shared), require('./tools')(shared));
+  let push = null;
+  const calendarFeed = require('./icalendar')(shared);
+  features.push(require('./classwork')(shared), require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), calendarFeed);
+  push = require('./push')(shared);
+  features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();
 
   route('GET', '/api/health', { auth: 'none' }, () => ({ ok: true }));
@@ -440,6 +455,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }));
   route('PUT', '/api/me', { auth: 'user' }, ({ user, body }) => {
     const fields = cleanProfileFields(body);
+    checkWords(fields.name, fields.bio, fields.pronouns, fields.interests || []);
     if (Object.keys(fields).length && user.profileLocked) throw new HttpError(403, 'An admin has locked your profile, so it can\'t be changed right now');
     for (const k of ['shareSchedule', 'searchable']) {
       if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
@@ -860,6 +876,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (url.pathname === '/auth/google') return authStart(req, res, url);
       if (url.pathname === '/auth/google/callback') return await authCallback(req, res, url);
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
+      if (url.pathname.startsWith('/cal/')) return calendarFeed.feed(req, res, url);
       return await serveStatic(req, res, url);
     } catch (e) {
       if (e instanceof HttpError) {
@@ -889,6 +906,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   server.headersTimeout = 70e3;
   server.requestTimeout = 120e3;
   let timer = null;
+  let reminderTimer = null;
+  const runReminders = () => push.runReminders().catch((e) => log(`Reminders failed: ${e.message}`));
 
   function listen() {
     return new Promise((resolve, reject) => {
@@ -898,6 +917,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         maintain();
         timer = setInterval(maintain, 6 * 3600e3);
         timer.unref();
+        reminderTimer = setInterval(runReminders, 5 * 60e3);
+        reminderTimer.unref();
         resolve(server.address().port);
       });
     });
@@ -905,6 +926,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   function close() {
     return new Promise((resolve) => {
       if (timer) clearInterval(timer);
+      if (reminderTimer) clearInterval(reminderTimer);
       const force = setTimeout(() => server.closeAllConnections(), 3000);
       force.unref();
       server.close(() => { clearTimeout(force); db.close(); resolve(); }); // also fires if it was never listening
@@ -912,7 +934,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     });
   }
 
-  return { server, listen, close, config, state, db, google: !!google };
+  return { server, listen, close, config, state, db, google: !!google, runReminders: () => push.runReminders() };
 }
 
 module.exports = { createApp };
