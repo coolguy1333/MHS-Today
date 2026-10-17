@@ -52,6 +52,9 @@ const step = (m) => console.log('•', m);
   const anon = await newUser('anon', {});
   await anon.page.goto(base + '/');
   await anon.page.waitForSelector('#day-head h1');
+  // the installable app: the manifest must load under the site's CSP (Chromium only fetches it on request)
+  const manifest = await (await anon.page.context().newCDPSession(anon.page)).send('Page.getAppManifest');
+  assert.ok(manifest.data && !(manifest.errors || []).length, 'web app manifest loads');
   step('anonymous dashboard: ' + (await text(anon.page, '#day-head')).replace(/\n+/g, ' | '));
   assert.match(await text(anon.page, '#day-head'), /Thursday, October 1/);
   assert.match(await text(anon.page, '#day-head'), /Day \?|day letter/i);
@@ -199,10 +202,10 @@ const step = (m) => console.log('•', m);
   assert.match(await text(bp, '#confirm-box'), /Send a friend request to\s*Ann L\./);
   assert.doesNotMatch(bp.url(), /code=/, 'the code is removed from the address bar');
   await bp.click('#confirm-box button:has-text("Send request")');
-  await bp.waitForFunction(() => /Request sent to/.test(document.querySelector('#requests').innerText));
+  await bp.waitForFunction(() => /Ann L\.[\s\S]*Request sent/.test(document.querySelector('#requests').innerText));
   step('invite link: sign in -> confirm -> request sent');
   await sp.reload(); await sp.waitForSelector('#requests button:has-text("Accept")');
-  assert.match(await text(sp, '#requests'), /Ben R\. wants to be friends/);
+  assert.match(await text(sp, '#requests'), /Ben R\.\s*wants to be friends/);
   await sp.click('#requests button:has-text("Accept")');
   await sp.waitForFunction(() => /Ben R\./.test(document.querySelector('#friends').innerText));
   await sp.screenshot({ path: path.join(SHOTS, 'friends.png'), fullPage: true });
@@ -231,18 +234,20 @@ const step = (m) => console.log('•', m);
   // ---------------------------------------------------------------- events + XSS
   // posting is for admins and verified people by default: Ann can't until the admin verifies her
   const ep = ann.page;
-  await ep.goto(base + '/events.html'); await ep.waitForSelector('#signin-card:not([hidden])');
-  assert.equal(await ep.locator('#add-card').isHidden(), true);
-  assert.match(await text(ep, '#signin-card'), /Only verified people can add events/);
+  await ep.goto(base + '/events.html'); await ep.waitForSelector('#add-card:not([hidden])');
+  // unverified: only private events for friends; no "Everyone" choice
+  assert.equal(await ep.locator('#ev-visibility option[value="public"]').count(), 0);
+  assert.match(await text(ep, '#post-note'), /admins, verified people/);
   await ap.goto(base + '/admin.html'); await ap.waitForSelector('#users tr');
   await ap.click('#users button[aria-label="Verify Ann L."]');
   await ap.waitForSelector('.toast:has-text("Ann L. can now post events")');
   assert.match(await text(ap, '#users'), /Ann L\.\s*verified/);
   step('events: unverified student cannot post; admin verifies Ann');
-  await ep.reload(); await ep.waitForSelector('#add-card:not([hidden])');
+  await ep.reload(); await ep.waitForSelector('#ev-visibility option[value="public"]', { state: 'attached' });
+  await ep.selectOption('#ev-visibility', 'public');
   await ep.fill('#title', '<img src=x onerror="window.__xss2=1"> Pep rally');
   await ep.fill('#date', '2026-10-03'); await ep.fill('#time', '14:30'); await ep.fill('#description', '<script>window.__xss3=1</script>Gym');
-  await ep.click('#event-form button');
+  await ep.click('#event-form button[type=submit]');
   await ep.waitForSelector('#upcoming .list-row');
   assert.match(await text(ep, '#upcoming'), /Pep rally/);
   assert.match(await text(ep, '#upcoming'), /2:30 PM/);
@@ -261,10 +266,10 @@ const step = (m) => console.log('•', m);
 
   // ---------------------------------------------------------------- account: privacy, rename, delete
   await sp.goto(base + '/account.html'); await sp.waitForSelector('#name');
-  await sp.fill('#name', 'Annie'); await sp.click('#name-form button');
+  await sp.fill('#name', 'Annie'); await sp.click('#profile-save');
   await sp.waitForFunction(() => document.querySelector('.nav-auth').innerText.includes('Annie'));
   await sp.uncheck('#share');
-  await sp.waitForSelector('.toast:has-text("hidden from friends")');
+  await sp.waitForSelector('.toast:has-text("hidden from all friends")');
   await bp.goto(base + '/friends.html');
   await bp.waitForFunction(() => /Schedule hidden/.test(document.querySelector('#friends').innerText));
   assert.match(await text(bp, '#friends'), /Annie/);
@@ -300,7 +305,7 @@ const step = (m) => console.log('•', m);
   // ---------------------------------------------------------------- phones: no sideways scrolling anywhere
   const phone = await newUser('phone', { sub: 'a1', email: 'admin@school.test', given_name: 'Ada', family_name: 'Min' }, { viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
   await signIn(phone);
-  for (const pg of ['index', 'schedule', 'events', 'friends', 'tools', 'account', 'admin', 'login']) {
+  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'tools', 'account', 'admin', 'login']) {
     await phone.page.goto(`${base}/${pg}.html`);
     await phone.page.waitForLoadState('networkidle');
     await phone.page.waitForTimeout(250);
@@ -309,7 +314,7 @@ const step = (m) => console.log('•', m);
       const culprit = await phone.page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 4).map((e) => e.tagName + '.' + e.className + ' ' + Math.round(e.getBoundingClientRect().right)));
       problems.push(`[phone] ${pg}.html scrolls sideways (${w.scroll} > ${w.view}): ${culprit.join(', ')}`);
     }
-    if (['index', 'schedule', 'friends', 'admin'].includes(pg)) await phone.page.screenshot({ path: path.join(SHOTS, `phone-${pg}.png`), fullPage: true });
+    if (['index', 'schedule', 'classwork', 'groups', 'friends', 'admin'].includes(pg)) await phone.page.screenshot({ path: path.join(SHOTS, `phone-${pg}.png`), fullPage: true });
   }
   step('phone layout checked on every page');
 
