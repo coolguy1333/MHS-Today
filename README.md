@@ -3,7 +3,7 @@
 Schedule, events and friends for Mukwonago High School students.
 
 - **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown ("B Lunch · 12 min left" at lunch), your own classes, and what's next.
-- **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D).
+- **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D). Or paste your schedule copied from Infinite Campus and it fills everything in, lunches included (read on your device; nothing is sent until you save).
 - **Classwork**: classmates post assignments, quizzes and tests to a class; only people in that class see them, and they show next to the class on Today. Three reports hide a post until an admin checks it. Classmates can also plan **study sessions** (for the class or one quiz/test) and say they're going.
 - **Reminders and the app**: add MHS Hub to your phone's home screen (on iPhone: Safari → Share → Add to Home Screen) to use it like an app, offline included, and turn on notifications on the Account page: classwork due tomorrow, an hour before your events and study sessions, and group announcements.
 - **Calendar sync**: a private link that puts your classwork, events, study sessions and no-school days into your iPhone or Google calendar.

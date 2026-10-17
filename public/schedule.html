@@ -21,6 +21,20 @@
     <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
     <h1>My Schedule</h1>
     <p class="muted">Each class belongs to a color block. Enter each class once, and the day letter decides which hour it meets in.</p>
+    <details class="card" id="import-card">
+      <summary>Fill in from Infinite Campus</summary>
+      <ol class="small">
+        <li>In Infinite Campus, open <strong>Schedule</strong> (all days).</li>
+        <li>Select the whole page (<kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>A</kbd>, or on a phone: press and hold, then <em>Select All</em>) and copy it.</li>
+        <li>Paste it below. It stays on your device: only the classes you save are sent.</li>
+      </ol>
+      <textarea id="ic-text" rows="5" aria-label="Schedule copied from Infinite Campus" placeholder="Day: A&#10;Period Yellow&#10;Criminal Justice&#10;7:30 AM - 8:32 AM&#10;Teacher: …"></textarea>
+      <div id="ic-preview"></div>
+      <div class="row">
+        <button class="btn small secondary" type="button" id="ic-read">Read my schedule</button>
+        <button class="btn small" type="button" id="ic-use" hidden>Fill in these classes</button>
+      </div>
+    </details>
     <div class="card">
       <h2>Your classes</h2>
       <form id="schedule-form" autocomplete="off"><div id="blocks"></div></form>
@@ -41,6 +55,7 @@
   <script src="js/bellSchedule.js"></script>
   <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/icimport.js"></script>
   <script src="js/pages/schedule.js"></script>
 </body>
 </html>

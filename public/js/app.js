@@ -209,14 +209,8 @@ const KIND_NAMES = { assignment: 'Assignment', quiz: 'Quiz', test: 'Test' };
 const GROUP_KINDS = { club: 'Club', sport: 'Sport', group: 'Student group' };
 
 // ---- classes and friends -------------------------------------------------------
-const normClass = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-// Same class = same name, and the same teacher when both have one.
-function sameClass(a, b) {
-  if (!a || !b) return false;
-  if (normClass(a.name) !== normClass(b.name)) return false;
-  const ta = normClass(a.teacher), tb = normClass(b.teacher);
-  return !ta || !tb || ta === tb;
-}
+// Same class = same name, and the same teacher (by last name) when both have one. Shared with the server.
+const sameClass = (a, b) => MHSBell.sameClass(a, b);
 // Classes are saved per color block; the day letter picks the block for each hour.
 function classAt(classes, letter, hour) {
   const key = MHSBell.blockFor(letter, hour);

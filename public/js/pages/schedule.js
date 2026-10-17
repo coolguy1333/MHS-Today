@@ -85,6 +85,36 @@
   }
 
   panel.addEventListener('input', () => { setDirty(true); renderGrid(); });
+
+  // ---- fill in from Infinite Campus (read in the browser; nothing is sent until Save)
+  let imported = null;
+  $('ic-read').addEventListener('click', () => {
+    const r = MHSImport.parse($('ic-text').value);
+    imported = r.classes;
+    const found = BLOCKS.filter((b) => imported[b.key]);
+    $('ic-use').hidden = !found.length;
+    fill($('ic-preview'), found.length
+      ? [h('p', { class: 'small' }, `Found ${found.length} class${found.length === 1 ? '' : 'es'}:`),
+        h('ul', { class: 'small' }, found.map((b) => {
+          const c = imported[b.key];
+          return h('li', null, chip(b), ' ', h('strong', null, c.name), [c.teacher, c.room ? `Rm ${c.room}` : '', c.lunch ? `${c.lunch} Lunch` : ''].filter(Boolean).map((x) => ` · ${x}`).join(''));
+        })),
+        r.warnings.map((w) => h('p', { class: 'notice small' }, w)),
+        h('p', { class: 'small muted' }, 'Classes you already entered for other colors are kept. Check everything, then press Save.')]
+      : h('p', { class: 'notice error small' }, "Couldn't find any classes. Copy the whole Schedule page (it has lines like \"Period Yellow\") and try again."));
+  });
+  $('ic-use').addEventListener('click', () => {
+    if (!imported) return;
+    for (const b of BLOCKS) if (imported[b.key]) setBlock(b.key, imported[b.key]);
+    setDirty(true);
+    renderGrid();
+    $('import-card').open = false;
+    $('ic-text').value = '';
+    fill($('ic-preview'));
+    $('ic-use').hidden = true;
+    toast('Filled in. Check your classes, then press Save.');
+    $('save-btn').focus();
+  });
   $('schedule-form').addEventListener('submit', (e) => e.preventDefault());
   window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 

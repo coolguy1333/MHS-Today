@@ -15,6 +15,7 @@ src/groups.js        groups and events (visibility, invitations, sign-up lists)
 src/tools.js         the Tools list and students' tool suggestions
 src/notices.js       announcement banners, countdowns, admin-added blocked words
 src/wordfilter.js    the word filter (whole words, common disguises undone)
+public/js/icimport.js  reads a schedule copied from Infinite Campus ("Period Yellow", "Teacher: Last, First", "Lunch: B …") into color blocks, in the browser
 src/icalendar.js     private calendar feeds (/cal/<token>.ics)
 src/push.js          notification settings, subscriptions and reminders (every 5 minutes)
 src/webpush.js       Web Push without dependencies: VAPID (RFC 8292) and aes128gcm encryption (RFC 8291)
@@ -76,7 +77,7 @@ People you may know: confirmed friends of your confirmed friends ("2 mutual frie
 
 ## Color blocks and lunch
 
-Classes are saved per color block, not per day: `classes = { yellow: { name, teacher, room }, green: { name, teacher, room, lunch: 'A' }, ... }`. `ROTATION[letter][hour - 1]` (from the MHS Daily Schedule grid) says which block meets in each hour, so each class is entered once. Lunch is inside Hour 4, so it is stored on the blocks that meet in Hour 4 (`LUNCH_BLOCKS`: Green on Day A, Orange on B–D); `lunchFor(classes, letter)` gives someone's lunch for a day, and `LUNCHES` has the A/B/C times for each schedule type. Schedules saved by the first release (keys like `A_1`) are converted to blocks when the server starts and when they are sent to `PUT /api/classes`.
+Classes match between people when the names match and the teachers' last names match (or one side has no teacher): `MHSBell.sameClass`, shared by the server and the pages. Classes are saved per color block, not per day: `classes = { yellow: { name, teacher, room }, green: { name, teacher, room, lunch: 'A' }, ... }`. `ROTATION[letter][hour - 1]` (from the MHS Daily Schedule grid) says which block meets in each hour, so each class is entered once. Lunch is inside Hour 4, so it is stored on the blocks that meet in Hour 4 (`LUNCH_BLOCKS`: Green on Day A, Orange on B–D); `lunchFor(classes, letter)` gives someone's lunch for a day, and `LUNCHES` has the A/B/C times for each schedule type. Schedules saved by the first release (keys like `A_1`) are converted to blocks when the server starts and when they are sent to `PUT /api/classes`.
 
 ## Data (`$DATA_DIR/db.json`)
 

@@ -313,13 +313,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     }
     return out;
   }
-  // Same class = same name, and the same teacher when both have one (like the pages' sameClass).
-  const normClass = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  function sameClass(a, b) {
-    if (!a || !b || normClass(a.name) !== normClass(b.name)) return false;
-    const ta = normClass(a.teacher), tb = normClass(b.teacher);
-    return !ta || !tb || ta === tb;
-  }
+  const { sameClass } = bell; // same name, same teacher (by last name) when both have one
   // Admin-managed links: validated like any user input; returns null for an invalid entry.
   // An http(s) address, normalized, or null.
   function cleanUrl(v) {

@@ -105,6 +105,22 @@
     return minutes >= start && minutes < end ? { minutesLeft: end - minutes } : null;
   }
 
+  // Same class = same name, and the same teacher when both have one. Teachers are compared by last
+  // name, so "Mr. Smith", "Smith", "Smith, John" and "John Smith" all match.
+  const normClass = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  function teacherKey(t) {
+    let s = String(t || '').toLowerCase();
+    if (s.includes(',')) s = s.split(',')[0]; // "Smith, John"
+    const words = s.replace(/[^a-z0-9]+/g, ' ').split(' ')
+      .filter((w) => w.length > 1 && !['mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'coach', 'prof', 'sr', 'jr'].includes(w));
+    return words.length ? words[words.length - 1] : '';
+  }
+  function sameClass(a, b) {
+    if (!a || !b || normClass(a.name) !== normClass(b.name)) return false;
+    const ta = teacherKey(a.teacher), tb = teacherKey(b.teacher);
+    return !ta || !tb || ta === tb;
+  }
+
   function timeToMinutes(hhmm) {
     const [h, m] = hhmm.split(':').map(Number);
     return h * 60 + m;
@@ -142,7 +158,7 @@
   const api = {
     SCHEDULES, timeToMinutes, formatTime, getCurrentPeriod,
     BLOCKS, BLOCK_KEYS, ROTATION, blockInfo, blockFor, meetings,
-    LUNCH_HOUR, LUNCH_BLOCKS, LUNCH_NAMES, LUNCHES, lunchFor, lunchTimes, atLunch
+    LUNCH_HOUR, LUNCH_BLOCKS, LUNCH_NAMES, LUNCHES, lunchFor, lunchTimes, atLunch, sameClass, teacherKey
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MHSBell = api;
