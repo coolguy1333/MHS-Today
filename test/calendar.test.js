@@ -136,6 +136,38 @@ test('bell: 12-hour formatting', () => {
   assert.equal(bell.formatTime('13:43'), '1:43 PM');
 });
 
+test('bell: color blocks follow the MHS Daily Schedule grid', () => {
+  assert.deepEqual(['A', 'B', 'C', 'D'].map((d) => [1, 2, 3, 4, 5, 6].map((hr) => bell.blockFor(d, hr))), [
+    ['yellow', 'red', 'pink', 'green', 'purple', 'silver'],
+    ['blue', 'red', 'pink', 'orange', 'green', 'silver'],
+    ['yellow', 'blue', 'pink', 'orange', 'purple', 'green'],
+    ['yellow', 'red', 'blue', 'orange', 'purple', 'silver']
+  ]);
+  for (const row of Object.values(bell.ROTATION)) assert.equal(new Set(row).size, 6, 'a block meets at most once a day');
+  for (const k of bell.BLOCK_KEYS) assert.equal(bell.meetings(k).length, 3, `${k} meets on three days`);
+  assert.equal(bell.blockFor('E', 1), null); assert.equal(bell.blockFor('A', 7), null); assert.equal(bell.blockFor('A', 'advisory'), null);
+  assert.equal(bell.blockFor('__proto__', 1), null);
+  assert.deepEqual(bell.LUNCH_BLOCKS, ['green', 'orange']);
+});
+
+test('bell: lunches sit inside Hour 4 and follow your Hour 4 class', () => {
+  for (const [key, lunches] of Object.entries(bell.LUNCHES)) {
+    const h4 = bell.SCHEDULES[key].periods.find((p) => p.hour === bell.LUNCH_HOUR);
+    for (const l of bell.LUNCH_NAMES) {
+      assert.ok(lunches[l].start >= h4.start && lunches[l].end <= h4.end && lunches[l].start < lunches[l].end, `${key} ${l}`);
+    }
+  }
+  const classes = { green: { name: 'Bio', lunch: 'A' }, orange: { name: 'Gym', lunch: 'C' } };
+  assert.equal(bell.lunchFor(classes, 'A'), 'A');
+  assert.equal(bell.lunchFor(classes, 'D'), 'C');
+  assert.equal(bell.lunchFor({ green: { name: 'Bio' } }, 'A'), null);
+  assert.equal(bell.lunchFor(null, 'A'), null);
+  assert.deepEqual(bell.atLunch('daily', 'B', bell.timeToMinutes('11:40')), { minutesLeft: 16 });
+  assert.equal(bell.atLunch('daily', 'B', bell.timeToMinutes('11:56')), null);
+  assert.equal(bell.atLunch('daily', null, bell.timeToMinutes('11:40')), null);
+  assert.ok(bell.atLunch('early_release', 'A', bell.timeToMinutes('10:00')));
+});
+
 test('bell: every schedule is ordered and non-overlapping', () => {
   for (const s of Object.values(bell.SCHEDULES)) {
     let prevEnd = -1;

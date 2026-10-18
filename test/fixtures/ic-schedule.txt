@@ -1,0 +1,84 @@
+* Day: 8Per
+   * Period ADV
+[Advisory (Seniors)](https://example.infinitecampus.org/campus/apps/portal/student/section/1001)
+ 7:30 AM - 7:30 AM
+      * Teacher: Smith, John
+      * Room: 227
+   * Period Yellow
+[Criminal Justice](https://example.infinitecampus.org/campus/apps/portal/student/section/1002)
+ 7:31 AM - 8:14 AM
+      * Teacher: Smith, John
+      * Room: 227
+   * Period Red
+[Functions, Stats, Trig](https://example.infinitecampus.org/campus/apps/portal/student/section/1003)
+ 8:19 AM - 9:01 AM
+      * Teacher: Garcia, Ana
+      * Room: 132
+   * Period Blue~
+[Team Up With Fitness](https://example.infinitecampus.org/campus/apps/portal/student/section/1004)
+ 9:06 AM - 9:44 AM
+      * Teacher: Lee, Sam
+      * Room: NGYMHS
+   * Period Pink
+[Introduction to Economics](https://example.infinitecampus.org/campus/apps/portal/student/section/1005)
+ 9:49 AM - 10:36 AM
+      * Teacher: Patel, Riya
+      * Room: 224
+   * Period Orange
+[Year Book Lab](https://example.infinitecampus.org/campus/apps/portal/student/section/1006)
+ 10:41 AM - 12:15 PM
+      * Teacher: Nguyen, Kim L
+      * Room: 117
+      * Lunch: B 11:31-11:56 Adv 11:41-12:06
+   * Period Green
+[Academic Essentials 2](https://example.infinitecampus.org/campus/apps/portal/student/section/1007)
+ 12:20 PM - 1:06 PM
+      * Teacher: Brown, Joe E
+      * Room: 289
+      * Lunch: A 10:56-11:21 Adv 11:11-11:36
+   * Period Purple
+[Technical Communications](https://example.infinitecampus.org/campus/apps/portal/student/section/1008)
+ 1:11 PM - 1:54 PM
+      * Teacher: Davis, Kyle
+      * Room: 206
+   * Period Silver
+[Early Release](https://example.infinitecampus.org/campus/apps/portal/student/section/1009)
+ 1:59 PM - 2:45 PM
+      * Teacher: Wilson, Pat
+      * Start: 10/12/2026
+* Day: A Adv
+   * Period Yellow
+[Criminal Justice](https://example.infinitecampus.org/campus/apps/portal/student/section/1002)
+ 7:30 AM - 8:27 AM
+      * Teacher: Smith, John
+      * Room: 227
+   * Period Advisory
+[Advisory (Seniors)](https://example.infinitecampus.org/campus/apps/portal/student/section/1001)
+ 10:36 AM - 11:06 AM
+      * Teacher: Smith, John
+      * Room: 227
+   * Period Green
+[Academic Essentials 2](https://example.infinitecampus.org/campus/apps/portal/student/section/1007)
+ 11:11 AM - 12:41 PM
+      * Teacher: Brown, Joe E
+      * Room: 289
+      * Lunch: A 10:56-11:21 Adv 11:11-11:36
+* Day: C
+   * Period Purple~
+[Technical Communications](https://example.infinitecampus.org/campus/apps/portal/student/section/1008)
+ 12:36 PM - 1:38 PM
+      * Teacher: Davis, Kyle
+      * Room: 206
+   * Period Green~
+[Academic Essentials 2](https://example.infinitecampus.org/campus/apps/portal/student/section/1007)
+ 1:43 PM - 2:45 PM
+      * Teacher: Brown, Joe E
+      * Room: 289
+      * Lunch: A 10:56-11:21 Adv 11:11-11:36
+* Day: HOCO
+   * Period Orange
+[Year Book Lab](https://example.infinitecampus.org/campus/apps/portal/student/section/1006)
+ 10:12 AM - 11:37 AM
+      * Teacher: Nguyen, Kim L
+      * Room: 117
+      * Lunch: B 11:31-11:56 Adv 11:41-12:06

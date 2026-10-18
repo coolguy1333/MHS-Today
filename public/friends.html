@@ -6,7 +6,12 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
   <title>Friends · MHS Hub</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -18,7 +23,7 @@
     <div class="grid grid-even">
       <div class="card">
         <h2>Your friend code</h2>
-        <p class="muted small">Share this with people you want as friends. Only people with the code can send you a request.</p>
+        <p class="muted small">Share this with people you want as friends. People can also find you by name unless you turn that off on your <a href="account.html">Account</a> page.</p>
         <p><span class="code-box mono" id="my-code">…</span></p>
         <div class="row">
           <button class="btn small" type="button" id="copy-code">Copy code</button>
@@ -28,6 +33,13 @@
       </div>
       <div class="card">
         <h2>Add a friend</h2>
+        <form id="search-form" class="stack" role="search">
+          <label><span>Search by name</span>
+            <span class="inline-field"><input type="search" id="search-q" maxlength="60" autocomplete="off" placeholder="First and/or last name" required />
+            <button class="btn" type="submit">Search</button></span>
+          </label>
+        </form>
+        <div id="search-results" aria-live="polite"></div>
         <form id="find-form" class="stack">
           <label><span>Their friend code</span>
             <span class="inline-field"><input type="text" id="friend-code" class="mono" maxlength="14" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
@@ -45,9 +57,15 @@
       <h2>Your friends</h2>
       <div id="friends"><p class="muted">Loading…</p></div>
     </div>
+    <div class="card" id="suggest-card" hidden>
+      <h2>People you may know</h2>
+      <p class="small muted">Friends of your friends and people in your classes who allow name search.</p>
+      <div id="suggestions"></div>
+    </div>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
   <script src="js/pages/friends.js"></script>
 </body>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
+  <title>Groups · MHS Hub</title>
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <h1>Groups</h1>
+    <p class="muted">Clubs, sports and student groups. Find people into the same things, see each group's events, and join.</p>
+    <div class="card">
+      <div class="filters">
+        <input type="search" id="q" placeholder="Search groups" aria-label="Search groups" />
+        <select id="kind" aria-label="Kind of group"><option value="">All kinds</option><option value="club">Clubs</option><option value="sport">Sports</option><option value="group">Student groups</option></select>
+        <label class="check"><input type="checkbox" id="mine" /><span>Only mine</span></label>
+      </div>
+      <div id="groups" class="group-grid"><p class="muted">Loading…</p></div>
+    </div>
+    <details class="card" id="create-card">
+      <summary>Start a group</summary>
+      <p class="small muted">New groups show up after an admin approves them. You'll be the group's leader.</p>
+      <form id="create-form" class="form-grid">
+        <label><span>Name</span><input type="text" id="g-name" maxlength="60" required /></label>
+        <label><span>Kind</span><select id="g-kind"><option value="club">Club</option><option value="sport">Sport</option><option value="group">Student group</option></select></label>
+        <label class="wide"><span>What it's about</span><textarea id="g-description" maxlength="600" rows="3"></textarea></label>
+        <label class="wide"><span>Who can join</span>
+          <select id="g-join"><option value="open">Anyone can join</option><option value="approval">Leaders approve each request</option></select></label>
+        <div class="wide"><button class="btn" type="submit">Create group</button></div>
+      </form>
+    </details>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/groups.js"></script>
+</body>
+</html>

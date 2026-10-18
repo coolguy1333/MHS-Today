@@ -144,13 +144,17 @@ test('server.js starts, warns about missing setup, answers health checks and exi
   const dir = tmp();
   const port = await freePort();
   const s = runServer({ PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dir });
-  await until(() => /listening/.test(s.output()));
-  assert.match(s.output(), /GOOGLE_CLIENT_ID.*not set/);
-  assert.match(s.output(), /ADMIN_EMAILS is empty/);
-  assert.equal((await fetch(`http://127.0.0.1:${port}/api/health`)).status, 200);
-  s.child.kill('SIGTERM');
-  assert.deepEqual(await s.exited, { code: 0, sig: null });
-  assert.ok(fs.existsSync(path.join(dir, 'db.json')));
+  try {
+    // the warnings go to stderr and may arrive after the "listening" line on stdout
+    await until(() => /listening/.test(s.output()) && /ADMIN_EMAILS is empty/.test(s.output()));
+    assert.match(s.output(), /GOOGLE_CLIENT_ID.*not set/);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/health`)).status, 200);
+    s.child.kill('SIGTERM');
+    assert.deepEqual(await s.exited, { code: 0, sig: null });
+    assert.ok(fs.existsSync(path.join(dir, 'db.json')));
+  } finally {
+    s.child.kill('SIGKILL'); // never leave a server running if an assertion failed
+  }
 });
 
 test('server.js explains bad settings and exits non-zero', async () => {
@@ -163,8 +167,11 @@ test('server.js explains bad settings and exits non-zero', async () => {
   const port = await freePort();
   const a = runServer({ PORT: String(port), HOST: '127.0.0.1', DATA_DIR: tmp() });
   await until(() => /listening/.test(a.output()));
-  const b = runServer({ PORT: String(port), HOST: '127.0.0.1', DATA_DIR: tmp() });
-  assert.equal((await b.exited).code, 1);
-  assert.match(b.output(), /Cannot listen/);
-  a.child.kill('SIGTERM'); await a.exited;
+  try {
+    const b = runServer({ PORT: String(port), HOST: '127.0.0.1', DATA_DIR: tmp() });
+    assert.equal((await b.exited).code, 1);
+    assert.match(b.output(), /Cannot listen/);
+  } finally {
+    a.child.kill('SIGTERM'); await a.exited;
+  }
 });

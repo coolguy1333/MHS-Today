@@ -111,12 +111,13 @@ function renderNav(active) {
   const nav = $('site-nav');
   if (!nav) return;
   const links = [
-    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'My Schedule', 'schedule'], ['events.html', 'Events', 'events'],
-    ['friends.html', 'Friends', 'friends'], ['tools.html', 'Tools', 'tools']
+    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'Schedule', 'schedule'], ['classwork.html', 'Classwork', 'classwork'],
+    ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
+    ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links'], ['tools.html', 'Tools', 'tools']
   ];
   const auth = h('span', { class: 'nav-auth' });
   fill(nav,
-    h('a', { href: 'index.html', class: 'brand' }, '\u{1F40E} MHS Hub'),
+    h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Hub'),
     h('nav', { 'aria-label': 'Main' },
       links.map(([href, label, key]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)),
       auth)
@@ -125,17 +126,68 @@ function renderNav(active) {
     if (me.user) {
       add(auth,
         me.user.admin ? h('a', { href: 'admin.html', class: active === 'admin' ? 'active' : null }, 'Admin') : null,
-        h('a', { href: 'account.html', class: active === 'account' ? 'active' : null }, me.user.name),
+        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : '') }, avatarEl(me.user, 22), me.user.name),
         h('button', {
           class: 'linklike', type: 'button',
-          onclick: async () => { try { await api('POST', '/api/logout', {}); } finally { location.href = 'index.html'; } }
+          onclick: async () => {
+            await forgetThisDevice(); // before signing out: removing the subscription needs the session
+            try { await api('POST', '/api/logout', {}); } finally {
+              await clearOfflineCopy();
+              location.href = 'index.html';
+            }
+          }
         }, 'Sign out')
       );
     } else {
       add(auth, h('a', { href: 'login.html' }, 'Sign in'));
     }
   }).catch(() => {});
+  renderBanner(nav);
 }
+
+// Admins' announcements, under the nav on every page. A closed one stays closed on this device.
+function renderBanner(nav) {
+  let closed = [];
+  try { closed = JSON.parse(localStorage.getItem('mhs-closed-notices') || '[]'); } catch { /* storage blocked */ }
+  api('GET', '/api/notices').then(({ announcements }) => {
+    const show = announcements.filter((a) => !closed.includes(a.id));
+    if (!show.length) return;
+    const box = h('div', { class: 'banners', role: 'region', 'aria-label': 'Announcements' }, show.map((a) => {
+      const el = h('div', { class: 'banner' + (a.urgent ? ' urgent' : '') }, h('span', null, a.text),
+        h('button', {
+          class: 'linklike', type: 'button', 'aria-label': 'Hide this announcement',
+          onclick: () => {
+            el.remove();
+            try { localStorage.setItem('mhs-closed-notices', JSON.stringify([...closed, a.id].slice(-50))); } catch { /* storage blocked */ }
+          }
+        }, '×'));
+      return el;
+    }));
+    nav.after(box);
+  }).catch(() => {});
+}
+
+// ---- installable app ----------------------------------------------------------------
+// The service worker keeps an offline copy of the pages (and your schedule) and shows push notifications.
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
+// Stops this device's push notifications for the signed-in person (so a shared phone doesn't keep
+// getting someone else's reminders after they sign out).
+async function forgetThisDevice() {
+  try {
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    const sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+    if (!sub) return;
+    await api('DELETE', '/api/push/subscribe?endpoint=' + encodeURIComponent(sub.endpoint)).catch(() => {});
+    await sub.unsubscribe();
+  } catch { /* push isn't available here */ }
+}
+async function clearOfflineCopy() {
+  try { if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k); } catch { /* nothing cached */ }
+}
+const isInstalled = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 // ---- calendar and time ---------------------------------------------------------
 let calendarPromise = null;
@@ -165,23 +217,39 @@ function fmtMinutes(mins) {
   return hrs ? `${hrs} h ${n % 60} min` : `${n} min`;
 }
 const SCHEDULE_NAMES = { daily: 'Daily schedule', advisory: 'Advisory day', early_release: 'Early release' };
+const KIND_NAMES = { assignment: 'Assignment', quiz: 'Quiz', test: 'Test' };
+const GROUP_KINDS = { club: 'Club', sport: 'Sport', group: 'Student group' };
 
 // ---- classes and friends -------------------------------------------------------
-const normClass = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-// Same class = same name, and the same teacher when both have one.
-function sameClass(a, b) {
-  if (!a || !b) return false;
-  if (normClass(a.name) !== normClass(b.name)) return false;
-  const ta = normClass(a.teacher), tb = normClass(b.teacher);
-  return !ta || !tb || ta === tb;
+// Same class = same name, and the same teacher (by last name) when both have one. Shared with the server.
+const sameClass = (a, b) => MHSBell.sameClass(a, b);
+// Classes are saved per color block; the day letter picks the block for each hour.
+function classAt(classes, letter, hour) {
+  const key = MHSBell.blockFor(letter, hour);
+  return key && classes && Object.prototype.hasOwnProperty.call(classes, key) ? classes[key] : null;
 }
 // What is a friend doing in `hour` on day `letter`? -> { text, muted }
 function friendClassText(friend, letter, hour) {
   if (!friend.classes) return { text: 'Schedule hidden', muted: true };
   if (hour === 'advisory') return { text: 'Advisory', muted: false };
-  const c = letter && friend.classes[`${letter}_${hour}`];
+  const c = classAt(friend.classes, letter, hour);
   if (!c) return { text: 'No class set', muted: true };
   return { text: c.name + (c.room ? ` · Rm ${c.room}` : ''), muted: false };
+}
+// A friend's lunch ('A' | 'B' | 'C' | null) on a day letter. Friends who share only their lunch
+// send `lunches` ({ A: 'B', ... }) instead of their classes.
+function friendLunch(friend, letter) {
+  if (friend.lunches) return Object.prototype.hasOwnProperty.call(friend.lunches, letter) ? friend.lunches[letter] : null;
+  return MHSBell.lunchFor(friend.classes, letter);
+}
+// "Same lunch as you (B)" etc. for a day letter, or null when either lunch is unknown.
+function sharedLunchText(myClasses, friend, letter) {
+  if (!letter) return null;
+  const mine = MHSBell.lunchFor(myClasses, letter);
+  const theirs = friendLunch(friend, letter);
+  if (!theirs) return null;
+  if (!mine) return { text: `${theirs} Lunch`, same: false };
+  return { text: mine === theirs ? `Same lunch as you (${theirs})` : `${theirs} Lunch`, same: mine === theirs };
 }
 // What is happening at school right now? -> { now, day, status, cur? }
 // status: 'no-school' | 'before-school' | 'in-class' | 'passing' | 'after-school'
@@ -193,12 +261,80 @@ function liveState(info) {
   return { now, day, cur, status: cur.status };
 }
 function friendNowText(friend, live) {
-  if (!friend.classes) return { text: 'Schedule hidden', muted: true };
+  if (!friend.classes && !friend.lunches) return { text: 'Schedule hidden', muted: true };
   if (live.status === 'no-school') return { text: 'No school today', muted: true };
   if (live.status === 'before-school') return { text: "School hasn't started", muted: true };
   if (live.status === 'after-school') return { text: "School's out", muted: true };
   if (live.status === 'passing') return { text: 'Passing period', muted: true };
+  if (live.cur.period.hour === MHSBell.LUNCH_HOUR) {
+    const lunch = friendLunch(friend, live.day.dayLetter);
+    if (MHSBell.atLunch(live.day.scheduleType, lunch, live.now.minutes)) return { text: `At ${lunch} Lunch`, muted: false };
+  }
+  if (!friend.classes) return { text: 'Shares lunch only', muted: true };
   return friendClassText(friend, live.day.dayLetter, live.cur.period.hour);
+}
+// One event in a list: when, who can see it, its group, the sign-up list, and delete for organizers.
+// `reload` runs after a change.
+function eventRow(e, today, reload) {
+  const VIS = { group: 'Group members', private: 'Private' };
+  const s = e.signup;
+  const signupLine = s ? h('div', { class: 'signup-line small' },
+    h('span', { class: 'muted' }, s.limit ? `${s.count} of ${s.limit} signed up` : `${s.count} signed up`),
+    e.by === undefined ? h('a', { href: 'login.html?next=events.html' }, 'Sign in to sign up') : h('button', {
+      class: 'btn small' + (s.me ? ' secondary' : ''), type: 'button', disabled: !s.me && s.limit > 0 && s.count >= s.limit,
+      onclick: (ev) => busy(ev.currentTarget, async () => {
+        await api('POST', `/api/events/${e.id}/signup`, { on: !s.me });
+        toast(s.me ? 'Taken off the list' : "You're signed up");
+        await reload();
+      })
+    }, s.me ? 'Cancel my spot' : s.limit > 0 && s.count >= s.limit ? 'Full' : 'Sign up'),
+    s.people && s.people.length ? h('span', { class: 'muted' }, `· ${s.people.map((p) => p.name).join(', ')}`) : null) : null;
+  return h('div', { class: 'list-row' },
+    h('div', null,
+      h('strong', null, e.title), VIS[e.visibility] ? [' ', h('span', { class: 'badge vis' }, VIS[e.visibility])] : null,
+      h('div', { class: 'small muted' },
+        fmtRelativeDay(e.date, today) + (e.time ? ` · ${MHSBell.formatTime(e.time)}` : ''),
+        e.group ? [' · ', h('a', { href: `group.html?id=${encodeURIComponent(e.group.id)}` }, e.group.name)] : null,
+        e.by ? ` · added by ${e.by}` : ''),
+      e.description ? h('div', { class: 'small' }, e.description) : null,
+      e.invitees && e.invitees.length ? h('div', { class: 'small muted' }, `Invited: ${e.invitees.map((p) => p.name).join(', ')}`) : null,
+      signupLine),
+    e.mine ? h('button', {
+      class: 'linklike danger', type: 'button', 'aria-label': `Delete ${e.title}`,
+      onclick: (ev) => busy(ev.currentTarget, async () => {
+        if (!confirm(`Delete "${e.title}"?`)) return;
+        await api('DELETE', '/api/events/' + e.id);
+        toast('Event deleted');
+        await reload();
+      })
+    }, 'Delete') : null);
+}
+
+// A round avatar: the person's emoji, or their initials, on their color.
+function avatarEl(person, size = 32) {
+  const a = MHSAvatars.clean(person && person.avatar);
+  return h('span', {
+    class: 'avatar', 'aria-hidden': 'true',
+    style: { background: MHSAvatars.COLORS[a.color], width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * (a.emoji ? 0.55 : 0.4))}px` }
+  }, a.emoji || MHSAvatars.initials(person && person.name));
+}
+const gradeText = (g) => (g ? `${g}th grade` : null);
+// A friend's profile in a pop-up: avatar, name, pronouns, grade, bio, interests.
+function showProfileCard(p) {
+  const close = h('button', { class: 'btn small secondary', type: 'button' }, 'Close');
+  const dlg = h('dialog', { class: 'profile-card', 'aria-label': `${p.name}'s profile` },
+    h('div', { class: 'profile-head' }, avatarEl(p, 64),
+      h('div', null, h('h2', null, p.name),
+        h('div', { class: 'muted' }, [p.pronouns, gradeText(p.grade)].filter(Boolean).join(' · ') || null))),
+    p.bio ? h('p', null, p.bio) : null,
+    p.interests && p.interests.length ? h('div', { class: 'chips' }, p.interests.map((i) => h('span', { class: 'chip' }, i))) : null,
+    !p.bio && !(p.interests && p.interests.length) ? h('p', { class: 'muted small' }, "They haven't filled in their profile yet.") : null,
+    h('div', { class: 'row' }, close));
+  close.addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // click outside the card
+  document.body.append(dlg);
+  dlg.showModal();
 }
 function colorDot(color) {
   const d = h('span', { class: 'dot', 'aria-hidden': 'true' });

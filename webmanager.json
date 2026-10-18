@@ -24,10 +24,18 @@
       "description": "Optional. Comma-separated Google Workspace domains allowed to sign in, for example your school's domain. Leave empty to let any Google account sign in."
     },
     {
+      "name": "MENU_DISTRICT",
+      "description": "Optional. My School Menus district number for the lunch menu (in the menu page's address). Default: 2534, Mukwonago Area School District."
+    },
+    {
+      "name": "MENU_ID",
+      "description": "Optional. My School Menus menu number for the lunch menu. Default: 133305, Mukwonago High School Lunch Menu. Set to off to hide the menu."
+    },
+    {
       "name": "EVENT_POSTING",
-      "description": "Who can add events to the shared events board.",
-      "default": "everyone",
-      "choices": ["everyone", "admins"]
+      "description": "Who can add events to the shared events board: verified (admins and people an admin verifies on the Admin page), everyone, or admins.",
+      "default": "verified",
+      "choices": ["verified", "everyone", "admins"]
     }
   ]
 }

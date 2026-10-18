@@ -6,7 +6,12 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
   <title>Today · MHS Hub</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -17,6 +22,10 @@
     <div id="load-error" class="notice error" hidden></div>
     <div class="card" id="day-head"><p class="muted">Loading…</p></div>
     <div class="card status-card" id="status" hidden></div>
+    <div class="card" id="countdown-card" hidden>
+      <h2>Countdowns</h2>
+      <div class="countdowns" id="countdowns"></div>
+    </div>
     <div class="grid grid-2">
       <div class="card">
         <h2>Schedule</h2>
@@ -27,6 +36,11 @@
         </table>
       </div>
       <div>
+        <div class="card">
+          <h2>Lunch menu</h2>
+          <div id="lunch-preview"><p class="muted small">Loading…</p></div>
+          <p class="small"><a href="lunch.html">Full menu →</a></p>
+        </div>
         <div class="card">
           <h2>Upcoming events</h2>
           <div id="events-preview"><p class="muted">Loading…</p></div>
@@ -41,6 +55,7 @@
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
   <script src="js/pages/index.js"></script>
 </body>

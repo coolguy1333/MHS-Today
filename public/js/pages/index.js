@@ -2,10 +2,10 @@
 (function () {
   renderNav('dashboard');
   const { dayInfo, nextSchoolDay } = MHSCalendar;
-  const { SCHEDULES, getCurrentPeriod, formatTime } = MHSBell;
+  const { SCHEDULES, getCurrentPeriod, formatTime, blockFor, blockInfo, LUNCH_HOUR, lunchFor, lunchTimes, atLunch } = MHSBell;
 
   // viewDate: null = automatic (today, or the next school day when there's no school today)
-  const S = { info: null, me: null, classes: {}, friends: [], events: [], viewDate: null, lastDate: null, key: '' };
+  const S = { info: null, me: null, classes: {}, friends: [], events: [], classwork: [], notices: {}, viewDate: null, lastDate: null, key: '' };
 
   function model() {
     const cal = S.info.calendar;
@@ -52,20 +52,37 @@
     );
   }
 
+  // Hour 4 also says which lunch you have and which friends share it.
+  function lunchLine(m) {
+    const lunch = lunchFor(S.classes, m.view.dayLetter);
+    if (!lunch) return S.me ? h('div', { class: 'small muted' }, 'Lunch not set. ', h('a', { href: 'schedule.html' }, 'Pick A, B or C')) : null;
+    const t = lunchTimes(m.view.scheduleType, lunch);
+    const buddies = S.friends.filter((f) => friendLunch(f, m.view.dayLetter) === lunch).map((f) => f.name);
+    return h('div', { class: 'small muted' }, `${lunch} Lunch ${formatTime(t.start)} – ${formatTime(t.end)}`,
+      buddies.length ? h('span', { class: 'with' }, `Lunch with ${listNames(buddies)}`) : null);
+  }
+
   function classCell(p, cls, m, hasAny) {
     if (p.hour === 'advisory') return h('span', { class: 'muted' }, 'Advisory');
+    const block = blockInfo(blockFor(m.view.dayLetter, p.hour));
     if (cls) {
-      const key = `${m.view.dayLetter}_${p.hour}`;
-      const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[key], cls)).map((f) => f.name);
-      // line 1: the class; line 2: teacher and which friends are in it
-      const meta = [cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
+      const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[block.key], cls)).map((f) => f.name);
+      // line 1: the class; line 2: block, teacher and which friends are in it
+      const meta = [block.label, cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
+      // classwork for this class due in the next week
+      const week = MHSCalendar.addDays(m.viewDate, 7);
+      const due = S.classwork.filter((i) => i.block === block.key && i.due >= m.viewDate && i.due <= week);
       return [
-        h('div', null, colorDot(cls.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
-        meta.length ? h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))) : null
+        h('div', null, colorDot(block.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
+        h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))),
+        p.hour === LUNCH_HOUR ? lunchLine(m) : null,
+        due.map((i) => h('a', { class: 'due-line', href: 'classwork.html' },
+          h('span', { class: `badge kind-${i.kind}` }, KIND_NAMES[i.kind]), ` ${i.title} · ${fmtRelativeDay(i.due, m.viewDate)}`))
       ];
     }
-    if (S.me && hasAny && m.view.dayLetter) return h('span', { class: 'muted small' }, 'Not set. ', h('a', { href: 'schedule.html' }, 'Add it'));
-    return null;
+    if (!block) return null;
+    if (S.me && hasAny) return h('span', { class: 'muted small' }, colorDot(block.color), `${block.label}: not set. `, h('a', { href: 'schedule.html' }, 'Add it'));
+    return h('span', { class: 'muted small' }, colorDot(block.color), block.label);
   }
 
   function renderTable(m) {
@@ -86,7 +103,7 @@
     const schedule = SCHEDULES[m.view.scheduleType] || SCHEDULES.daily;
     for (const p of schedule.periods) {
       if (p.note) add(body, h('tr', { class: 'note-row' }, h('td', { colspan: 3 }, `${formatTime(p.note.start)} – ${formatTime(p.note.end)} · ${p.note.text}`)));
-      const cls = m.view.dayLetter ? S.classes[`${m.view.dayLetter}_${p.hour}`] : null;
+      const cls = classAt(S.classes, m.view.dayLetter, p.hour);
       add(body, h('tr', { class: 'period-row', dataset: { hour: String(p.hour) } },
         h('th', { scope: 'row' }, p.label),
         h('td', { class: 'time small muted' }, `${formatTime(p.start)} – ${formatTime(p.end)}`),
@@ -104,12 +121,19 @@
     const nameFor = (p) => {
       if (!p) return null;
       if (p.hour === 'advisory') return 'Advisory';
-      const c = v.dayLetter && S.classes[`${v.dayLetter}_${p.hour}`];
+      const c = classAt(S.classes, v.dayLetter, p.hour);
       return c ? c.name + (c.room ? ` (Rm ${c.room})` : '') : null;
     };
     const periodText = (p) => `${p.label}${nameFor(p) ? ` – ${nameFor(p)}` : ''}`;
     let title, detail = null;
-    if (cur.status === 'in-class') {
+    const lunch = cur.status === 'in-class' && cur.period.hour === LUNCH_HOUR ? lunchFor(S.classes, v.dayLetter) : null;
+    const eating = lunch && atLunch(v.scheduleType, lunch, m.now.minutes);
+    if (eating) {
+      title = `${lunch} Lunch · ${fmtMinutes(eating.minutesLeft)} left`;
+      detail = eating.minutesLeft < cur.minutesLeft
+        ? `Then back to ${periodText(cur.period)} until ${formatTime(cur.period.end)}`
+        : cur.next ? `Next: ${periodText(cur.next)} at ${formatTime(cur.next.start)}` : null;
+    } else if (cur.status === 'in-class') {
       title = `${cur.period.label} · ${fmtMinutes(cur.minutesLeft)} left`;
       const here = nameFor(cur.period);
       detail = [here, cur.next ? `Next: ${periodText(cur.next)} at ${formatTime(cur.next.start)}` : 'Last period of the day'].filter(Boolean).join(' · ');
@@ -142,6 +166,41 @@
     }
   }
 
+  // A short version of the day's menu: each counter and its first few dishes.
+  async function renderLunchMenu(m) {
+    const box = $('lunch-preview');
+    const date = m.view && m.view.schoolDay ? m.viewDate : null;
+    if (!date) { fill(box, h('p', { class: 'muted small' }, 'No school, no lunch.')); return; }
+    if (S.menuDate === date) return;
+    S.menuDate = date;
+    try {
+      const data = await api('GET', `/api/lunch?date=${date}`);
+      if (S.menuDate !== date) return;
+      if (!data.available) { fill(box, h('p', { class: 'muted small' }, data.error === 'not-configured' ? 'Lunch menu not set up.' : 'No menu posted.')); return; }
+      fill(box, data.sections.slice(0, 4).map((s) => h('div', { class: 'list-row' }, h('div', null,
+        s.title ? h('strong', null, s.title) : null,
+        h('div', { class: 'small muted' }, s.items.filter((i) => i.kind === 'food').slice(0, 3).map((i) => i.name).join(', '))))));
+    } catch (e) {
+      S.menuDate = null;
+      fill(box, h('p', { class: 'muted small' }, e.message));
+    }
+  }
+
+  // Days until the dates admins picked (school days in brackets).
+  function renderCountdowns(m) {
+    const list = (S.notices.countdowns || []).filter((c) => c.date >= m.now.date);
+    $('countdown-card').hidden = !list.length;
+    fill($('countdowns'), list.map((c) => {
+      const days = Math.round((MHSCalendar.parseDate(c.date) - MHSCalendar.parseDate(m.now.date)) / 86400000);
+      let school = 0;
+      for (let d = m.now.date; d < c.date && school < 400; d = MHSCalendar.addDays(d, 1)) if (MHSCalendar.dayInfo(m.cal, d).schoolDay) school++;
+      return h('div', { class: 'countdown' },
+        h('span', { class: 'big' }, days === 0 ? 'Today' : String(days)),
+        h('span', null, days === 0 ? c.title : `day${days === 1 ? '' : 's'} until ${c.title}`),
+        days > 1 ? h('div', { class: 'small muted' }, `${school} school day${school === 1 ? '' : 's'}`) : null);
+    }));
+  }
+
   function renderFriends() {
     const box = clear($('friends-preview'));
     if (!S.me) { add(box, h('p', { class: 'muted small' }, h('a', { href: 'login.html' }, 'Sign in'), ' to see where your friends are.')); return; }
@@ -160,6 +219,8 @@
     updateLive(m);
     renderEvents(m);
     renderFriends();
+    renderLunchMenu(m);
+    renderCountdowns(m);
   }
 
   function tick() {
@@ -172,18 +233,18 @@
 
   async function load() {
     try {
-      const [info, me, events] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events')]);
-      let classes = {}, friends = [];
+      const [info, me, events, notices] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events'), api('GET', '/api/notices')]);
+      let classes = {}, friends = [], classwork = [];
       if (me.user) {
-        const [c, f] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends')]);
-        classes = c; friends = f.friends;
+        const [c, f, w] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'), api('GET', '/api/classwork')]);
+        classes = c; friends = f.friends; classwork = w;
       }
       S.info = info; // always keep the newest clock offset
-      const key = JSON.stringify([info.calendar, events, classes, friends, me.user && me.user.admin]);
+      const key = JSON.stringify([info.calendar, events, classes, friends, classwork, notices, me.user && me.user.admin]);
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events });
+      Object.assign(S, { me: me.user, classes, friends, events, classwork, notices });
       S.lastDate = schoolClock(info).date;
       renderAll();
     } catch (e) {

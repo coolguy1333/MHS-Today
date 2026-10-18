@@ -36,7 +36,14 @@ function loadConfig(env = process.env) {
     },
     adminEmails: new Set(list(env.ADMIN_EMAILS)),
     allowedDomains: list(env.ALLOWED_DOMAINS).map((d) => d.replace(/^@/, '')),
-    eventPosting: env.EVENT_POSTING === 'admins' ? 'admins' : 'everyone',
+    // verified (default): admins and people an admin has verified; everyone: any signed-in student; admins: admins only.
+    eventPosting: ['everyone', 'admins'].includes(env.EVENT_POSTING) ? env.EVENT_POSTING : 'verified',
+    // Lunch menu on Health-e Pro / My School Menus (the ids are in the menu page's address).
+    // Defaults: Mukwonago Area School District, Mukwonago High School Lunch Menu. MENU_ID=off turns it off.
+    menu: {
+      district: /^\d{1,9}$/.test(env.MENU_DISTRICT || '') ? env.MENU_DISTRICT : '2534',
+      id: env.MENU_ID === 'off' ? '' : /^\d{1,9}$/.test(env.MENU_ID || '') ? env.MENU_ID : '133305'
+    },
     sessionDays: 60,
     maxUsers: 5000,
     maxEvents: 3000

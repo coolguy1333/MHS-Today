@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#1e3a8a" />
+  <title>Group · MHS Hub</title>
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <p class="small"><a href="groups.html">← All groups</a></p>
+    <div class="card" id="head"><p class="muted">Loading…</p></div>
+    <div class="grid grid-2" id="body" hidden>
+      <div>
+        <div class="card">
+          <h2>Events</h2>
+          <div id="events"></div>
+          <details id="add-event" hidden>
+            <summary>Add an event</summary>
+            <form id="event-form" class="form-grid">
+              <label class="wide"><span>Title</span><input type="text" id="ev-title" required maxlength="120" /></label>
+              <label><span>Date</span><input type="date" id="ev-date" required /></label>
+              <label><span>Time (optional)</span><input type="time" id="ev-time" /></label>
+              <label class="wide"><span>Details (optional)</span><input type="text" id="ev-description" maxlength="500" /></label>
+              <label><span>Who can see it</span><select id="ev-visibility"><option value="group">Group members</option><option value="public">Everyone</option></select></label>
+              <label class="check"><input type="checkbox" id="ev-signup" /><span>Sign-up list</span></label>
+              <label><span>Spots (empty = no limit)</span><input type="number" id="ev-limit" min="1" max="500" inputmode="numeric" /></label>
+              <div class="wide"><button class="btn" type="submit">Add event</button></div>
+            </form>
+          </details>
+        </div>
+        <div class="card" id="board-card" hidden>
+          <h2>Board</h2>
+          <form id="post-form" class="stack">
+            <label><span class="sr-only">Write a post</span><textarea id="post-text" rows="2" maxlength="1000" placeholder="Write something to the group…" required></textarea></label>
+            <div class="row">
+              <button class="btn small" type="submit">Post</button>
+              <label class="check" id="announce-field" hidden><input type="checkbox" id="post-announce" /><span>Announcement (notifies members)</span></label>
+            </div>
+          </form>
+          <div id="posts"></div>
+        </div>
+      </div>
+      <div>
+        <div class="card" id="polls-card" hidden>
+          <h2>Polls</h2>
+          <div id="polls"></div>
+          <details id="poll-add" hidden>
+            <summary>Start a poll</summary>
+            <form id="poll-form" class="stack">
+              <label><span>Question</span><input type="text" id="poll-q" maxlength="200" required /></label>
+              <label><span>Choices, one per line (2 to 8)</span><textarea id="poll-options" rows="4" required></textarea></label>
+              <div><button class="btn small" type="submit">Start poll</button></div>
+            </form>
+          </details>
+        </div>
+        <div class="card" id="requests-card" hidden>
+          <h2>Join requests</h2>
+          <div id="requests"></div>
+        </div>
+        <div class="card" id="members-card" hidden>
+          <h2>Members</h2>
+          <div id="members"></div>
+        </div>
+        <details class="card" id="edit-card" hidden>
+          <summary>Edit group</summary>
+          <form id="edit-form" class="form-grid">
+            <label><span>Name</span><input type="text" id="g-name" maxlength="60" required /></label>
+            <label><span>Kind</span><select id="g-kind"><option value="club">Club</option><option value="sport">Sport</option><option value="group">Student group</option></select></label>
+            <label class="wide"><span>What it's about</span><textarea id="g-description" maxlength="600" rows="3"></textarea></label>
+            <label class="wide"><span>Who can join</span><select id="g-join"><option value="open">Anyone can join</option><option value="approval">Leaders approve each request</option></select></label>
+            <label class="wide"><span>Links, one per line: Title | https://…</span><textarea id="g-links" rows="3" placeholder="Practice schedule | https://…"></textarea></label>
+            <div class="wide row">
+              <button class="btn small" type="submit">Save</button>
+              <button class="btn small danger" type="button" id="delete-group">Delete group</button>
+            </div>
+          </form>
+        </details>
+      </div>
+    </div>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/group.js"></script>
+</body>
+</html>

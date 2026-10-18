@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const cal = require('../public/js/calendar.js');
 const { startApp, closeAll, user } = require('./helpers');
 const { startMockGoogle } = require('./mock-google');
@@ -33,6 +34,8 @@ test('security headers are on every kind of response', async () => {
     assert.match(csp, /script-src 'self'(;|$)/);        // no 'unsafe-inline' / 'unsafe-eval'
     assert.match(csp, /style-src 'self'(;|$)/);
     assert.match(csp, /frame-ancestors 'none'/);
+    assert.match(csp, /manifest-src 'self'/);   // the installable app's manifest must be allowed
+    assert.match(csp, /worker-src 'self'/);
     assert.match(csp, /base-uri 'none'/);
     assert.doesNotMatch(csp, /unsafe/);
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff', p);
@@ -122,11 +125,11 @@ test('things that look like object internals are just unknown ids', async () => 
     assert.equal((await c.del(`/api/friends/${id}`)).status, 200, id);
     assert.equal((await c.del(`/api/events/${id}`)).status, 404, id);
   }
-  const r = await c.put('/api/classes', { __proto__: { polluted: 1 }, constructor: { name: 'x' }, A_1: { name: 'Math', __proto__: { x: 1 } } });
+  const r = await c.put('/api/classes', { __proto__: { polluted: 1 }, constructor: { name: 'x' }, yellow: { name: 'Math', __proto__: { x: 1 } } });
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.data), ['A_1']);
+  assert.deepEqual(Object.keys(r.data), ['yellow']);
   assert.equal({}.polluted, undefined);
-  const raw = '{"A_2":{"name":"Art"},"__proto__":{"polluted":true}}';
+  const raw = '{"red":{"name":"Art"},"__proto__":{"polluted":true}}';
   assert.equal((await c.put('/api/classes', raw)).status, 200);
   assert.equal({}.polluted, undefined);
 });
@@ -154,30 +157,61 @@ test('writes are rate limited per person', async () => {
 
 // ---------------------------------------------------------------- classes & profile
 
-test('classes: validated, trimmed, blank name clears, colours sanitised', async () => {
+test('classes: one per color block, validated, trimmed, blank name clears, lunch only on Hour 4 blocks', async () => {
   const ctx = await startApp({ mock });
   const c = await as(ctx, 1);
   assert.deepEqual((await c.get('/api/classes')).data, {});
   const r = await c.put('/api/classes', {
-    A_1: { name: '  Algebra  II ', teacher: 'Mr.   Smith', room: '204', color: '#FF0000' },
-    B_6: { name: 'Art', color: 'red; background:url(x)' },
-    C_3: { name: '<img src=x onerror=alert(1)>', teacher: 'a\u0000b\nc' },
-    D_2: { name: '   ' },
-    A_7: { name: 'Hour seven' }, E_1: { name: 'Day E' }, 'A_1 ': { name: 'sneaky' }, a_1: { name: 'lower' },
-    A_2: 'not an object', A_3: null, A_4: [],
-    A_5: { name: 'x'.repeat(200), room: 'r'.repeat(100) }
+    yellow: { name: '  Algebra  II ', teacher: 'Mr.   Smith', room: '204', color: '#FF0000', lunch: 'A' },
+    pink: { name: '<img src=x onerror=alert(1)>', teacher: 'a\u0000b\nc' },
+    red: { name: '   ' },
+    green: { name: 'Biology', lunch: 'B' }, orange: { name: 'Gym', lunch: 'D' },
+    Yellow: { name: 'caps' }, 'blue ': { name: 'sneaky' }, black: { name: 'no such block' }, E_1: { name: 'Day E' }, A_7: { name: 'Hour seven' },
+    purple: 'not an object', blue: null,
+    silver: { name: 'x'.repeat(200), room: 'r'.repeat(100) }
   });
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.data).sort(), ['A_1', 'A_5', 'B_6', 'C_3']);
-  assert.deepEqual(r.data.A_1, { name: 'Algebra II', teacher: 'Mr. Smith', room: '204', color: '#ff0000' });
-  assert.equal(r.data.B_6.color, '#4f7cff');
-  assert.equal(r.data.C_3.name, '<img src=x onerror=alert(1)>'); // stored as plain text; the pages never parse it as HTML
-  assert.equal(r.data.C_3.teacher, 'a b c');
-  assert.equal(Array.from(r.data.A_5.name).length, 60);
-  assert.equal(r.data.A_5.room.length, 20);
+  assert.deepEqual(Object.keys(r.data).sort(), ['green', 'orange', 'pink', 'silver', 'yellow']);
+  assert.deepEqual(r.data.yellow, { name: 'Algebra II', teacher: 'Mr. Smith', room: '204' });
+  assert.deepEqual(r.data.green, { name: 'Biology', teacher: '', room: '', lunch: 'B' });
+  assert.equal(r.data.orange.lunch, undefined, 'only A, B or C');
+  assert.equal(r.data.pink.name, '<img src=x onerror=alert(1)>'); // stored as plain text; the pages never parse it as HTML
+  assert.equal(r.data.pink.teacher, 'a b c');
+  assert.equal(Array.from(r.data.silver.name).length, 60);
+  assert.equal(r.data.silver.room.length, 20);
   assert.deepEqual((await c.get('/api/classes')).data, r.data);
   assert.deepEqual((await c.put('/api/classes', {})).data, {});      // clearing everything works
   assert.deepEqual((await (await as(ctx, 2)).get('/api/classes')).data, {}); // and they're private per person
+});
+
+test('classes: day-and-hour schedules from the first release move to their color block', async () => {
+  const ctx = await startApp({ mock });
+  const c = await as(ctx, 1);
+  const r = await c.put('/api/classes', {
+    A_1: { name: 'Math', color: '#123456' }, C_1: { name: 'Also yellow' }, B_1: { name: 'Bio' }, A_4: { name: 'Gym', lunch: 'C' },
+    red: { name: 'Choir' }, A_2: { name: 'Old red' }
+  });
+  assert.deepEqual(r.data, {
+    red: { name: 'Choir', teacher: '', room: '' }, yellow: { name: 'Math', teacher: '', room: '' },
+    green: { name: 'Gym', teacher: '', room: '', lunch: 'C' }, blue: { name: 'Bio', teacher: '', room: '' }
+  });
+});
+
+test('classes: saved schedules in the old format are converted at startup', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mhs-test-'));
+  const id = '00000000000000aa';
+  fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({
+    version: 2, sessions: {}, events: [], calendar: cal.emptyCalendar(),
+    users: {
+      [id]: {
+        id, sub: 'sub-1', email: 'user1@school.test', name: 'Old', created: 1, lastLogin: 1, friends: [], friendCode: 'ABCDEFGHJK', shareSchedule: true,
+        classes: { A_1: { name: 'Math', teacher: 'T', room: '1', color: '#112233' }, D_4: { name: 'Gym' } }
+      }
+    }
+  }));
+  const ctx = await startApp({ mock, tweak: (cfg) => { cfg.dataDir = dir; } });
+  assert.deepEqual(ctx.app.state.users[id].classes, { yellow: { name: 'Math', teacher: 'T', room: '1' }, orange: { name: 'Gym', teacher: '', room: '' } });
+  assert.ok(ctx.logs.some((l) => /Converted 1 saved schedule to color blocks/.test(l)));
 });
 
 test('profile: display name and sharing toggle are validated', async () => {
@@ -256,6 +290,38 @@ test('events: 10 a day per student, admins exempt; posting can be limited to adm
   assert.equal((await kid.get('/api/me')).data.config.eventPosting, 'admins');
 });
 
+test('events: by default only admins and verified people can post, and admins verify people', async () => {
+  const ctx = await startApp({ mock, env: { EVENT_POSTING: undefined } });
+  const kid = await as(ctx, 1);
+  const other = await as(ctx, 2);
+  const boss = await as(ctx, 7, { email: 'admin@school.test' });
+  assert.equal((await kid.get('/api/me')).data.config.eventPosting, 'verified');
+  let me = await kid.me();
+  assert.equal(me.verified, false); assert.equal(me.canPostEvents, false);
+  const denied = await kid.post('/api/events', { title: 'x', date: soon() });
+  assert.equal(denied.status, 403); assert.match(denied.data.error, /verified/);
+  assert.equal((await boss.me()).canPostEvents, true);
+  assert.equal((await boss.post('/api/events', { title: 'From admin', date: soon() })).status, 200);
+
+  // students can't verify themselves or anyone else
+  assert.equal((await kid.put('/api/me', { verified: true })).status, 200);
+  assert.equal((await kid.me()).verified, false);
+  assert.equal((await other.put(`/api/admin/users/${me.id}`, { verified: true })).status, 403);
+
+  assert.equal((await boss.put(`/api/admin/users/${me.id}`, { verified: 'yes' })).status, 400);
+  assert.equal((await boss.put('/api/admin/users/0123456789abcdef', { verified: true })).status, 404);
+  assert.equal((await boss.put(`/api/admin/users/${me.id}`, { verified: true })).status, 200);
+  me = await kid.me();
+  assert.equal(me.verified, true); assert.equal(me.canPostEvents, true);
+  assert.equal((await kid.post('/api/events', { title: 'Club meeting', date: soon() })).status, 200);
+  assert.equal((await other.post('/api/events', { title: 'x', date: soon() })).status, 403);
+  assert.equal((await boss.get('/api/admin/users')).data.find((u) => u.id === me.id).verified, true);
+
+  assert.equal((await boss.put(`/api/admin/users/${me.id}`, { verified: false })).status, 200);
+  assert.equal((await kid.post('/api/events', { title: 'x', date: soon() })).status, 403);
+  assert.equal((await kid.get('/api/events')).data.length, 2, 'unverifying keeps events already posted');
+});
+
 test('events: admins can delete anyone\'s, the board has a size cap', async () => {
   const ctx = await startApp({ mock, tweak: (cfg) => { cfg.maxEvents = 3; } });
   const kid = await as(ctx, 1);
@@ -274,8 +340,8 @@ test('friends: request by code, confirm, see schedules, unfriend', async () => {
   const ctx = await startApp({ mock });
   const a = await as(ctx, 1, { given_name: 'Ann' });
   const b = await as(ctx, 2, { given_name: 'Ben' });
-  await a.put('/api/classes', { A_1: { name: 'Math', room: '1' } });
-  await b.put('/api/classes', { A_1: { name: 'Math', room: '1' }, A_2: { name: 'Art' } });
+  await a.put('/api/classes', { yellow: { name: 'Math', room: '1' } });
+  await b.put('/api/classes', { yellow: { name: 'Math', room: '1' }, red: { name: 'Art' } });
   const codeB = (await b.me()).friendCode;
 
   // the code can be typed sloppily; looking it up only reveals a first name
@@ -302,8 +368,8 @@ test('friends: request by code, confirm, see schedules, unfriend', async () => {
   fa = (await a.get('/api/friends')).data;
   fb = (await b.get('/api/friends')).data;
   assert.equal(fa.friends[0].name, 'Ben T.');
-  assert.equal(fa.friends[0].classes.A_2.name, 'Art');
-  assert.equal(fb.friends[0].classes.A_1.name, 'Math');
+  assert.equal(fa.friends[0].classes.red.name, 'Art');
+  assert.equal(fb.friends[0].classes.yellow.name, 'Math');
   assert.equal(fa.outgoing.length + fa.incoming.length + fb.outgoing.length + fb.incoming.length, 0);
   assert.equal(JSON.stringify(fa).includes('friendCode'), false);
   assert.equal(JSON.stringify(fa).includes('@school.test'), false, 'friends never see email addresses');

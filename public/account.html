@@ -6,7 +6,12 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
   <title>Account · MHS Hub</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -17,16 +22,47 @@
     <h1>Account</h1>
     <div class="card">
       <h2>Profile</h2>
-      <form id="name-form" class="stack">
-        <label><span>Display name (shown to your friends and on events you add)</span>
-          <span class="inline-field"><input type="text" id="name" maxlength="40" required /><button class="btn" type="submit">Save</button></span>
-        </label>
+      <p class="notice" id="locked-note" hidden>An admin has locked your profile, so it can't be changed right now.</p>
+      <form id="profile-form" class="form-grid">
+        <label class="wide"><span>Display name (shown to your friends, in name search and on events you add)</span>
+          <input type="text" id="name" maxlength="40" required /></label>
+        <div class="wide">
+          <span class="field-label">Avatar</span>
+          <div class="person" id="avatar-preview"></div>
+          <div class="picker" id="color-picker" role="radiogroup" aria-label="Avatar color"></div>
+          <div class="picker" id="emoji-picker" role="radiogroup" aria-label="Avatar picture"></div>
+        </div>
+        <label><span>Pronouns (optional)</span><input type="text" id="pronouns" maxlength="20" placeholder="she/her, he/him, they/them…" /></label>
+        <label><span>Grade</span>
+          <select id="grade"><option value="">Not set</option><option value="9">9th</option><option value="10">10th</option><option value="11">11th</option><option value="12">12th</option></select></label>
+        <label class="wide"><span>Bio (optional, shown to friends)</span>
+          <textarea id="bio" maxlength="160" rows="2" placeholder="Clubs, sports, what you're into…"></textarea></label>
+        <label class="wide"><span>Interests (up to 5, separated by commas)</span>
+          <input type="text" id="interests" maxlength="140" placeholder="Robotics, soccer, band" /></label>
+        <div class="wide row"><button class="btn" type="submit" id="profile-save">Save profile</button><span class="small muted" id="bio-count"></span></div>
       </form>
       <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students.</p>
     </div>
     <div class="card">
       <h2>Privacy</h2>
-      <label class="check"><input type="checkbox" id="share" /><span>Let friends see my classes and where I am right now</span></label>
+      <label class="check"><input type="checkbox" id="share" /><span>Let friends see my schedule (you can limit each friend on the Friends page)</span></label>
+      <label class="check"><input type="checkbox" id="searchable" /><span>Let people find me by searching my name</span></label>
+      <p class="small muted">Name search matches your first and last name from Google but only ever shows your display name.</p>
+    </div>
+    <div class="card" id="notify-card">
+      <h2>Notifications</h2>
+      <div id="notify-body"><p class="muted small">Loading…</p></div>
+      <fieldset id="notify-prefs" hidden>
+        <legend class="field-label">Send me</legend>
+        <label class="check"><input type="checkbox" data-kind="classwork" /><span>Classwork due tomorrow (the evening before)</span></label>
+        <label class="check"><input type="checkbox" data-kind="events" /><span>Events and study sessions I'm going to (an hour before)</span></label>
+        <label class="check"><input type="checkbox" data-kind="groups" /><span>Announcements in my groups</span></label>
+      </fieldset>
+    </div>
+    <div class="card">
+      <h2>Calendar sync</h2>
+      <p class="small muted">Put your classwork, your groups' events, events you signed up for, study sessions and no-school days into your phone's calendar. It updates by itself.</p>
+      <div id="cal-body"><p class="muted small">Loading…</p></div>
     </div>
     <div class="card" id="admin-card" hidden>
       <h2>Admin</h2>
@@ -43,6 +79,7 @@
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
   <script src="js/pages/account.js"></script>
 </body>

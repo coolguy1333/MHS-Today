@@ -90,10 +90,11 @@ test('status page data describes the setup without revealing secrets', async () 
 async function populate(ctx) {
   const boss = await admin(ctx);
   const [a, b] = [await as(ctx, 1, { given_name: 'Ann' }), await as(ctx, 2, { given_name: 'Ben' })];
-  await a.put('/api/classes', { A_1: { name: 'Math', teacher: 'Smith', room: '1', color: '#112233' } });
+  await a.put('/api/classes', { green: { name: 'Math', teacher: 'Smith', room: '1', lunch: 'B' } });
   await b.put('/api/me', { shareSchedule: false });
   await a.post('/api/friends/request', { code: (await b.me()).friendCode });
   await b.post(`/api/friends/${(await a.me()).id}/accept`);
+  await boss.put(`/api/admin/users/${(await a.me()).id}`, { verified: true });
   await a.post('/api/events', { title: 'Game night', date: cal.addDays(today(), 4), time: '19:00', description: 'Bring snacks' });
   await boss.put('/api/admin/calendar', { anchorDate: today(), anchorLetter: 'D', noSchool: { [cal.addDays(today(), 9)]: 'Break' } });
   return { boss, a, b };
@@ -137,7 +138,8 @@ test('restore: a backup rebuilds an empty server exactly, and sign-in finds the 
   const annAfter = await ann.me();
   assert.equal(annAfter.id, annBefore.id);
   assert.equal(annAfter.friendCode, annBefore.friendCode);
-  assert.deepEqual((await ann.get('/api/classes')).data, { A_1: { name: 'Math', teacher: 'Smith', room: '1', color: '#112233' } });
+  assert.equal(annAfter.verified, true, 'verification survived');
+  assert.deepEqual((await ann.get('/api/classes')).data, { green: { name: 'Math', teacher: 'Smith', room: '1', lunch: 'B' } });
   const friendsAfter = (await ann.get('/api/friends')).data;
   assert.deepEqual(friendsAfter.friends.map((f) => [f.id, f.name, f.classes]), friendsBefore.friends.map((f) => [f.id, f.name, f.classes]));
   assert.equal(friendsAfter.friends[0].classes, null, 'privacy setting survived');
@@ -227,7 +229,7 @@ test('restore: everything in the file is sanitised like fresh input', async () =
   assert.equal(u1.email, 'one@school.test');
   assert.equal(u1.name, 'Evil name ' + 'x'.repeat(30)); // 40 characters in total
   assert.equal(u1.created, 0); assert.equal(u1.lastLogin, 0);
-  assert.deepEqual(Object.keys(u1.classes), ['A_1']); assert.equal(u1.classes.A_1.color, '#4f7cff');
+  assert.deepEqual(u1.classes, { yellow: { name: '<b>x</b>', teacher: '', room: '' } }); // old-format keys are converted too
   assert.deepEqual(u1.friends, [id(2)]);
   assert.equal(u1.shareSchedule, true);
   assert.equal(u1.admin, undefined);
