@@ -1,2 +1,7 @@
+# Nothing here is for search engines. The one exception is calendar feeds (/cal/<private token>.ics):
+# Google Calendar fetches subscribed calendars with a bot that obeys this file, and without
+# "Allow: /cal/" it subscribes but never loads any events. Feed links are secret and not linked
+# from anywhere, and the feeds are sent with "X-Robots-Tag: noindex", so nothing gets indexed.
 User-agent: *
+Allow: /cal/
 Disallow: /

@@ -59,7 +59,10 @@ test('static files: clean URLs, caching, no path traversal, no dotfiles or sourc
   const robots = await c.raw('GET', '/robots.txt');
   assert.equal(robots.status, 200);
   assert.match(robots.headers.get('content-type'), /text\/plain/);
-  assert.match(await robots.text(), /Disallow: \//);
+  const rules = await robots.text();
+  assert.match(rules, /^Disallow: \/$/m);
+  // Google Calendar's fetcher obeys robots.txt: without this, subscribed calendars stay empty
+  assert.match(rules, /^Allow: \/cal\/$/m);
   assert.equal((await c.raw('GET', '/index.html')).status, 200);
   const css = await c.raw('GET', '/css/style.css');
   const etag = css.headers.get('etag');
