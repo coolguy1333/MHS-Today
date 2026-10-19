@@ -70,19 +70,18 @@ test('word filter: catches disguised words but not innocent ones, plus admin wor
 
 // ---------------------------------------------------------------- calendar sync
 
-test('calendar: a private feed link with classwork, my events, study sessions and no-school days', async () => {
+test('calendar: a private feed link with my events, study sessions and no-school days', async () => {
   const ctx = await startApp({ mock });
   const boss = await owner(ctx);
   const ann = await as(ctx, 1, { given_name: 'Ann' });
   const ben = await as(ctx, 2, { given_name: 'Ben' });
   await ann.put('/api/classes', { yellow: { name: 'Algebra II' } });
   await ben.put('/api/classes', { yellow: { name: 'Algebra II' } });
-  await ben.post('/api/classwork', { block: 'yellow', kind: 'quiz', title: 'Unit 3; ch. 1, 2', due: day(2) });
   await boss.post('/api/events', { title: 'Public game', date: day(3), time: '19:00' });
   await boss.post('/api/events', { title: 'Car wash', date: day(4), time: '09:30', signup: true });
   const carWash = (await ann.get('/api/events')).data.find((e) => e.title === 'Car wash');
   await ann.post(`/api/events/${carWash.id}/signup`, { on: true });
-  await ann.post('/api/study', { block: 'yellow', title: 'Quiz prep', date: day(1), time: '15:00', place: 'Library' });
+  await ann.post('/api/study', { block: 'yellow', title: 'Quiz prep; ch. 1, 2', date: day(1), time: '15:00', place: 'Library' });
   await boss.put('/api/admin/calendar', { noSchool: { [day(5)]: 'Fall break' } });
 
   assert.deepEqual((await ann.get('/api/me/calendar')).data, { url: null });
@@ -94,10 +93,9 @@ test('calendar: a private feed link with classwork, my events, study sessions an
   assert.match(res.headers.get('content-type'), /^text\/calendar/);
   const ics = await res.text();
   assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
-  assert.match(ics, /SUMMARY:Quiz due: Unit 3\\; ch\. 1\\, 2 \(Algebra II\)/, 'text is escaped');
-  assert.match(ics, new RegExp(`DTSTART;VALUE=DATE:${day(2).replace(/-/g, '')}`));
   assert.match(ics, /SUMMARY:Car wash/);
-  assert.match(ics, /SUMMARY:Study: Quiz prep \(Algebra II\)\r\nLOCATION:Library|SUMMARY:Study: Quiz prep \(Algebra II\)/);
+  assert.match(ics, /SUMMARY:Study: Quiz prep\\; ch\. 1\\, 2 \(Algebra II\)/, 'text is escaped');
+  assert.match(ics, new RegExp(`DTSTART;VALUE=DATE:${day(5).replace(/-/g, '')}`), 'no-school days are all-day events');
   assert.match(ics, /SUMMARY:No school: Fall break/);
   assert.doesNotMatch(ics, /Public game/, 'only events that are yours');
   assert.ok(ics.split('\r\n').every((l) => Buffer.byteLength(l) <= 75), 'lines are folded');
@@ -113,6 +111,40 @@ test('calendar: a private feed link with classwork, my events, study sessions an
   await ann.del('/api/me/calendar');
   assert.equal((await ctx.client().raw('GET', new URL(url2).pathname, { xhr: false })).status, 404);
   assert.equal((await ctx.client().raw('GET', '/cal/nope.ics', { xhr: false })).status, 404);
+});
+
+test('calendar: every school day is an event from 7:00 to the last bell, titled with the day letter', async () => {
+  const ctx = await startApp({ mock });
+  const boss = await owner(ctx);
+  const ann = await as(ctx, 1);
+  const c0 = cal.emptyCalendar();
+  const d0 = cal.dayInfo(c0, today()).schoolDay ? today() : cal.nextSchoolDay(c0, today());
+  const d1 = cal.nextSchoolDay(c0, d0);
+  const d2 = cal.nextSchoolDay(c0, d1);
+  await boss.put('/api/admin/calendar', { anchorDate: d0, anchorLetter: 'B', types: { [d1]: 'early_release', [d2]: 'advisory' } });
+  const { url } = (await ann.post('/api/me/calendar')).data;
+  const ics = await (await ctx.client().raw('GET', new URL(url).pathname, { xhr: false })).text();
+  const events = ics.split('BEGIN:VEVENT').slice(1);
+  const ev = (date) => events.find((v) => v.includes(`UID:day-${date}@mhs-hub`));
+  const local = (v, field) => {
+    const stamp = v.match(new RegExp(`${field}:(\\d{8}T\\d{6}Z)`))[1];
+    const n = cal.schoolNow('America/Chicago', new Date(stamp.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/, '$1-$2-$3T$4:$5:$6Z')));
+    return `${n.date} ${String(Math.floor(n.minutes / 60)).padStart(2, '0')}:${String(Math.round(n.minutes % 60)).padStart(2, '0')}`;
+  };
+  assert.match(ev(d0), /SUMMARY:Day B\r\n/);
+  assert.equal(local(ev(d0), 'DTSTART'), `${d0} 07:00`);
+  assert.equal(local(ev(d0), 'DTEND'), `${d0} 14:45`);
+  assert.match(ev(d1), /SUMMARY:Day C · Early release\r\n/);
+  assert.equal(local(ev(d1), 'DTEND'), `${d1} 12:45`, 'early release ends at 12:45');
+  assert.match(ev(d2), /SUMMARY:Day D · Advisory day\r\n/);
+  assert.equal(local(ev(d2), 'DTEND'), `${d2} 14:45`);
+  // no events on weekends or no-school days
+  const sat = [0, 1, 2, 3, 4, 5, 6].map((i) => cal.addDays(d0, i)).find((d) => new Date(cal.parseDate(d)).getUTCDay() === 6);
+  assert.equal(ev(sat), undefined);
+  await boss.put('/api/admin/calendar', { anchorDate: d0, anchorLetter: 'B', noSchool: { [d1]: 'Teacher day' } });
+  const ics2 = await (await ctx.client().raw('GET', new URL(url).pathname, { xhr: false })).text();
+  assert.doesNotMatch(ics2, new RegExp(`UID:day-${d1}@`));
+  assert.match(ics2.split('BEGIN:VEVENT').find((v) => v.includes(`UID:day-${d2}@`)), /SUMMARY:Day C\r\n/, 'the letter skips the day off');
 });
 
 // ---------------------------------------------------------------- group board and polls
@@ -169,7 +201,7 @@ test('group board: members post and reply, leaders announce and run polls', asyn
 
 // ---------------------------------------------------------------- study sessions
 
-test('study sessions: planned for a class (or one quiz), seen by classmates, who say they are going', async () => {
+test('study sessions: planned for a class, seen by classmates, who say they are going', async () => {
   const ctx = await startApp({ mock });
   const ann = await as(ctx, 1, { given_name: 'Ann' });
   const ben = await as(ctx, 2, { given_name: 'Ben' });
@@ -177,15 +209,13 @@ test('study sessions: planned for a class (or one quiz), seen by classmates, who
   await ann.put('/api/classes', { pink: { name: 'Chemistry', teacher: 'Lee' }, red: { name: 'English' } });
   await ben.put('/api/classes', { blue: { name: 'Chemistry', teacher: 'Lee' } });
   await cy.put('/api/classes', { pink: { name: 'Chemistry', teacher: 'Ng' } });
-  const quiz = (await ben.post('/api/classwork', { block: 'blue', kind: 'test', title: 'Stoichiometry', due: day(3) })).data;
-  const english = (await ann.post('/api/classwork', { block: 'red', kind: 'quiz', title: 'Poems', due: day(3) })).data;
 
   for (const bad of [{ block: 'yellow', title: 'x', date: day(1) }, { block: 'pink', title: '', date: day(1) }, { block: 'pink', title: 'x', date: day(-1) },
-    { block: 'pink', title: 'x', date: day(1), time: '3pm' }, { block: 'pink', title: 'x', date: day(1), classworkId: english.id }]) {
+    { block: 'pink', title: 'x', date: day(1), time: '3pm' }]) {
     assert.equal((await ann.post('/api/study', bad)).status, 400, JSON.stringify(bad));
   }
-  const s = (await ann.post('/api/study', { block: 'pink', classworkId: quiz.id, title: 'Test review', date: day(2), time: '15:15', place: 'Library' })).data;
-  assert.deepEqual([s.going, s.me, s.classwork.title, s.block], [1, true, 'Stoichiometry', 'pink']);
+  const s = (await ann.post('/api/study', { block: 'pink', title: 'Test review', date: day(2), time: '15:15', place: 'Library' })).data;
+  assert.deepEqual([s.going, s.me, s.block], [1, true, 'pink']);
   let seen = (await ben.get('/api/study')).data;
   assert.deepEqual(seen.map((x) => [x.title, x.block, x.people]), [['Test review', 'blue', ['Ann T.']]]);
   assert.deepEqual((await cy.get('/api/study')).data, [], 'different teacher, different class');
@@ -296,15 +326,14 @@ test('push: subscribe, choose kinds, test message, group announcements, gone dev
   assert.ok(!JSON.stringify((await boss.get('/api/admin/backup')).data).includes('privateKey'), 'push keys are not in backups');
 });
 
-test('push: evening classwork reminders and an hour-before reminders, each sent once', async () => {
+test('push: evening reminders from Google Tasks and an hour-before reminders, each sent once', async () => {
   const phone = fakeDevice();
   const svc = fakePushService([phone]);
   const ctx = await startApp({ mock, fetchFn: svc.fetch });
   const ann = await as(ctx, 1, { given_name: 'Ann' });
-  const ben = await as(ctx, 2, { given_name: 'Ben' });
-  await ann.put('/api/classes', { yellow: { name: 'Algebra II' }, red: { name: 'English' } });
-  await ben.put('/api/classes', { yellow: { name: 'Algebra II' }, red: { name: 'English' } });
+  await ann.put('/api/classes', { yellow: { name: 'Algebra II' } });
   await ann.post('/api/push/subscribe', phone.sub);
+  assert.equal((await ann.connectTasks(mock)).headers.get('location'), '/classwork.html?tasks=connected');
 
   // pin the clock: 7:30 pm school time today, and 2:20 pm for the hour-before check
   const realNow = Date.now;
@@ -318,9 +347,11 @@ test('push: evening classwork reminders and an hour-before reminders, each sent 
   };
   try {
     const t = today();
-    await ben.post('/api/classwork', { block: 'yellow', kind: 'quiz', title: 'Unit 3', due: cal.addDays(t, 1) });
-    await ben.post('/api/classwork', { block: 'red', kind: 'assignment', title: 'Essay', due: cal.addDays(t, 1) });
-    await ben.post('/api/classwork', { block: 'red', kind: 'test', title: 'Later', due: cal.addDays(t, 3) });
+    const due = (n) => `${cal.addDays(t, n)}T00:00:00.000Z`;
+    mock.addTask('sub-1', { title: 'Unit 3 quiz', due: due(1) });
+    mock.addTask('sub-1', { title: 'Essay', due: due(1) });
+    mock.addTask('sub-1', { title: 'Done already', due: due(1), status: 'completed' });
+    mock.addTask('sub-1', { title: 'Later', due: due(3) });
     await ann.post('/api/events', { title: 'Movie night', date: t, time: '15:00', visibility: 'private', invitees: [] });
     await ann.post('/api/study', { block: 'yellow', title: 'Quiz prep', date: t, time: '15:10' });
 
@@ -330,7 +361,7 @@ test('push: evening classwork reminders and an hour-before reminders, each sent 
 
     Date.now = () => at(t, '19:30');
     await ctx.app.runReminders();
-    assert.deepEqual(svc.got.map((g) => [g.msg.title, g.msg.body]), [['2 things due tomorrow', 'Quiz: Unit 3 (Algebra II)\nAssignment: Essay (English)']]);
+    assert.deepEqual(svc.got.map((g) => [g.msg.title, g.msg.body, g.msg.url]), [['2 things due tomorrow', 'Essay\nUnit 3 quiz', '/classwork.html']]);
     await ctx.app.runReminders();
     assert.equal(svc.got.length, 1, 'only once');
 
@@ -341,10 +372,16 @@ test('push: evening classwork reminders and an hour-before reminders, each sent 
     await ctx.app.runReminders();
     assert.equal(svc.got.length, 2, 'only once');
 
-    // turning off a kind stops it
+    // one task the next evening; then turning the kind off stops it
+    svc.got = [];
+    mock.addTask('sub-1', { title: 'Lab report', due: due(3) });
+    Date.now = () => at(cal.addDays(t, 2), '19:00');
+    await ctx.app.runReminders();
+    assert.deepEqual(svc.got.map((g) => g.msg.title), ['2 things due tomorrow']);
     await ann.put('/api/push/prefs', { classwork: false });
     svc.got = [];
-    Date.now = () => at(cal.addDays(t, 2), '19:00');
+    Date.now = () => at(cal.addDays(t, 4), '19:00');
+    mock.addTask('sub-1', { title: 'Poster', due: due(5) });
     await ctx.app.runReminders();
     assert.equal(svc.got.length, 0);
   } finally {

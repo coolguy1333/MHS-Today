@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
-  <title>Classwork · MHS Hub</title>
+  <title>Assignments · MHS Hub</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -19,23 +19,28 @@
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
     <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
-    <h1>Classwork</h1>
-    <p class="muted">Assignments, quizzes and tests that classmates posted for your classes. Only people in the same class (same name and teacher) see them. Always double-check with your teacher.</p>
-    <div class="card">
-      <h2>Coming up</h2>
-      <div id="upcoming"><p class="muted">Loading…</p></div>
+    <h1>Assignments</h1>
+    <p class="muted">Your own Google Tasks: the same list as in Gmail, Google Calendar and the Google Tasks app. Only you see them.</p>
+    <div id="tasks-msg" class="notice" hidden></div>
+    <div class="card" id="connect-card" hidden>
+      <h2>Connect Google Tasks</h2>
+      <p>See and check off your assignments here. Google will ask you to let MHS Hub see and edit your tasks; you can disconnect any time.</p>
+      <p><a class="btn" id="connect-btn" href="/auth/google?connect=tasks">Connect Google Tasks</a></p>
     </div>
-    <div class="card" id="add-card" hidden>
-      <h2>Post for your class</h2>
-      <form id="add-form" class="form-grid">
-        <label><span>Class</span><select id="cw-block" required></select></label>
-        <label><span>Type</span>
-          <select id="cw-kind"><option value="assignment">Assignment</option><option value="quiz">Quiz</option><option value="test">Test</option></select></label>
-        <label class="wide"><span>Title</span><input type="text" id="cw-title" maxlength="100" required placeholder="Unit 3 quiz, Lab report…" /></label>
-        <label><span>Due</span><input type="date" id="cw-due" required /></label>
-        <label class="wide"><span>Notes (optional)</span><input type="text" id="cw-notes" maxlength="300" placeholder="Sections, pages, what to bring" /></label>
-        <div class="wide"><button class="btn" type="submit">Post</button></div>
-      </form>
+    <div class="card" id="tasks-card" hidden>
+      <div class="row between"><h2>To do</h2><a class="small" href="https://tasks.google.com/" target="_blank" rel="noopener noreferrer">Open Google Tasks</a></div>
+      <div id="tasks"><p class="muted">Loading…</p></div>
+      <details id="task-add">
+        <summary>Add an assignment</summary>
+        <form id="task-form" class="form-grid">
+          <label class="wide"><span>Title</span><input type="text" id="tk-title" maxlength="300" required placeholder="Unit 3 quiz, Lab report…" /></label>
+          <label><span>Due (optional)</span><input type="date" id="tk-due" /></label>
+          <label><span>List</span><select id="tk-list"></select></label>
+          <label class="wide"><span>Notes (optional)</span><input type="text" id="tk-notes" maxlength="1000" placeholder="Class, pages, what to bring" /></label>
+          <div class="wide"><button class="btn" type="submit">Add to Google Tasks</button></div>
+        </form>
+      </details>
+      <p class="small"><button class="linklike" type="button" id="disconnect-btn">Disconnect Google Tasks</button></p>
     </div>
     <div class="card" id="study-card" hidden>
       <h2>Study sessions</h2>
@@ -45,7 +50,6 @@
         <summary>Plan a study session</summary>
         <form id="study-form" class="form-grid">
           <label><span>Class</span><select id="st-block" required></select></label>
-          <label><span>For (optional)</span><select id="st-for"></select></label>
           <label class="wide"><span>Title</span><input type="text" id="st-title" maxlength="100" required placeholder="Unit 3 review" /></label>
           <label><span>Date</span><input type="date" id="st-date" required /></label>
           <label><span>Time (optional)</span><input type="time" id="st-time" /></label>
@@ -55,11 +59,7 @@
         </form>
       </details>
     </div>
-    <p class="card muted" id="no-classes" hidden>Add your classes on <a href="schedule.html">Schedule</a> to see and post classwork.</p>
-    <details class="card" id="past-card" hidden>
-      <summary>Recently due</summary>
-      <div id="past"></div>
-    </details>
+    <p class="card muted" id="no-classes" hidden>Add your classes on <a href="schedule.html">Schedule</a> to plan study sessions with classmates.</p>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>

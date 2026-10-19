@@ -192,6 +192,28 @@ const step = (m) => console.log('•', m);
   assert.match(await text(sp, '#day-head'), /Thursday, October 1/);
   step('day navigation skips the break; special schedule shown; back to today works');
 
+  // ---------------------------------------------------------------- assignments = Ann's Google Tasks
+  assert.match(await text(sp, '#tasks-preview'), /Connect Google Tasks/);
+  mock.addTask('s1', { title: 'Lab report', due: '2026-10-02T00:00:00.000Z' });
+  mock.addTask('s1', { title: 'Old worksheet', due: '2026-09-29T00:00:00.000Z' });
+  await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#connect-card:not([hidden])');
+  await sp.click('#connect-btn');
+  await sp.waitForSelector('#tasks-card:not([hidden]) .list-row');
+  assert.match(await text(sp, '#tasks-msg'), /Google Tasks is connected/);
+  assert.equal(new URL(sp.url()).search, '', 'the result is taken out of the address');
+  assert.match(await text(sp, '#tasks'), /Old worksheet[\s\S]*Overdue[\s\S]*Lab report[\s\S]*Due Tomorrow/);
+  await sp.click('#task-add summary');
+  await sp.fill('#tk-title', 'Unit 3 quiz'); await sp.fill('#tk-due', '2026-10-05');
+  await sp.click('#task-form button[type=submit]');
+  await sp.waitForSelector('#tasks .list-row:has-text("Unit 3 quiz")');
+  await sp.check('#tasks .list-row:has-text("Old worksheet") input[type=checkbox]');
+  await sp.waitForFunction(() => !document.querySelector('#tasks').textContent.includes('Old worksheet'));
+  assert.equal(mock.tasksOf('s1')[0].items.find((t) => t.title === 'Old worksheet').status, 'completed');
+  await sp.screenshot({ path: path.join(SHOTS, 'assignments.png'), fullPage: true });
+  await sp.goto(base + '/index.html'); await sp.waitForSelector('#tasks-preview .list-row');
+  assert.match(await text(sp, '#tasks-preview'), /Lab report[\s\S]*Due Tomorrow[\s\S]*Unit 3 quiz/);
+  step('assignments: connect Google Tasks, list, add, check off; due soon on Today');
+
   // ---------------------------------------------------------------- friends (Ben on a phone-sized screen)
   await sp.goto(base + '/friends.html'); await sp.waitForSelector('#my-code:not(:text("…"))');
   const annCode = (await text(sp, '#my-code')).replace('-', '');
@@ -305,7 +327,7 @@ const step = (m) => console.log('•', m);
   // ---------------------------------------------------------------- phones: no sideways scrolling anywhere
   const phone = await newUser('phone', { sub: 'a1', email: 'admin@school.test', given_name: 'Ada', family_name: 'Min' }, { viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
   await signIn(phone);
-  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'tools', 'account', 'admin', 'login']) {
+  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'account', 'admin', 'login']) {
     await phone.page.goto(`${base}/${pg}.html`);
     await phone.page.waitForLoadState('networkidle');
     await phone.page.waitForTimeout(250);

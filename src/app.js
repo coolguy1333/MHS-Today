@@ -9,6 +9,7 @@ const cal = require('../public/js/calendar.js');
 const bell = require('../public/js/bellSchedule.js');
 const avatars = require('../public/js/avatars.js');
 const { openDb } = require('./db');
+const { openSecretBox } = require('./secretbox');
 const { createGoogle, AuthError, newPkce } = require('./google');
 const { createMenu } = require('./menu');
 const { createFilter } = require('./wordfilter');
@@ -57,6 +58,7 @@ const MIME = {
 
 function createApp(config, { log = (...a) => console.log(new Date().toISOString(), ...a), fetchFn } = {}) {
   const db = openDb(config.dataDir, log);
+  const secrets = openSecretBox(config.dataDir); // encrypts Google Tasks tokens at rest
   const state = db.state;
   const limiter = new RateLimiter();
   const loginKey = crypto.randomBytes(32); // signs the short-lived "sign-in in progress" cookie
@@ -219,6 +221,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     return { user, isNew };
   }
   function deleteUser(id) {
+    const gone = state.users[id];
     delete state.users[id];
     for (const [h, s] of Object.entries(state.sessions)) if (s.userId === id) delete state.sessions[h];
     for (const u of Object.values(state.users)) {
@@ -226,7 +229,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       delete u.shareLevels[id];
       u.hiddenSuggestions = u.hiddenSuggestions.filter((f) => f !== id);
     }
-    for (const f of features) f.forgetUser(id);
+    for (const f of features) f.forgetUser(id, gone);
     db.save();
   }
   const profile = (u) => ({
@@ -407,6 +410,12 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         if (!codes.has(c)) { codes.add(c); u.friendCode = c; }
       }
     }
+    // Google Tasks connections aren't in backups; keep the ones this server already has
+    const bySub = new Map(Object.values(state.users).map((u) => [u.sub, u]));
+    for (const u of Object.values(users)) {
+      const old = bySub.get(u.sub);
+      if (old && old.googleTasks) u.googleTasks = old.googleTasks;
+    }
     db.snapshot('before-restore'); // the previous data stays recoverable
     state.users = users;
     const counts = Object.assign({ events: 0, droppedEvents: 0 }, ...features.map((f) => f.importData(data, users) || {}));
@@ -419,7 +428,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
 
   // ---------- API routes ----------
   const routes = [];
-  const features = []; // classwork, groups (and events), tools: see below
+  const features = []; // study sessions, Google Tasks, groups (and events), tools...: see below
   function route(method, pattern, opts, handler) {
     const names = [];
     const re = new RegExp('^' + pattern.replace(/:([a-z]+)/g, (_, n) => { names.push(n); return '([^/]+)'; }) + '$');
@@ -430,13 +439,14 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // what to remove when someone deletes their account.
   const shared = {
     route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
-    today, cal, bell, sameClass, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, features, fetchFn,
+    today, cal, bell, sameClass, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, features, fetchFn, google, secrets,
     // notify(userIds, kind, { title, body, url }): push notifications (set up by src/push.js below)
     notify: (...a) => (push ? push.notify(...a) : undefined)
   };
   let push = null;
   const calendarFeed = require('./icalendar')(shared);
-  features.push(require('./classwork')(shared), require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), calendarFeed);
+  const tasks = require('./tasks')(shared);
+  features.push(require('./study')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), calendarFeed);
   push = require('./push')(shared);
   features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();
@@ -785,28 +795,41 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed');
     if (!google) return redirect(res, '/login.html?error=config');
     if (!limiter.hit(`auth:${clientIp(req)}`, 300, 60e3)) return redirect(res, '/login.html?error=busy');
+    // ?connect=tasks: a signed-in person allowing access to their Google Tasks (same round trip).
+    const forTasks = url.searchParams.get('connect') === 'tasks';
+    const me = forTasks ? currentUser(req) : null;
+    if (forTasks && !me) return redirect(res, '/login.html?next=classwork.html');
     const pkce = newPkce();
     const pending = {
       s: crypto.randomBytes(16).toString('base64url'), n: crypto.randomBytes(16).toString('base64url'),
-      v: pkce.verifier, next: safeNext(url.searchParams.get('next')), exp: Date.now() + 10 * 60e3
+      v: pkce.verifier, next: forTasks ? '/classwork.html' : safeNext(url.searchParams.get('next')), exp: Date.now() + 10 * 60e3,
+      ...(forTasks ? { purpose: 'tasks', uid: me.id } : {})
     };
     addCookie(res, serializeCookie(PENDING, sign(pending), { maxAge: 600, secure: config.secure }));
-    redirect(res, google.authUrl({ state: pending.s, nonce: pending.n, challenge: pkce.challenge }));
+    redirect(res, google.authUrl({
+      state: pending.s, nonce: pending.n, challenge: pkce.challenge,
+      ...(forTasks ? { scope: tasks.REQUEST_SCOPE, offline: true, loginHint: me.email } : {})
+    }));
   }
 
   async function authCallback(req, res, url) {
     if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed');
     if (!google) return redirect(res, '/login.html?error=config');
-    const fail = (code) => { clearCookie(res, PENDING); return redirect(res, `/login.html?error=${code}`); };
+    const pending = unsign(parseCookies(req.headers.cookie)[PENDING]);
+    const forTasks = !!pending && pending.purpose === 'tasks';
+    const fail = (code) => {
+      clearCookie(res, PENDING);
+      return redirect(res, forTasks ? `/classwork.html?tasks=${code}` : `/login.html?error=${code}`);
+    };
     if (!limiter.hit(`auth:${clientIp(req)}`, 300, 60e3)) return fail('busy');
 
     const q = url.searchParams;
     if (q.get('error')) return fail(q.get('error') === 'access_denied' ? 'denied' : 'failed');
-    const pending = unsign(parseCookies(req.headers.cookie)[PENDING]);
     const code = q.get('code');
     // The cookie ties this callback to the browser that started the sign-in (stops login CSRF).
     if (!pending || !safeEqual(q.get('state') || '', pending.s)) return fail('state');
     if (!code || code.length > 2048) return fail('failed');
+    if (forTasks) return connectTasks(req, res, pending, code, fail);
     try {
       const claims = await google.verifyIdToken(await google.exchangeCode(code, pending.v), pending.n);
       if (!google.domainAllowed(claims)) {
@@ -823,6 +846,32 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       else log(`Sign-in failed: ${e.message}`);
       return fail(e instanceof AuthError ? e.code : 'failed');
     }
+  }
+
+  // The second half of "connect Google Tasks": only for the person who started it, and only for
+  // their own Google account (the one they sign in with).
+  async function connectTasks(req, res, pending, code, fail) {
+    const user = currentUser(req);
+    if (!user || user.id !== pending.uid) return fail('signin');
+    let body;
+    try {
+      body = await google.exchangeTokens(code, pending.v);
+      const claims = await google.verifyIdToken(body.id_token, pending.n);
+      if (claims.sub !== user.sub) {
+        if (body.refresh_token) google.revoke(body.refresh_token);
+        return fail('account');
+      }
+      tasks.connect(user, body);
+    } catch (e) {
+      if (e instanceof tasks.ConnectError) {
+        if (body && body.refresh_token) google.revoke(body.refresh_token);
+        return fail(e.code);
+      }
+      log(`Connecting Google Tasks failed: ${e.message}`);
+      return fail('failed');
+    }
+    clearCookie(res, PENDING);
+    return redirect(res, '/classwork.html?tasks=connected');
   }
 
   // ---------- static files ----------
@@ -871,6 +920,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (url.pathname === '/auth/google/callback') return await authCallback(req, res, url);
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
       if (url.pathname.startsWith('/cal/')) return calendarFeed.feed(req, res, url);
+      if (url.pathname === '/tools' || url.pathname === '/tools.html') return redirect(res, '/links.html#tools'); // merged into Links & tools
       return await serveStatic(req, res, url);
     } catch (e) {
       if (e instanceof HttpError) {

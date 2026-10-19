@@ -5,7 +5,7 @@
 const crypto = require('node:crypto');
 
 class AuthError extends Error {
-  // code: 'failed' | 'unverified' (the page shows a friendly message for each)
+  // code: 'failed' | 'unverified' | 'revoked' (the page shows a friendly message for each)
   constructor(message, code = 'failed') { super(message); this.code = code; }
 }
 
@@ -40,13 +40,15 @@ function createGoogle(cfg, { redirectUri, allowedDomains = [], fetchFn = fetch, 
     return crypto.createPublicKey({ key: jwk, format: 'jwk' });
   }
 
-  function authUrl({ state, nonce, challenge }) {
+  // Sign-in asks only for openid/email/profile. Connecting Google Tasks asks for `scope` with
+  // offline access (a refresh token), for the account given in `loginHint`.
+  function authUrl({ state, nonce, challenge, scope, offline, loginHint }) {
     const u = new URL(cfg.authUrl);
     const params = {
       client_id: cfg.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: 'openid email profile',
+      scope: scope || 'openid email profile',
       state,
       nonce,
       code_challenge: challenge,
@@ -54,30 +56,53 @@ function createGoogle(cfg, { redirectUri, allowedDomains = [], fetchFn = fetch, 
       prompt: 'select_account'
     };
     if (allowedDomains.length === 1) params.hd = allowedDomains[0]; // only a hint; the domain is re-checked on the token
+    if (offline) { params.access_type = 'offline'; params.prompt = 'consent'; params.include_granted_scopes = 'true'; }
+    if (loginHint) params.login_hint = loginHint;
     u.search = new URLSearchParams(params).toString();
     return u.toString();
   }
 
-  async function exchangeCode(code, verifier) {
+  async function tokenRequest(form) {
     let res, body;
     try {
       res = await fetchFn(cfg.tokenUrl, {
-        method: 'POST',
+        method: 'POST', redirect: 'error',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-        body: new URLSearchParams({
-          code, client_id: cfg.clientId, client_secret: cfg.clientSecret,
-          redirect_uri: redirectUri, grant_type: 'authorization_code', code_verifier: verifier
-        }),
+        body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, ...form }),
         signal: AbortSignal.timeout(10000)
       });
       body = await res.json();
     } catch (e) {
       throw new AuthError(`token request failed: ${e.message}`);
     }
-    if (!res.ok || !body || typeof body.id_token !== 'string') {
-      throw new AuthError(`Google rejected the sign-in code (${body && body.error ? body.error : res.status})`);
+    if (!res.ok || !body || typeof body !== 'object') {
+      const err = body && body.error ? String(body.error) : String(res.status);
+      // invalid_grant on a refresh = the person revoked access (or the token expired): connect again
+      throw new AuthError(`Google rejected the token request (${err})`, err === 'invalid_grant' && form.grant_type === 'refresh_token' ? 'revoked' : 'failed');
     }
-    return body.id_token;
+    return body;
+  }
+  // Code -> the whole token response ({ id_token, access_token, refresh_token?, expires_in, scope }).
+  async function exchangeTokens(code, verifier) {
+    const body = await tokenRequest({ code, redirect_uri: redirectUri, grant_type: 'authorization_code', code_verifier: verifier });
+    if (typeof body.id_token !== 'string') throw new AuthError('Google sent no ID token');
+    return body;
+  }
+  const exchangeCode = async (code, verifier) => (await exchangeTokens(code, verifier)).id_token;
+  // Refresh token -> { access_token, expires_in }
+  async function refresh(refreshToken) {
+    const body = await tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken });
+    if (typeof body.access_token !== 'string') throw new AuthError('Google sent no access token');
+    return body;
+  }
+  // Best effort: tells Google to forget a token (when someone disconnects or deletes their account).
+  async function revoke(token) {
+    try {
+      await fetchFn(cfg.revokeUrl, {
+        method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token }), signal: AbortSignal.timeout(10000)
+      });
+    } catch { /* the token is deleted here either way */ }
   }
 
   async function verifyIdToken(idToken, nonce) {
@@ -116,7 +141,7 @@ function createGoogle(cfg, { redirectUri, allowedDomains = [], fetchFn = fetch, 
     return typeof claims.hd === 'string' && allowedDomains.includes(claims.hd.toLowerCase());
   }
 
-  return { authUrl, exchangeCode, verifyIdToken, domainAllowed };
+  return { authUrl, exchangeCode, exchangeTokens, refresh, revoke, verifyIdToken, domainAllowed };
 }
 
 module.exports = { createGoogle, AuthError, newPkce };

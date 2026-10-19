@@ -32,6 +32,8 @@ function loadConfig(env = process.env) {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
       jwksUrl: 'https://www.googleapis.com/oauth2/v3/certs',
+      revokeUrl: 'https://oauth2.googleapis.com/revoke',
+      tasksApi: 'https://tasks.googleapis.com/tasks/v1',
       issuers: ['https://accounts.google.com', 'accounts.google.com']
     },
     adminEmails: new Set(list(env.ADMIN_EMAILS)),

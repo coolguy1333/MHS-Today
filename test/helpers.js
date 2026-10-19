@@ -99,6 +99,16 @@ class Client {
     const cb = new URL(toGoogle.headers.get('location'));
     return this.raw('GET', cb.pathname + cb.search);
   }
+  // "Connect Google Tasks" against the mock, as the signed-in person (or as `identity` at Google).
+  async connectTasks(mock, identity) {
+    if (identity) mock.identity = { sub: 'sub-1', email: 'student@school.test', email_verified: true, given_name: 'Sam', family_name: 'Student', hd: 'school.test', ...identity };
+    const start = await this.raw('GET', '/auth/google?connect=tasks');
+    const loc = start.headers.get('location') || '';
+    if (start.status !== 302 || !loc.startsWith(mock.origin)) return start;
+    const toGoogle = await fetch(loc, { redirect: 'manual' });
+    const cb = new URL(toGoogle.headers.get('location'));
+    return this.raw('GET', cb.pathname + cb.search);
+  }
   async me() { return (await this.get('/api/me')).data.user; }
 }
 

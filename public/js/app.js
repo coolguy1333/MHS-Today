@@ -111,9 +111,9 @@ function renderNav(active) {
   const nav = $('site-nav');
   if (!nav) return;
   const links = [
-    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'Schedule', 'schedule'], ['classwork.html', 'Classwork', 'classwork'],
+    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'Schedule', 'schedule'], ['classwork.html', 'Assignments', 'classwork'],
     ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
-    ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links'], ['tools.html', 'Tools', 'tools']
+    ['friends.html', 'Friends', 'friends'], ['links.html', 'Links & tools', 'links']
   ];
   const auth = h('span', { class: 'nav-auth' });
   fill(nav,
@@ -217,7 +217,6 @@ function fmtMinutes(mins) {
   return hrs ? `${hrs} h ${n % 60} min` : `${n} min`;
 }
 const SCHEDULE_NAMES = { daily: 'Daily schedule', advisory: 'Advisory day', early_release: 'Early release' };
-const KIND_NAMES = { assignment: 'Assignment', quiz: 'Quiz', test: 'Test' };
 const GROUP_KINDS = { club: 'Club', sport: 'Sport', group: 'Student group' };
 
 // ---- classes and friends -------------------------------------------------------

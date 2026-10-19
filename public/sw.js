@@ -2,7 +2,7 @@
 // Everything goes to the network first; the copy is only used when there is no connection.
 // Signing out clears the copy (see clearOfflineCopy in js/app.js).
 'use strict';
-const CACHE = 'mhs-hub-v1';
+const CACHE = 'mhs-hub-v2';
 const SHELL = [
   '/index.html', '/schedule.html', '/classwork.html', '/lunch.html', '/events.html', '/offline.html',
   '/css/style.css', '/js/app.js', '/js/calendar.js', '/js/bellSchedule.js', '/js/avatars.js',
@@ -10,7 +10,7 @@ const SHELL = [
   '/icon-32.png', '/icon-167.png', '/app-icon-192.png'
 ];
 // API answers worth keeping for offline use (all about the signed-in person or the school day).
-const KEEP_API = ['/api/me', '/api/calendar', '/api/classes', '/api/classwork', '/api/notices', '/api/events', '/api/friends', '/api/lunch', '/api/study'];
+const KEEP_API = ['/api/me', '/api/calendar', '/api/classes', '/api/tasks', '/api/notices', '/api/events', '/api/friends', '/api/lunch', '/api/study'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));

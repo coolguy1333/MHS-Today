@@ -6,13 +6,15 @@
 server.js            starts the app; exits with a clear message on bad settings
 src/config.js        environment variables -> settings
 src/app.js           security headers, Google sign-in routes, JSON API, static files
-src/google.js        Google OpenID Connect (code flow + PKCE, ID-token verification)
+src/google.js        Google OpenID Connect (code flow + PKCE, ID-token verification), token refresh and revoke
+src/secretbox.js     AES-256-GCM for secrets at rest (key in $DATA_DIR/secret.key)
 src/db.js            db.json: atomic writes, daily snapshots, old-format archive
 src/util.js          text cleaning, cookies, rate limiter, friend codes
 src/menu.js          lunch menu from Health-e Pro (My School Menus), cached per month
-src/classwork.js     classwork posts (assignments, quizzes, tests) and reports
+src/tasks.js         Assignments: connect Google Tasks, and the server-side Tasks API proxy
+src/study.js         study sessions
 src/groups.js        groups and events (visibility, invitations, sign-up lists)
-src/tools.js         the Tools list and students' tool suggestions
+src/tools.js         the tools (on Links & tools) and students' tool suggestions
 src/notices.js       announcement banners, countdowns, admin-added blocked words
 src/wordfilter.js    the word filter (whole words, common disguises undone)
 public/js/icimport.js  reads a schedule copied from Infinite Campus ("Period Yellow", "Teacher: Last, First", "Lunch: B …") into color blocks, in the browser
@@ -49,9 +51,11 @@ Name search matches every typed word against the start of the person's Google fi
 
 ## Feature modules
 
-`src/classwork.js`, `src/groups.js` and `src/tools.js` each get a small toolkit from `createApp` (`route`, `state`, `db`, user helpers…), add their routes, and return `exportData`, `importData(data, users)`, `maintain()`, `forgetUser(id)` and `status()`, which backups, restores, the six-hourly cleanup, account deletion and the Admin status use.
+`src/study.js`, `src/tasks.js`, `src/groups.js`, `src/tools.js` and the others each get a small toolkit from `createApp` (`route`, `state`, `db`, user helpers…), add their routes, and return `exportData`, `importData(data, users)`, `maintain()`, `forgetUser(id, user)` and `status()`, which backups, restores, the six-hourly cleanup, account deletion and the Admin status use.
 
-**Classwork** items are stored with the class's name and teacher; you see an item when one of your classes is the same class (same name, and the same teacher when both have one). Items go away 14 days after they're due. Three different reporters hide an item (its author and admins still see it) until an admin keeps or deletes it under *Needs attention*.
+**Assignments (Google Tasks)**: `/auth/google?connect=tasks` runs a second Google round trip for the signed-in person only, asking for `openid email https://www.googleapis.com/auth/tasks` with `access_type=offline` and `prompt=consent` (and `login_hint` = their email). The callback must come back in the same browser session, for the same Google `sub`, with the Tasks scope ticked and a refresh token; otherwise the token is revoked and the Assignments page says why (`?tasks=scope|account|offline|denied|signin|failed`). The refresh token is sealed with AES-256-GCM (`src/secretbox.js`) in `user.googleTasks`; access tokens live only in memory. Pages call `/api/tasks`; the server calls `https://tasks.googleapis.com/tasks/v1` (open tasks from up to 10 lists, soonest first), so the CSP stays same-origin. If Google says the grant is gone (`invalid_grant`), the connection is forgotten and the page offers to connect again. Disconnecting and deleting an account revoke the token at Google. Tokens are never exported; an in-app restore keeps connections for matching `sub`s.
+
+**Study sessions** are stored with the class's name and teacher; you see one when one of your classes is the same class (same name, and the same teacher when both have one).
 
 **Groups**: `{ id, name, kind: club|sport|group, description, links, joinPolicy: open|approval, approved, members: { userId: 'leader'|'member' }, requests: [ids] }`. Unapproved groups are visible only to their members and admins. A group always keeps a leader; if the last person leaves or is deleted, the group and its events go too.
 
@@ -59,13 +63,13 @@ Name search matches every typed word against the start of the person's Google fi
 
 ## Reminders, calendar sync and the installable app
 
-**Push**: each device that turns notifications on sends its subscription (endpoint + keys); endpoints must belong to a real browser push service (Apple, Google, Mozilla, Microsoft). Messages are encrypted for the device and signed with the server's VAPID key (`state.vapid`, made on first start, never exported). A 404/410 from the push service removes that device. Reminders run every five minutes: between 6 and 9 pm school time, one message per person listing what's due tomorrow in their classes; and about an hour before any timed event they made, signed up for or were invited to, or a study session they're going to. `state.sentReminders` makes each go out once. Group announcements notify members straight away. People choose the kinds on the Account page.
+**Push**: each device that turns notifications on sends its subscription (endpoint + keys); endpoints must belong to a real browser push service (Apple, Google, Mozilla, Microsoft). Messages are encrypted for the device and signed with the server's VAPID key (`state.vapid`, made on first start, never exported). A 404/410 from the push service removes that device. Reminders run every five minutes: between 6 and 9 pm school time, one message per person listing their Google Tasks due tomorrow (the `classwork` preference); and about an hour before any timed event they made, signed up for or were invited to, or a study session they're going to. `state.sentReminders` makes each go out once. Group announcements notify members straight away. People choose the kinds on the Account page.
 
-**Calendar feed**: `/cal/<48 hex>.ics` (calendar apps can't sign in, so the token is the key; it can be replaced or turned off). Timed items are converted from school time to UTC; lines are folded at 75 bytes.
+**Calendar feed**: `/cal/<48 hex>.ics` (calendar apps can't sign in, so the token is the key; it can be replaced or turned off). Every school day from two weeks back to six months ahead is an event from 7:00 to that day's last bell (14:45, or 12:45 on early release), titled with the day letter (`Day B`, `Day C · Early release`, `Day D · Advisory day`), so admin changes to the calendar show up on the next sync. Timed items are converted from school time to UTC; lines are folded at 75 bytes.
 
 **Installable**: `manifest.webmanifest` plus `sw.js`, which goes to the network first and falls back to its copy offline (pages, scripts, and a few API answers such as your classes and the calendar). Signing out deletes the copy.
 
-**Word filter**: whole words only (so "assess" passes), with common disguises undone (`sh1t`, `$hit`, `f u c k`, `fuuuck`); a few words also catch any ending (`fucking`). It runs on what students type: profiles, events, classwork, study sessions, groups, posts, polls and tool ideas.
+**Word filter**: whole words only (so "assess" passes), with common disguises undone (`sh1t`, `$hit`, `f u c k`, `fuuuck`); a few words also catch any ending (`fucking`). It runs on what students type: profiles, events, study sessions, groups, posts, polls and tool ideas.
 
 ## Admins, profiles and suggestions
 
@@ -96,7 +100,8 @@ State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: ap
 | `GET/PUT /api/classes` | signed in | Own classes |
 | `GET /api/lunch?date=` | anyone | Lunch menu for a day (today by default, up to 60 days either way) |
 | `GET /api/links`, `GET /api/tools` | anyone | The important links; the tools |
-| `GET/POST /api/classwork`, `DELETE /api/classwork/:id`, `POST /api/classwork/:id/report` | signed in (delete: author or admin) | Classwork for your classes |
+| `GET /auth/google?connect=tasks` | signed in | Connect Google Tasks |
+| `GET/POST /api/tasks` (`{ title, due, notes, listId }`), `PUT /api/tasks/:list/:task` (`{ done }`), `DELETE /api/tasks/connection` | signed in (and connected) | Your Google Tasks: open tasks, add, check off, disconnect |
 | `GET/POST /api/groups`, `GET/PUT/DELETE /api/groups/:id`, `POST /api/groups/:id/join` `leave`, `PUT /api/groups/:id/members/:uid` (`{ role: 'leader' \| 'member' \| null }`) | signed in (changes: leaders or admins) | Groups |
 | `GET /api/events?group=`, `POST /api/events` (`{ visibility, groupId, invitees, signup }`), `POST /api/events/:id/signup` (`{ on }`) | events you can see; posting rules below | Events |
 | `POST /api/tools/suggestions` | signed in | Suggest a tool |
@@ -107,7 +112,7 @@ State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: ap
 | `GET /api/groups/:id/board`, `POST /api/groups/:id/posts` (`{ text, announcement }`), `POST …/posts/:pid/replies`, `DELETE …/posts/:pid[/replies/:rid]`, `POST /api/groups/:id/polls`, `POST …/polls/:pid/vote` (`{ choice }`), `PUT/DELETE …/polls/:pid` | members (announcements, polls: leaders) | Group board |
 | `POST /api/events`, `DELETE /api/events/:id` | post: admins and verified people (see `EVENT_POSTING`); delete: owner or admin | Events |
 | `GET /api/friends`, `POST /api/friends/lookup`, `POST /api/friends/search` (`{ q }`), `POST /api/friends/request` (`{ code }` or `{ id }`), `POST /api/friends/:id/accept`, `PUT /api/friends/:id` (`{ level }`), `DELETE /api/friends/:id`, `GET /api/friends/suggestions`, `POST /api/friends/suggestions/:id/hide` | signed in | Friends |
-| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ admin, verified, name, pronouns, grade, bio, interests, avatar, profileLocked, reset }`), `PUT /api/admin/links` (`{ links }`), `PUT /api/admin/tools` (`{ tools }`), `GET /api/admin/tool-suggestions`, `POST /api/admin/tool-suggestions/:id/accept`, `DELETE /api/admin/tool-suggestions/:id`, `GET /api/admin/classwork`, `POST /api/admin/classwork/:id/keep`, `PUT /api/admin/groups/:id` (`{ approved }`), `GET/PUT /api/admin/notices` (`{ announcements, countdowns, blockedWords }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
+| `GET /api/admin/status` `users`, `PUT /api/admin/users/:id` (`{ admin, verified, name, pronouns, grade, bio, interests, avatar, profileLocked, reset }`), `PUT /api/admin/links` (`{ links }`), `PUT /api/admin/tools` (`{ tools }`), `GET /api/admin/tool-suggestions`, `POST /api/admin/tool-suggestions/:id/accept`, `DELETE /api/admin/tool-suggestions/:id`, `PUT /api/admin/groups/:id` (`{ approved }`), `GET/PUT /api/admin/notices` (`{ announcements, countdowns, blockedWords }`), `DELETE /api/admin/users/:id`, `PUT /api/admin/calendar`, `GET /api/admin/backup`, `POST /api/admin/restore` | admin | Admin |
 
 ## Security design
 
