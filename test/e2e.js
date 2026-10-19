@@ -45,6 +45,13 @@ const step = (m) => console.log('•', m);
     await u.page.goto(base + '/login.html' + (next ? `?next=${encodeURIComponent(next)}` : ''));
     await u.page.click('#google-btn');
     await u.page.waitForURL((url) => !/login\.html|\/auth\//.test(url.pathname), { timeout: 10000 });
+    // first sign-in: read and agree to the Privacy & Terms, then on to where they were going
+    await u.page.waitForLoadState('networkidle');
+    if (/terms\.html/.test(u.page.url())) {
+      await u.page.check('#agree-box');
+      await u.page.click('#agree-btn');
+      await u.page.waitForURL((url) => !/terms\.html/.test(url.pathname), { timeout: 10000 });
+    }
   }
   const text = (p, sel) => p.locator(sel).innerText();
 
@@ -182,7 +189,7 @@ const step = (m) => console.log('•', m);
   // dashboard with live status (Thu 10:00 AM = Hour 3)
   await sp.goto(base + '/index.html');
   await sp.waitForSelector('#setup-card:not([hidden])');
-  assert.match(await text(sp, '#setup-card'), /Get set up[\s\S]*1 of 3 done[\s\S]*Add your classes[\s\S]*Connect Google Tasks[\s\S]*Add a friend/);
+  assert.match(await text(sp, '#setup-card'), /Get set up[\s\S]*1 of 2 done[\s\S]*Add your classes[\s\S]*Add a friend/);
   assert.equal(await sp.locator('#setup-card li.done').count(), 1, 'classes are done');
   await sp.waitForSelector('#schedule-body tr.period-row.current');
   const status = await text(sp, '#status');
@@ -224,26 +231,14 @@ const step = (m) => console.log('•', m);
   await sp.screenshot({ path: path.join(SHOTS, 'dashboard-weeks.png'), fullPage: true });
   step('day navigation skips the break; special schedule shown; advisory row; two-week calendar opens a day; back to today works');
 
-  // ---------------------------------------------------------------- assignments = Ann's Google Tasks
-  assert.match(await text(sp, '#tasks-preview'), /Connect Google Tasks/);
-  mock.addTask('s1', { title: 'Lab report', due: '2026-10-02T00:00:00.000Z' });
-  mock.addTask('s1', { title: 'Old worksheet', due: '2026-09-29T00:00:00.000Z' });
-  await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#connect-card:not([hidden])');
-  await sp.click('#connect-btn');
-  await sp.waitForSelector('#tasks-card:not([hidden]) .list-row');
-  assert.match(await text(sp, '#tasks-msg'), /Google Tasks is connected/);
-  assert.equal(new URL(sp.url()).search, '', 'the result is taken out of the address');
-  assert.match(await text(sp, '#tasks'), /Old worksheet[\s\S]*Overdue[\s\S]*Lab report[\s\S]*Due tomorrow/);
-  await sp.fill('#tk-title', 'Unit 3 quiz'); await sp.fill('#tk-due', '2026-10-05');
-  await sp.click('#task-form button[type=submit]');
-  await sp.waitForSelector('#tasks .list-row:has-text("Unit 3 quiz")');
-  await sp.check('#tasks .list-row:has-text("Old worksheet") input[type=checkbox]');
-  await sp.waitForFunction(() => !document.querySelector('#tasks').textContent.includes('Old worksheet'));
-  assert.equal(mock.tasksOf('s1')[0].items.find((t) => t.title === 'Old worksheet').status, 'completed');
+  // ---------------------------------------------------------------- assignments: "coming soon" (GOOGLE_TASKS is off by default)
+  assert.equal(await sp.locator('#tasks-card').isHidden(), true, 'no "Due soon" card while assignments are coming soon');
+  await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#soon-card:not([hidden])');
+  assert.match(await text(sp, '#soon-card'), /Coming soon/);
+  assert.equal(await sp.locator('#connect-card').isHidden(), true);
+  assert.equal(await sp.locator('#study-card').isVisible(), true, 'study sessions still work');
   await sp.screenshot({ path: path.join(SHOTS, 'assignments.png'), fullPage: true });
-  await sp.goto(base + '/index.html'); await sp.waitForSelector('#tasks-preview .list-row');
-  assert.match(await text(sp, '#tasks-preview'), /Lab report[\s\S]*Due tomorrow[\s\S]*Unit 3 quiz/);
-  step('assignments: connect Google Tasks, list, add, check off; due soon on Today');
+  step('assignments: "coming soon" card; study sessions still there; no Due soon card on Today');
 
   // ---------------------------------------------------------------- friends (Ben on a phone-sized screen)
   await sp.goto(base + '/friends.html'); await sp.waitForSelector('#my-code:not(:text("…"))');
@@ -383,7 +378,7 @@ const step = (m) => console.log('•', m);
   assert.equal(await pp.locator('.tabbar a.active').innerText(), 'Today');
   await pp.click('.tabbar button.tab');
   assert.equal(await pp.locator('.tabbar button.tab').getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Events', 'Groups', 'Lunch', 'Links', 'Account', 'Admin', 'Sign out']);
+  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Events', 'Groups', 'Lunch', 'Links', 'Account', 'Feedback', 'Admin', 'Sign out']);
   await pp.keyboard.press('Escape');
   assert.equal(await pp.locator('#more-sheet').isHidden(), true);
   await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Events")');

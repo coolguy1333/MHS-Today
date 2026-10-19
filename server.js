@@ -13,7 +13,7 @@ try {
 }
 
 app.listen().then((port) => {
-  console.log(`MHS Hub listening on ${config.host}:${port} (public address ${config.publicUrl}, data in ${config.dataDir})`);
+  console.log(`MHS Today listening on ${config.host}:${port} (public address ${config.publicUrl}, data in ${config.dataDir})`);
   if (!app.google) console.warn('WARNING: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set, so nobody can sign in yet.');
   if (!config.adminEmails.size) console.warn('WARNING: ADMIN_EMAILS is empty, so nobody can edit the school calendar or manage users.');
   if (!config.allowedDomains.length) console.warn('NOTE: ALLOWED_DOMAINS is empty, so any Google account can sign in.');

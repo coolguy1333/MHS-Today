@@ -8,7 +8,7 @@
   let info = null;
 
   function renderHead() {
-    document.title = `${g.name} · MHS Hub`;
+    document.title = `${g.name} · MHS Today`;
     const member = g.myRole === 'leader' || g.myRole === 'member';
     const action = member
       ? h('button', {
@@ -139,7 +139,7 @@
   async function loadEvents() {
     const events = await api('GET', `/api/events?group=${encodeURIComponent(g.id)}`);
     const today = schoolClock(info).date;
-    const upcoming = events.filter((e) => e.date >= today);
+    const upcoming = events.filter((e) => eventEnd(e) >= today);
     fill($('events'), upcoming.length ? upcoming.map((e) => eventRow(e, today, loadEvents)) : h('p', { class: 'muted' }, 'No upcoming events.'));
   }
 
@@ -176,6 +176,7 @@
     busy(e.submitter, async () => {
       await api('POST', '/api/events', {
         title: $('ev-title').value, date: $('ev-date').value, time: $('ev-time').value, description: $('ev-description').value,
+        endDate: $('ev-end-date').value || null, endTime: $('ev-end-time').value, location: $('ev-location').value,
         visibility: $('ev-visibility').value, groupId: g.id,
         signup: $('ev-signup').checked ? { limit: $('ev-limit').value ? Number($('ev-limit').value) : 0 } : null
       });

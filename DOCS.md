@@ -1,4 +1,4 @@
-# MHS Hub: how it works
+# MHS Today: how it works
 
 ## Layout
 

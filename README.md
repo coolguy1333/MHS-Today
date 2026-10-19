@@ -1,4 +1,4 @@
-# MHS Hub
+# MHS Today
 
 Schedule, events and friends for Mukwonago High School students.
 
@@ -6,7 +6,7 @@ Schedule, events and friends for Mukwonago High School students.
 - **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D). Or paste your schedule copied from Infinite Campus and it fills everything in, lunches included (read on your device; nothing is sent until you save).
 - **Assignments**: your own **Google Tasks** (the same list as in Gmail, Google Calendar and the Tasks app). Connect once, then see what's due on Today, add assignments and check them off. Only you see them. Classmates can also plan **study sessions** for a class and say they're going.
 - **Made for phones**: a tab bar at the bottom (Today, Schedule, Assignments, Friends, More), Save that stays in view while you edit your schedule, and no sideways scrolling.
-- **Reminders and the app**: add MHS Hub to your phone's home screen (on iPhone: Safari → Share → Add to Home Screen) to use it like an app, offline included, and turn on notifications on the Account page: Google Tasks due tomorrow, an hour before your events and study sessions, and group announcements.
+- **Reminders and the app**: add MHS Today to your phone's home screen (on iPhone: Safari → Share → Add to Home Screen) to use it like an app, offline included, and turn on notifications on the Account page: Google Tasks due tomorrow, an hour before your events and study sessions, and group announcements.
 - **Calendar sync**: a private link that puts every school day (7:00 until the last bell, 12:45 on early-release days, titled "Day B", "Day C · Early release"…), your events, study sessions and no-school days into your iPhone or Google calendar.
 - **Announcements and countdowns**: admins put a banner on every page (snow day, spirit week) and countdowns on Today (finals, winter break).
 - **Word filter** on everything students type, plus words admins add.

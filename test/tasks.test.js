@@ -20,10 +20,11 @@ async function as(ctx, n, extra) {
 }
 const owner = (ctx) => as(ctx, 99, { email: 'admin@school.test', given_name: 'Ada' });
 const where = (r) => r.headers.get('location');
+const ON = { GOOGLE_TASKS: 'on' }; // off ("coming soon") by default
 const day = (n) => cal.addDays(cal.schoolNow('America/Chicago').date, n);
 
 test('tasks: connect asks for the Tasks scope with offline access, for your own account only', async () => {
-  const ctx = await startApp({ mock });
+  const ctx = await startApp({ mock, env: ON });
   assert.equal(where(await ctx.client().raw('GET', '/auth/google?connect=tasks')), '/login.html?next=classwork.html', 'sign in first');
   const ann = await as(ctx, 1);
   assert.deepEqual((await ann.get('/api/tasks')).data, { available: true, connected: false });
@@ -54,7 +55,7 @@ test('tasks: connect asks for the Tasks scope with offline access, for your own 
 });
 
 test('tasks: unticked box, no refresh token, cancelled, or a stolen callback all fail cleanly', async () => {
-  const ctx = await startApp({ mock });
+  const ctx = await startApp({ mock, env: ON });
   const ann = await as(ctx, 1);
   mock.grantScope = 'openid email';
   assert.equal(where(await ann.connectTasks(mock)), '/classwork.html?tasks=scope');
@@ -83,7 +84,7 @@ test('tasks: unticked box, no refresh token, cancelled, or a stolen callback all
 });
 
 test('tasks: list, add and check off your Google Tasks; others never see them', async () => {
-  const ctx = await startApp({ mock });
+  const ctx = await startApp({ mock, env: ON });
   const ann = await as(ctx, 1);
   const ben = await as(ctx, 2);
   await ann.connectTasks(mock, user(1));
@@ -127,7 +128,7 @@ test('tasks: list, add and check off your Google Tasks; others never see them', 
 });
 
 test('tasks: disconnecting or revoking at Google forgets the token; deleting your account revokes it', async () => {
-  const ctx = await startApp({ mock });
+  const ctx = await startApp({ mock, env: ON });
   const ann = await as(ctx, 1);
   await ann.connectTasks(mock);
   const before = mock.revoked.length;
@@ -152,7 +153,7 @@ test('tasks: disconnecting or revoking at Google forgets the token; deleting you
 });
 
 test('tasks: never in backups; a restore on the same server keeps connections', async () => {
-  const ctx = await startApp({ mock });
+  const ctx = await startApp({ mock, env: ON });
   const boss = await owner(ctx);
   const ann = await as(ctx, 1);
   await ann.connectTasks(mock, user(1));
@@ -162,14 +163,23 @@ test('tasks: never in backups; a restore on the same server keeps connections', 
   assert.equal((await boss.post('/api/admin/restore', backup)).status, 200);
   assert.ok((await ann.get('/api/tasks')).data.tasks.some((t) => t.title === 'Still here'));
 
-  const other = await startApp({ mock });
+  const other = await startApp({ mock, env: ON });
   await (await owner(other)).post('/api/admin/restore', backup);
   const ann2 = await as(other, 1);
   assert.equal((await ann2.get('/api/tasks')).data.connected, false, 'another server: connect again');
 });
 
+test('tasks: "coming soon" unless GOOGLE_TASKS=on', async () => {
+  const ctx = await startApp({ mock });
+  const ann = await as(ctx, 1);
+  assert.deepEqual((await ann.get('/api/tasks')).data, { available: false, connected: false, comingSoon: true });
+  assert.equal((await ann.post('/api/tasks', { title: 'x' })).status, 503);
+  assert.equal(where(await ann.raw('GET', '/auth/google?connect=tasks')), '/classwork.html', 'no Google round trip');
+  assert.match(mock.lastAuthQuery.scope, /^openid email profile$/);
+});
+
 test('tasks: off when Google sign-in is not set up', async () => {
-  const ctx = await startApp({ mock, tweak: (c) => { c.google.clientId = ''; } });
+  const ctx = await startApp({ mock, env: ON, tweak: (c) => { c.google.clientId = ''; } });
   // no sign-in means no session either, so just check the route answers safely
   assert.equal((await ctx.client().get('/api/tasks')).status, 401);
   assert.equal(where(await ctx.client().raw('GET', '/auth/google?connect=tasks')), '/login.html?error=config');

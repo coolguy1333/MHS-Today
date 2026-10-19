@@ -4,21 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#1e3a8a" />
-  <title>Group · MHS Hub</title>
+  <meta name="theme-color" content="#183890" />
+  <title>Group · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
-    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <p class="small"><a href="groups.html">← All groups</a></p>
     <div class="card" id="head"><p class="muted">Loading…</p></div>
     <div class="grid grid-2" id="body" hidden>
@@ -31,7 +31,10 @@
             <form id="event-form" class="form-grid">
               <label class="wide"><span>Title</span><input type="text" id="ev-title" required maxlength="120" /></label>
               <label><span>Date</span><input type="date" id="ev-date" required /></label>
-              <label><span>Time (optional)</span><input type="time" id="ev-time" /></label>
+              <label><span>Ends (if it's more than one day)</span><input type="date" id="ev-end-date" /></label>
+              <label><span>Starts (optional)</span><input type="time" id="ev-time" /></label>
+              <label><span>Ends (optional)</span><input type="time" id="ev-end-time" /></label>
+              <label class="wide"><span>Where (room or address)</span><input type="text" id="ev-location" maxlength="120" placeholder="Rm 173, Main Gym, 1234 Main St…" /></label>
               <label class="wide"><span>Details (optional)</span><input type="text" id="ev-description" maxlength="500" /></label>
               <label><span>Who can see it</span><select id="ev-visibility"><option value="group">Group members</option><option value="public">Everyone</option></select></label>
               <label class="check"><input type="checkbox" id="ev-signup" /><span>Sign-up list</span></label>

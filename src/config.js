@@ -50,6 +50,9 @@ function loadConfig(env = process.env) {
       const site = /^\d{1,9}$/.test(env.MENU_SITE || '') ? env.MENU_SITE : district === '2534' && id === '133305' ? '15466' : '';
       return { district, id, site };
     })(),
+    // Assignments from Google Tasks: off ("coming soon") until the district allows the Tasks API.
+    // GOOGLE_TASKS=on turns it on.
+    googleTasks: env.GOOGLE_TASKS === 'on',
     sessionDays: 60,
     maxUsers: 5000,
     maxEvents: 3000

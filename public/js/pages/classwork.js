@@ -10,9 +10,9 @@
   const MESSAGES = {
     connected: ['ok', 'Google Tasks is connected.'],
     denied: ['error', 'Google Tasks wasn\'t connected (you cancelled).'],
-    scope: ['error', 'Google Tasks wasn\'t connected: tick the box that lets MHS Hub see and edit your tasks, then try again.'],
-    account: ['error', 'Connect the same Google account you sign in to MHS Hub with.'],
-    offline: ['error', 'Google didn\'t give MHS Hub lasting access. Please try again.'],
+    scope: ['error', 'Google Tasks wasn\'t connected: tick the box that lets MHS Today see and edit your tasks, then try again.'],
+    account: ['error', 'Connect the same Google account you sign in to MHS Today with.'],
+    offline: ['error', 'Google didn\'t give MHS Today lasting access. Please try again.'],
     state: ['error', 'That attempt expired. Please try again.'],
     signin: ['error', 'Sign in again, then connect Google Tasks.'],
     busy: ['error', 'Too many people are connecting right now. Wait a minute and try again.'],
@@ -50,12 +50,10 @@
       t.link ? h('a', { class: 'small', href: t.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open') : null);
   }
   function renderTasks() {
+    $('soon-card').hidden = data.available;
+    $('tasks-intro').hidden = !data.available;
     $('connect-card').hidden = data.connected || !data.available;
     $('tasks-card').hidden = !data.connected;
-    if (!data.available) {
-      const box = $('tasks-msg');
-      box.hidden = false; box.className = 'notice'; box.textContent = 'Google sign-in isn\'t set up on this site yet, so Google Tasks can\'t be connected.';
-    }
     if (!data.connected) return;
     const today = schoolClock(info).date;
     fill($('tasks'), data.tasks.length ? data.tasks.map((t) => taskRow(t, today)) : h('p', { class: 'muted' }, 'Nothing to do. Nice!'));
@@ -84,7 +82,7 @@
     });
   });
   $('disconnect-btn').addEventListener('click', (e) => {
-    if (!confirm('Disconnect Google Tasks? Your tasks stay in Google; MHS Hub just stops showing them.')) return;
+    if (!confirm('Disconnect Google Tasks? Your tasks stay in Google; MHS Today just stops showing them.')) return;
     busy(e.currentTarget, async () => { await api('DELETE', '/api/tasks/connection'); toast('Google Tasks disconnected'); await loadTasks(); });
   });
 

@@ -4,7 +4,7 @@
   'use strict';
 
   const COLORS = {
-    blue: '#1e3a8a', gold: '#d99b00', red: '#c62828', green: '#15803d',
+    blue: '#183890', gold: '#d99b00', red: '#c62828', green: '#15803d',
     purple: '#7c3aed', pink: '#c2189b', teal: '#0f766e', gray: '#4b5563'
   };
   const EMOJIS = [

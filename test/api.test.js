@@ -54,7 +54,7 @@ test('static files: clean URLs, caching, no path traversal, no dotfiles or sourc
   const home = await c.raw('GET', '/');
   assert.equal(home.status, 200);
   assert.match(home.headers.get('content-type'), /text\/html/);
-  assert.match(await home.text(), /MHS Hub/);
+  assert.match(await home.text(), /MHS Today/);
   assert.equal((await c.raw('GET', '/events')).status, 200);             // /events -> events.html
   const robots = await c.raw('GET', '/robots.txt');
   assert.equal(robots.status, 200);
@@ -152,7 +152,7 @@ test('writes are rate limited per person', async () => {
   const ctx = await startApp({ mock });
   const c = await as(ctx, 1);
   let limited = 0;
-  for (let i = 0; i < 130; i++) if ((await c.put('/api/classes', {})).status === 429) limited++;
+  for (let i = 0; i < 129; i++) if ((await c.put('/api/classes', {})).status === 429) limited++; // + agreeing to the terms = 130
   assert.equal(limited, 10);
   const other = await as(ctx, 2);
   assert.equal((await other.put('/api/classes', {})).status, 200);

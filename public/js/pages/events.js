@@ -9,9 +9,12 @@
 
   function render() {
     const today = schoolClock(info).date;
-    const upcoming = events.filter((e) => e.date >= today);
-    const past = events.filter((e) => e.date < today).reverse();
-    fill($('upcoming'), upcoming.length ? upcoming.map((e) => eventRow(e, today, load)) : h('p', { class: 'muted' }, 'No upcoming events yet.'));
+    const kind = $('cat-filter').value;
+    const shown = kind ? events.filter((e) => e.category === kind) : events;
+    const upcoming = shown.filter((e) => eventEnd(e) >= today); // multi-day events stay until their last day
+    const past = shown.filter((e) => eventEnd(e) < today).reverse();
+    fill($('upcoming'), upcoming.length ? upcoming.map((e) => eventRow(e, today, load))
+      : h('p', { class: 'muted' }, kind ? `No upcoming ${EVENT_CATEGORIES[kind].toLowerCase()} events.` : 'No upcoming events yet.'));
     $('past-card').hidden = !past.length;
     fill($('past'), past.map((e) => eventRow(e, today, load)));
   }
@@ -31,6 +34,7 @@
     const vis = $('ev-visibility').value;
     const g = led.find((x) => x.id === $('ev-group').value);
     $('group-field').hidden = vis === 'private' || !led.length;
+    $('category-field').hidden = vis !== 'private' && !!$('ev-group').value; // a group's events take the group's kind
     $('invite-field').hidden = vis !== 'private';
     // "No group" only makes sense for public events by people who may post them
     $('ev-group').querySelector('option[value=""]').disabled = vis === 'group' || (vis === 'public' && !me.canPostEvents);
@@ -62,12 +66,16 @@
     syncForm();
   }
 
+  $('cat-filter').addEventListener('change', render);
+  $('date').addEventListener('change', () => { $('end-date').min = $('date').value; });
   $('event-form').addEventListener('submit', (e) => {
     e.preventDefault();
     busy(e.submitter, async () => {
       const visibility = $('ev-visibility').value;
       const body = {
         title: $('title').value, date: $('date').value, time: $('time').value, description: $('description').value, visibility,
+        endDate: $('end-date').value || null, endTime: $('end-time').value, location: $('location').value,
+        category: $('ev-group').value && visibility !== 'private' ? undefined : $('ev-category').value, // a group's events take its kind
         groupId: visibility === 'private' ? null : $('ev-group').value || null,
         signup: $('ev-signup').checked ? { limit: $('ev-limit').value ? Number($('ev-limit').value) : 0 } : null
       };

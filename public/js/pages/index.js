@@ -35,6 +35,9 @@
     if (!m.todayInfo.schoolDay && m.viewDate !== m.now.date) {
       notes.push(h('p', { class: 'notice' }, `${noSchoolText(m.todayInfo)} today. Showing the next school day.`));
     }
+    if (S.me && S.me.unreadFeedback) {
+      notes.push(h('p', { class: 'notice' }, 'We answered your feedback. ', h('a', { href: 'feedback.html' }, 'See the reply')));
+    }
     if (v.schoolDay && !v.dayLetter) {
       notes.push(h('p', { class: 'notice' }, "The day letter hasn't been set yet, so classes can't be matched to today. ",
         S.me && S.me.admin ? h('a', { href: 'admin.html' }, 'Set it on the Admin page.') : 'An admin needs to set it.'));
@@ -218,12 +221,12 @@
 
   function renderEvents(m) {
     const box = clear($('events-preview'));
-    const upcoming = S.events.filter((e) => e.date >= m.now.date).slice(0, 5); // the server sends them in date order
+    const upcoming = S.events.filter((e) => eventEnd(e) >= m.now.date).slice(0, 5); // the server sends them in date order; multi-day ones stay until they end
     if (!upcoming.length) { add(box, h('p', { class: 'muted' }, 'Nothing coming up.')); return; }
     for (const e of upcoming) {
       add(box, h('div', { class: 'list-row' }, h('div', null,
         h('strong', null, e.title),
-        h('div', { class: 'small muted' }, fmtRelativeDay(e.date, m.now.date) + (e.time ? ` · ${formatTime(e.time)}` : '')))));
+        h('div', { class: 'small muted' }, fmtEventWhen(e, m.now.date) + (e.location ? ` · ${e.location}` : '')))));
     }
   }
 
@@ -337,7 +340,8 @@
   }
 
   load();
-  setInterval(tick, 15000);
-  setInterval(load, 5 * 60000); // pick up new events, calendar changes and friends' changes
+  // Nothing runs while the tab is hidden (Chromebooks keep many tabs open); coming back catches up.
+  setInterval(() => { if (!document.hidden) tick(); }, 15000);
+  setInterval(() => { if (!document.hidden) load(); }, 5 * 60000); // new events, calendar changes, friends' changes
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); load(); } });
 })();

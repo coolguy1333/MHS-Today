@@ -15,6 +15,10 @@
 // announcement, which notifies members) and polls (leaders ask, members vote once, may change it).
 const KINDS = ['club', 'sport', 'group'];
 const VISIBILITY = ['public', 'group', 'private'];
+// What kind of event it is (a filter on the Events page). Group events default to their group's kind.
+const CATEGORIES = ['school', 'sports', 'clubs', 'community', 'holidays'];
+const KIND_CATEGORY = { club: 'clubs', sport: 'sports', group: 'clubs' };
+const MAX_EVENT_DAYS = 31; // a multi-day event spans at most this many days
 const EVENT_KEEP_DAYS = 60;   // events are removed this long after their date
 const MAX_GROUPS = 500;
 const MAX_MEMBERS = 1000;
@@ -341,7 +345,9 @@ module.exports = function groups(app) {
   }
 
   // Returns the cleaned event fields or throws 400. `daysBack` = how far in the past a date may be.
-  function cleanEventFields(b, daysBack = 7) {
+  // An event can have an end time, and end on a later day (endDate, null = same day).
+  const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+  function cleanEventFields(b, daysBack = 7, fallbackCategory = 'school') {
     const title = cleanText(b.title, 120);
     if (!title) throw bad('Give the event a title');
     const date = typeof b.date === 'string' ? b.date : '';
@@ -349,8 +355,20 @@ module.exports = function groups(app) {
     const t = today();
     if (date < cal.addDays(t, -daysBack) || date > cal.addDays(t, 365 * 3)) throw bad('That date is too far away');
     const time = typeof b.time === 'string' ? b.time : '';
-    if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw bad('Invalid time');
-    return { title, date, time, description: cleanText(b.description, 500) };
+    if (time && !TIME.test(time)) throw bad('Invalid time');
+    let endDate = typeof b.endDate === 'string' && b.endDate ? b.endDate : null;
+    if (endDate !== null) {
+      if (cal.parseDate(endDate) === null) throw bad('Pick a valid end date');
+      if (endDate < date) throw bad('The event can\'t end before it starts');
+      if (endDate > cal.addDays(date, MAX_EVENT_DAYS - 1)) throw bad(`An event can last up to ${MAX_EVENT_DAYS} days`);
+      if (endDate === date) endDate = null;
+    }
+    const endTime = typeof b.endTime === 'string' ? b.endTime : '';
+    if (endTime && !TIME.test(endTime)) throw bad('Invalid end time');
+    if (endTime && !time) throw bad('Add a start time to give the event an end time');
+    if (endTime && !endDate && endTime <= time) throw bad('The end time must be after the start time');
+    const category = CATEGORIES.includes(b.category) ? b.category : fallbackCategory;
+    return { title, date, time, endDate, endTime, category, location: cleanText(b.location, 120), description: cleanText(b.description, 500) };
   }
   function cleanSignup(s) {
     if (s === undefined || s === null || s === false) return null;
@@ -367,7 +385,8 @@ module.exports = function groups(app) {
     const org = !!user && (organizers(e).has(user.id) || isAdmin(user));
     const author = getUser(e.by);
     return {
-      id: e.id, title: e.title, date: e.date, time: e.time, description: e.description, visibility: e.visibility,
+      id: e.id, title: e.title, date: e.date, time: e.time, endDate: e.endDate, endTime: e.endTime, category: e.category, location: e.location,
+      description: e.description, visibility: e.visibility,
       group: g ? { id: g.id, name: g.name } : null,
       by: user ? (author ? author.name : 'Former student') : undefined,
       mine: canEdit(e, user),
@@ -410,8 +429,9 @@ module.exports = function groups(app) {
       invitees = [...new Set(list)];
       if (!invitees.every((id) => friends.has(id))) throw bad('You can only invite your friends');
     }
-    const fields = cleanEventFields(body);
-    checkWords(fields.title, fields.description);
+    const g = groupId ? findGroup(groupId) : null;
+    const fields = cleanEventFields(body, 7, g ? KIND_CATEGORY[g.kind] : 'school');
+    checkWords(fields.title, fields.description, fields.location);
     const signup = cleanSignup(body.signup);
     if (state.events.length >= config.maxEvents) throw bad('The events board is full');
     if (!isAdmin(user) && !limiter.hit(`event:${user.id}`, 10, 86400e3)) throw new HttpError(429, 'You can add up to 10 events a day');
@@ -456,7 +476,10 @@ module.exports = function groups(app) {
     })),
     calendarItems: (user) => state.events.filter((e) => canSee(e, user) && mineForCalendar(e, user)).map((e) => {
       const g = e.groupId ? findGroup(e.groupId) : null;
-      return { uid: `ev-${e.id}`, date: e.date, time: e.time || null, title: e.title, description: [g ? g.name : '', e.description].filter(Boolean).join(': ') };
+      return {
+        uid: `ev-${e.id}`, date: e.date, time: e.time || null, endDate: e.endDate, endTime: e.endTime, title: e.title, location: e.location,
+        description: [g ? g.name : '', e.description].filter(Boolean).join(': ')
+      };
     }),
     status: () => ({ groups: state.groups.length, pendingGroups: state.groups.filter((g) => !g.approved).length }),
     exportData: () => ({ groups: state.groups }),
@@ -508,7 +531,7 @@ module.exports = function groups(app) {
           const signup = isPlainObject(e.signup) ? cleanSignup({ limit: e.signup.limit }) : null;
           if (signup && Array.isArray(e.signup.people)) signup.people = [...new Set(e.signup.people.filter((id) => hasOwn(users, id)))];
           events.push({
-            id: e.id, ...cleanEventFields(e, EVENT_KEEP_DAYS), by, created: num(e.created), visibility, groupId: g ? g.id : null,
+            id: e.id, ...cleanEventFields(e, EVENT_KEEP_DAYS, g ? KIND_CATEGORY[g.kind] : 'school'), by, created: num(e.created), visibility, groupId: g ? g.id : null,
             invitees: visibility === 'private' && Array.isArray(e.invitees) ? [...new Set(e.invitees.filter((id) => hasOwn(users, id)))].slice(0, MAX_INVITEES) : [],
             signup
           });
@@ -519,7 +542,7 @@ module.exports = function groups(app) {
     },
     maintain() {
       const cutoff = cal.addDays(today(), -EVENT_KEEP_DAYS);
-      state.events = state.events.filter((e) => e.date >= cutoff);
+      state.events = state.events.filter((e) => (e.endDate || e.date) >= cutoff);
     },
     forgetUser(id) {
       state.events = state.events.filter((e) => e.by !== id);
@@ -550,6 +573,11 @@ module.exports = function groups(app) {
         if (e.groupId === undefined) e.groupId = null;
         if (!Array.isArray(e.invitees)) e.invitees = [];
         if (e.signup === undefined) e.signup = null;
+        // added with end times and categories
+        if (e.endDate === undefined) e.endDate = null;
+        if (typeof e.endTime !== 'string') e.endTime = '';
+        if (typeof e.location !== 'string') e.location = '';
+        if (!CATEGORIES.includes(e.category)) { const g = e.groupId ? findGroup(e.groupId) : null; e.category = g ? KIND_CATEGORY[g.kind] : 'school'; }
       }
     }
   };

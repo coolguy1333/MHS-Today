@@ -302,7 +302,7 @@ test('push: subscribe, choose kinds, test message, group announcements, gone dev
   assert.equal((await ben.post('/api/push/subscribe', laptop.sub)).data.devices, 1);
 
   assert.equal((await ann.post('/api/push/test')).status, 200);
-  assert.deepEqual(svc.got.map((g) => g.msg.title), ['MHS Hub']);
+  assert.deepEqual(svc.got.map((g) => g.msg.title), ['MHS Today']);
 
   // a group announcement reaches members (not the author), if they want group notifications
   const gid = (await ann.post('/api/groups', { name: 'Band', kind: 'club', joinPolicy: 'open' })).data.id;
@@ -329,7 +329,7 @@ test('push: subscribe, choose kinds, test message, group announcements, gone dev
 test('push: evening reminders from Google Tasks and an hour-before reminders, each sent once', async () => {
   const phone = fakeDevice();
   const svc = fakePushService([phone]);
-  const ctx = await startApp({ mock, fetchFn: svc.fetch });
+  const ctx = await startApp({ mock, fetchFn: svc.fetch, env: { GOOGLE_TASKS: 'on' } });
   const ann = await as(ctx, 1, { given_name: 'Ann' });
   await ann.put('/api/classes', { yellow: { name: 'Algebra II' } });
   await ann.post('/api/push/subscribe', phone.sub);

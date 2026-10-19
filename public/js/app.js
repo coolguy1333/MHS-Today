@@ -22,15 +22,21 @@ async function api(method, url, body) {
     const err = new Error((data && data.error) || `Something went wrong (${res.status})`);
     err.status = res.status;
     if (res.status === 401) goToLogin(); // session ended: sign in again and come back here
+    if (data && data.mustAgree) goToTerms(); // the Privacy & Terms changed: read and agree first
     throw err;
   }
   return data;
 }
 
-function goToLogin() {
+// This page (and its query), to come back to after signing in or agreeing to the terms.
+function hereForNext() {
   const page = location.pathname.split('/').pop() || 'index.html';
-  const next = /^[a-z]+\.html$/.test(page) ? page + (/^\?[A-Za-z0-9_=&.-]{0,100}$/.test(location.search) ? location.search : '') : 'index.html';
-  location.href = 'login.html?next=' + encodeURIComponent(next);
+  return /^[a-z]+\.html$/.test(page) ? page + (/^\?[A-Za-z0-9_=&.-]{0,100}$/.test(location.search) ? location.search : '') : 'index.html';
+}
+function goToLogin() { location.href = 'login.html?next=' + encodeURIComponent(hereForNext()); }
+function goToTerms() {
+  if (/terms\.html$/.test(location.pathname)) return;
+  location.href = 'terms.html?agree=1&next=' + encodeURIComponent(hereForNext());
 }
 
 // ---- building DOM safely -------------------------------------------------------
@@ -104,6 +110,7 @@ function getMe() { // { user | null, config }
 async function requireLogin() {
   const me = await getMe();
   if (!me.user) { goToLogin(); await new Promise(() => {}); }
+  if (me.user.mustAgree && !/terms\.html$/.test(location.pathname)) { goToTerms(); await new Promise(() => {}); }
   return me.user;
 }
 
@@ -148,7 +155,7 @@ function renderNav(active) {
   const current = (key) => ({ class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null });
   const wide = h('nav', { 'aria-label': 'Main', class: 'nav-wide' });
   const auth = h('span', { class: 'nav-auth' });
-  fill(nav, h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Hub'), wide, auth);
+  fill(nav, h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Today'), wide, auth);
   // the page may draw the nav again (after a rename): replace the old bar and its listeners
   for (const el of document.querySelectorAll('body > .tabbar, body > .more-sheet')) el.remove();
   if (renderNav.off) renderNav.off.abort();
@@ -157,6 +164,8 @@ function renderNav(active) {
 
   getMe().catch(() => ({ user: null })).then((me) => {
     const user = me.user;
+    if (user && user.mustAgree) goToTerms(); // signed in but hasn't agreed to the (latest) Privacy & Terms
+    renderFooter(user);
     const links = user ? ALL : ALL.filter(([, , key]) => key === 'dashboard');
     add(wide, links.map(([href, label, key]) => h('a', { href, ...current(key) }, label)));
     if (user) {
@@ -175,6 +184,7 @@ function renderNav(active) {
       const sheet = h('div', { class: 'more-sheet', id: 'more-sheet', hidden: true }, h('div', { class: 'sheet-links' },
         ALL.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)),
         h('a', { href: 'account.html', ...current('account') }, 'Account'),
+        h('a', { href: 'feedback.html', ...current('feedback') }, 'Feedback', user.unreadFeedback ? h('span', { class: 'dot', 'aria-label': ' (new reply)' }) : null),
         user.admin ? h('a', { href: 'admin.html', ...current('admin') }, 'Admin') : null,
         h('button', { class: 'linklike', type: 'button', onclick: signOut }, 'Sign out')));
       const moreBtn = h('button', {
@@ -197,6 +207,17 @@ function renderNav(active) {
     document.body.classList.add('has-tabbar');
   });
   renderBanner(nav);
+}
+
+// The footer on every page: About, Privacy & Terms, Feedback.
+function renderFooter(user) {
+  for (const old of document.querySelectorAll('body > .site-footer')) old.remove();
+  const main = document.querySelector('main');
+  if (!main) return;
+  main.after(h('footer', { class: 'site-footer' },
+    h('a', { href: 'about.html' }, 'About'), h('a', { href: 'terms.html' }, 'Privacy & Terms'),
+    user ? h('a', { href: 'feedback.html' }, 'Feedback', user.unreadFeedback ? ' (new reply)' : '') : null,
+    h('span', { class: 'muted' }, 'Made by MHS students')));
 }
 
 // Admins' announcements, under the nav on every page. A closed one stays closed on this device.
@@ -329,6 +350,17 @@ function friendNowText(friend, live) {
 }
 // One event in a list: when, who can see it, its group, the sign-up list, and delete for organizers.
 // `reload` runs after a change.
+// ---- events ----
+const EVENT_CATEGORIES = { school: 'School', sports: 'Sports', clubs: 'Clubs', community: 'Community', holidays: 'Holidays' };
+const eventEnd = (e) => e.endDate || e.date; // multi-day events end on endDate
+// "Today · 3:00 – 5:00 PM", "Fri, Oct 23 – Sun, Oct 25", "Fri, Oct 23, 7:00 PM – Sat, Oct 24, 1:00 AM"
+function fmtEventWhen(e, today) {
+  const t = (x) => MHSBell.formatTime(x);
+  const day = (d) => fmtRelativeDay(d, today);
+  if (!e.endDate) return day(e.date) + (e.time ? ` · ${t(e.time)}${e.endTime ? ` – ${t(e.endTime)}` : ''}` : '');
+  if (!e.time) return `${day(e.date)} – ${day(e.endDate)}`;
+  return `${day(e.date)}, ${t(e.time)} – ${day(e.endDate)}${e.endTime ? `, ${t(e.endTime)}` : ''}`;
+}
 function eventRow(e, today, reload) {
   const VIS = { group: 'Group members', private: 'Private' };
   const s = e.signup;
@@ -345,9 +377,12 @@ function eventRow(e, today, reload) {
     s.people && s.people.length ? h('span', { class: 'muted' }, `· ${s.people.map((p) => p.name).join(', ')}`) : null) : null;
   return h('div', { class: 'list-row' },
     h('div', null,
-      h('strong', null, e.title), VIS[e.visibility] ? [' ', h('span', { class: 'badge vis' }, VIS[e.visibility])] : null,
+      h('strong', null, e.title),
+      EVENT_CATEGORIES[e.category] ? [' ', h('span', { class: `badge cat cat-${e.category}` }, EVENT_CATEGORIES[e.category])] : null,
+      VIS[e.visibility] ? [' ', h('span', { class: 'badge vis' }, VIS[e.visibility])] : null,
       h('div', { class: 'small muted' },
-        fmtRelativeDay(e.date, today) + (e.time ? ` · ${MHSBell.formatTime(e.time)}` : ''),
+        fmtEventWhen(e, today),
+        e.location ? [' · ', h('span', { class: 'where' }, e.location)] : null,
         e.group ? [' · ', h('a', { href: `group.html?id=${encodeURIComponent(e.group.id)}` }, e.group.name)] : null,
         e.by ? ` · added by ${e.by}` : ''),
       e.description ? h('div', { class: 'small' }, e.description) : null,

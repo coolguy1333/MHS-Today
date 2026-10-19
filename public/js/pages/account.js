@@ -83,10 +83,10 @@
     if (!supported) {
       $('notify-prefs').hidden = true;
       fill(body, isIos() && !isInstalled()
-        ? [h('p', null, 'On iPhone, notifications work once MHS Hub is on your home screen:'),
+        ? [h('p', null, 'On iPhone, notifications work once MHS Today is on your home screen:'),
           h('ol', { class: 'small' }, h('li', null, 'In Safari, tap the Share button (the square with an arrow).'),
             h('li', null, 'Tap ', h('strong', null, 'Add to Home Screen'), ', then ', h('strong', null, 'Add'), '.'),
-            h('li', null, 'Open MHS Hub from your home screen and come back to this page.'))]
+            h('li', null, 'Open MHS Today from your home screen and come back to this page.'))]
         : h('p', { class: 'muted' }, "This browser can't show notifications from websites."));
       return;
     }
@@ -95,6 +95,8 @@
     const on = !!sub && Notification.permission === 'granted';
     $('notify-prefs').hidden = !info.devices;
     for (const box of $('notify-prefs').querySelectorAll('input')) box.checked = info.prefs[box.dataset.kind];
+    // assignment reminders come from Google Tasks, which may still be "coming soon"
+    $('notify-prefs').querySelector('[data-kind="classwork"]').closest('label').hidden = !(await getMe()).config.assignments;
     fill(body,
       h('p', null, on ? 'Notifications are on for this device.' : Notification.permission === 'denied'
         ? 'Notifications are blocked for this site. Allow them in your browser or phone settings, then come back.'
@@ -155,7 +157,7 @@
           h('li', null, 'Add it on a computer: the Google Calendar phone app can\'t add calendars from a link. Use the button above, or on ',
             h('a', { href: 'https://calendar.google.com/calendar/r/settings/addbyurl', target: '_blank', rel: 'noopener noreferrer' }, 'calendar.google.com'),
             ' choose ', h('em', null, 'Other calendars → + → From URL'), ' and paste the link below.'),
-          h('li', null, 'It then shows up in the Google Calendar app on your phone (if not, open the app\'s settings and turn on sync for "MHS Hub").'),
+          h('li', null, 'It then shows up in the Google Calendar app on your phone (if not, open the app\'s settings and turn on sync for "MHS Today").'),
           h('li', null, 'Google checks for changes every few hours, so new classwork or events can take a while to appear. Apple Calendar updates more often.'))),
       h('label', { class: 'stack small' }, h('span', null, 'Or copy the link into any calendar app ("subscribe" or "add from URL"):'),
         h('span', { class: 'inline-field' }, field, h('button', { class: 'btn small secondary', type: 'button', onclick: () => copyText(url) }, 'Copy'))),

@@ -182,5 +182,6 @@
     await find(invite, null);
     box.scrollIntoView({ block: 'center' }); // the add-a-friend card is below your friends
   }
-  setInterval(() => load(false).catch(() => {}), 30000);
+  setInterval(() => { if (!document.hidden) load(false).catch(() => {}); }, 30000); // paused while the tab is hidden
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(false).catch(() => {}); });
 })();

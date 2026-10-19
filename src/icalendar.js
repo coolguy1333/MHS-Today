@@ -80,8 +80,8 @@ module.exports = function icalendar(app) {
 
   function build(user) {
     const now = Date.now();
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MHS Hub//Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
-      'X-WR-CALNAME:MHS Hub', `X-WR-TIMEZONE:${config.tz}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MHS Today//Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+      'X-WR-CALNAME:MHS Today', `X-WR-TIMEZONE:${config.tz}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
     const items = features.flatMap((f) => (f.calendarItems ? f.calendarItems(user) : []));
     const t = today();
     items.push(...schoolDays(t));
@@ -89,12 +89,14 @@ module.exports = function icalendar(app) {
       if (date >= cal.addDays(t, -30)) items.push({ uid: `noschool-${date}`, date, title: label ? `No school: ${label}` : 'No school' });
     }
     for (const it of items) {
-      lines.push('BEGIN:VEVENT', `UID:${it.uid}@mhs-hub`, `DTSTAMP:${stamp(now)}`);
+      lines.push('BEGIN:VEVENT', `UID:${it.uid}@mhs-hub` /* kept after the rename so subscribed calendars update instead of duplicating */, `DTSTAMP:${stamp(now)}`);
+      const last = it.endDate || it.date; // events can end on a later day
       if (it.time) {
         const start = zonedToUtc(it.date, it.time);
-        lines.push(`DTSTART:${stamp(start)}`, `DTEND:${stamp(start + (it.minutes || 60) * 60e3)}`);
+        const end = it.endTime ? zonedToUtc(last, it.endTime) : it.endDate ? zonedToUtc(last, '23:59') : start + (it.minutes || 60) * 60e3;
+        lines.push(`DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`);
       } else {
-        lines.push(`DTSTART;VALUE=DATE:${ymd(it.date)}`, `DTEND;VALUE=DATE:${ymd(cal.addDays(it.date, 1))}`, 'TRANSP:TRANSPARENT');
+        lines.push(`DTSTART;VALUE=DATE:${ymd(it.date)}`, `DTEND;VALUE=DATE:${ymd(cal.addDays(last, 1))}`, 'TRANSP:TRANSPARENT');
       }
       lines.push(`SUMMARY:${esc(it.title)}`);
       if (it.description) lines.push(`DESCRIPTION:${esc(it.description)}`);
@@ -115,7 +117,7 @@ module.exports = function icalendar(app) {
     const body = build(user);
     res.writeHead(200, {
       'Content-Type': 'text/calendar; charset=utf-8', 'Content-Length': Buffer.byteLength(body),
-      'Cache-Control': 'private, max-age=300', 'Content-Disposition': 'inline; filename="mhs-hub.ics"'
+      'Cache-Control': 'private, max-age=300', 'Content-Disposition': 'inline; filename="mhs-today.ics"'
     });
     res.end(req.method === 'HEAD' ? undefined : body);
   }

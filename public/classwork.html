@@ -4,27 +4,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#1e3a8a" />
-  <title>Assignments · MHS Hub</title>
+  <meta name="theme-color" content="#183890" />
+  <title>Assignments · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
-    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <h1>Assignments</h1>
-    <p class="muted">Your own Google Tasks: the same list as in Gmail, Google Calendar and the Google Tasks app. Only you see them.</p>
+    <p class="muted" id="tasks-intro" hidden>Your own Google Tasks: the same list as in Gmail, Google Calendar and the Google Tasks app. Only you see them.</p>
     <div id="tasks-msg" class="notice" hidden></div>
+    <div class="card soon-card" id="soon-card" hidden>
+      <span class="badge">Coming soon</span>
+      <h2>Your assignments, in one place</h2>
+      <p class="muted">See what's due and check things off right here. We're working on it with the district. For now, plan study sessions with your classmates below.</p>
+    </div>
     <div class="card" id="connect-card" hidden>
       <h2>Connect Google Tasks</h2>
-      <p>See and check off your assignments here. Google will ask you to let MHS Hub see and edit your tasks; you can disconnect any time.</p>
+      <p>See and check off your assignments here. Google will ask you to let MHS Today see and edit your tasks; you can disconnect any time.</p>
       <p><a class="btn" id="connect-btn" href="/auth/google?connect=tasks">Connect Google Tasks</a></p>
     </div>
     <div class="card" id="tasks-card" hidden>

@@ -18,7 +18,7 @@ module.exports = function push(app) {
     db.save();
   }
   if (!isPlainObject(state.sentReminders)) state.sentReminders = {};
-  const subject = /^https:/.test(config.publicUrl) ? config.publicUrl : 'mailto:admin@mhs-hub.invalid';
+  const subject = /^https:/.test(config.publicUrl) ? config.publicUrl : 'mailto:admin@mhs-today.invalid';
   const prefsOf = (u) => ({ ...Object.fromEntries(KINDS.map((k) => [k, true])), ...(isPlainObject(u.notify) ? u.notify : {}) });
   const subsOf = (u) => (Array.isArray(u.pushSubs) ? u.pushSubs : []);
 
@@ -41,7 +41,7 @@ module.exports = function push(app) {
   }
 
   route('GET', '/api/push', { auth: 'user' }, ({ user }) => ({ publicKey: state.vapid.publicKey, devices: subsOf(user).length, prefs: prefsOf(user) }));
-  route('POST', '/api/push/subscribe', { auth: 'user' }, ({ user, body }) => {
+  route('POST', '/api/push/subscribe', { auth: 'user', audit: false }, ({ user, body }) => {
     const keys = isPlainObject(body.keys) ? body.keys : {};
     if (typeof body.endpoint !== 'string' || !webpush.validEndpoint(body.endpoint)) throw bad('That browser\'s push service isn\'t supported');
     if (!/^[A-Za-z0-9_-]{80,100}$/.test(keys.p256dh || '') || !/^[A-Za-z0-9_-]{16,32}$/.test(keys.auth || '')) throw bad('Invalid subscription');
@@ -51,13 +51,13 @@ module.exports = function push(app) {
     db.save();
     return { devices: user.pushSubs.length };
   });
-  route('DELETE', '/api/push/subscribe', { auth: 'user' }, ({ user, url }) => {
+  route('DELETE', '/api/push/subscribe', { auth: 'user', audit: false }, ({ user, url }) => {
     const endpoint = url.searchParams.get('endpoint');
     user.pushSubs = endpoint ? subsOf(user).filter((s) => s.endpoint !== endpoint) : [];
     db.save();
     return { devices: user.pushSubs.length };
   });
-  route('PUT', '/api/push/prefs', { auth: 'user' }, ({ user, body }) => {
+  route('PUT', '/api/push/prefs', { auth: 'user', audit: false }, ({ user, body }) => {
     const prefs = prefsOf(user);
     for (const k of KINDS) {
       if (body[k] === undefined) continue;
@@ -68,10 +68,10 @@ module.exports = function push(app) {
     db.save();
     return { prefs };
   });
-  route('POST', '/api/push/test', { auth: 'user' }, async ({ user }) => {
+  route('POST', '/api/push/test', { auth: 'user', audit: false }, async ({ user }) => {
     if (!subsOf(user).length) throw bad('Turn on notifications on this device first');
     if (!limiter.hit(`pushtest:${user.id}`, 5, 3600e3)) throw new HttpError(429, 'That\'s enough tests for now');
-    await notify([user.id], null, { title: 'MHS Hub', body: 'Notifications are working 🎉', url: '/account.html' });
+    await notify([user.id], null, { title: 'MHS Today', body: 'Notifications are working 🎉', url: '/account.html' });
     return { ok: true };
   });
 

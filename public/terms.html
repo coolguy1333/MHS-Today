@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#183890" />
+  <title>Privacy & Terms · MHS Today</title>
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
+    <div class="card agree-card" id="agree-card" hidden>
+      <h2>Before you start</h2>
+      <p>Please read how MHS Today uses your information and the rules for using it. When you're ready, agree at the bottom of the page.</p>
+    </div>
+    <h1>Privacy &amp; Terms</h1>
+    <p class="muted small">Last updated October 19, 2026.</p>
+    <div class="card prose">
+      <h2>Privacy: what we keep and why</h2>
+      <h3>When you sign in with Google</h3>
+      <p>We get your name, your school email address and an ID number from Google. We never see or store your Google password.</p>
+      <h3>What you add</h3>
+      <ul>
+        <li>Your profile: display name, avatar, and optionally pronouns, grade, bio and interests.</li>
+        <li>Your classes, teachers, rooms and lunch.</li>
+        <li>Friends, events, sign-ups, groups, posts, polls, study sessions and feedback.</li>
+      </ul>
+      <h3>Who sees it</h3>
+      <ul>
+        <li>Your friends see your classes and lunch, and you choose for each friend what they see (or turn it off on your Account page).</li>
+        <li>People in a group see its posts; events are seen by who you pick (everyone, a group, or friends you invite).</li>
+        <li>Classmates in the same class see study sessions for that class.</li>
+        <li>Admins (MHS Today's student and staff helpers) can see accounts and posts so they can keep the site safe.</li>
+      </ul>
+      <h3>The record of activity</h3>
+      <p>For the school district, MHS Today keeps a permanent record of sign-ins and changes made on the site (who did what and when, and the network address it came from). Only the site's owners can see it, and it is kept even after an account is deleted.</p>
+      <h3>What we don't do</h3>
+      <p>No ads, no selling or sharing your information, and no tracking. Your information is stored on the school's server.</p>
+      <h3>Your choices</h3>
+      <ul>
+        <li><a href="/api/me/export" id="export-link">Download my data</a>: everything the site keeps about you, as a file.</li>
+        <li><a href="account.html#delete-card">Delete my account</a>: removes your profile, classes, friends, events and posts. (The record of activity above stays.)</li>
+      </ul>
+    </div>
+    <div class="card prose">
+      <h2>Terms: using MHS Today</h2>
+      <ul>
+        <li>Use your own school Google account, and only for school-related things.</li>
+        <li>School rules and the student code of conduct apply here like anywhere at school. Be kind: no bullying, threats, hate, or inappropriate content.</li>
+        <li>Don't post other people's private information.</li>
+        <li>Admins can remove posts and events, and limit or remove accounts that break these rules.</li>
+        <li>Schedules, day letters and lunch menus can be wrong or change. Check official school sources for anything important.</li>
+        <li>MHS Today is made by students and is offered as is. It may change or stop.</li>
+      </ul>
+      <p>Questions? <a href="feedback.html">Send us feedback</a>.</p>
+    </div>
+    <div class="card agree-card" id="agree-bottom" hidden>
+      <label class="check"><input type="checkbox" id="agree-box" /><span>I've read the Privacy &amp; Terms and agree to them.</span></label>
+      <div class="row">
+        <button class="btn" type="button" id="agree-btn" disabled>Agree and continue</button>
+        <button class="linklike" type="button" id="decline-btn">No thanks, sign me out</button>
+      </div>
+    </div>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/terms.js"></script>
+</body>
+</html>
