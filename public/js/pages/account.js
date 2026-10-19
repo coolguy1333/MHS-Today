@@ -95,8 +95,6 @@
     const on = !!sub && Notification.permission === 'granted';
     $('notify-prefs').hidden = !info.devices;
     for (const box of $('notify-prefs').querySelectorAll('input')) box.checked = info.prefs[box.dataset.kind];
-    // assignment reminders come from Google Tasks, which may still be "coming soon"
-    $('notify-prefs').querySelector('[data-kind="classwork"]').closest('label').hidden = !(await getMe()).config.assignments;
     fill(body,
       h('p', null, on ? 'Notifications are on for this device.' : Notification.permission === 'denied'
         ? 'Notifications are blocked for this site. Allow them in your browser or phone settings, then come back.'

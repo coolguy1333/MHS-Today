@@ -117,6 +117,44 @@
     }
   }
 
+  // ---- tests & assignments classmates added for your classes
+  const KIND_LABEL = { test: 'Test', quiz: 'Quiz', assignment: 'Assignment', project: 'Project' };
+  function classItemRow(i, today) {
+    const b = blockInfo(i.block);
+    return h('div', { class: 'list-row' },
+      h('div', null,
+        h('span', { class: `badge kind-${i.kind}` }, KIND_LABEL[i.kind]), ' ', h('strong', null, i.title), i.hidden ? [' ', hiddenBadge(i)] : null,
+        h('div', { class: 'small' }, colorDot(b && b.color), i.className, ' · ', h('span', { class: i.due < today ? 'muted' : null }, fmtDue(i.due, today))),
+        i.notes ? h('div', { class: 'small' }, i.notes) : null,
+        h('div', { class: 'small muted' }, `added by ${i.by}`)),
+      h('div', { class: 'row nowrap small' },
+        i.canDelete ? h('button', {
+          class: 'linklike danger', type: 'button', 'aria-label': `Delete ${i.title}`,
+          onclick: (e) => { if (confirm(`Delete "${i.title}" for everyone in the class?`)) busy(e.currentTarget, async () => { await api('DELETE', `/api/classwork/${i.id}`); await loadClassItems(); }); }
+        }, 'Delete') : null,
+        i.mine ? null : reportButton('classwork', { id: i.id }, `"${i.title}"`)));
+  }
+  async function loadClassItems() {
+    try {
+      const items = await api('GET', '/api/classwork');
+      const today = schoolClock(info).date;
+      fill($('class-items'), items.length ? items.map((i) => classItemRow(i, today))
+        : h('p', { class: 'muted small' }, 'Nothing yet. When you hear about a test or assignment, add it so your class knows.'));
+    } catch (e) {
+      fill($('class-items'), h('p', { class: 'notice error' }, e.message));
+    }
+  }
+  $('class-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      await api('POST', '/api/classwork', { block: $('ce-block').value, kind: $('ce-kind').value, title: $('ce-title').value, due: $('ce-due').value, notes: $('ce-notes').value });
+      $('ce-title').value = ''; $('ce-notes').value = '';
+      $('class-add').open = false;
+      toast('Added. Your classmates can see it now.');
+      await loadClassItems();
+    });
+  });
+
   let classes;
   try {
     [classes, info] = await Promise.all([api('GET', '/api/classes'), loadCalendar()]);
@@ -127,6 +165,14 @@
   const mine = BLOCKS.filter((b) => classes[b.key]);
   $('no-classes').hidden = !!mine.length;
   $('study-card').hidden = !mine.length;
+  $('class-card').hidden = !mine.length;
+  // posting needs a teacher on the class, so it reaches the right section
+  fill($('ce-block'), mine.map((b) => h('option', { value: b.key, disabled: !classes[b.key].teacher }, `${classes[b.key].name} (${b.label})${classes[b.key].teacher ? '' : ' – add the teacher first'}`)));
+  const noTeacher = mine.filter((b) => !classes[b.key].teacher);
+  $('ce-teacher-note').hidden = !noTeacher.length;
+  add($('ce-teacher-note'), 'To add things for a class, its teacher must be on ', h('a', { href: 'schedule.html' }, 'My Schedule'), '.');
+  const firstOk = mine.find((b) => classes[b.key].teacher);
+  if (firstOk) $('ce-block').value = firstOk.key;
   fill($('st-block'), mine.map((b) => h('option', { value: b.key }, `${classes[b.key].name} (${b.label})`)));
   $('study-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -146,5 +192,7 @@
   $('st-date').min = today;
   $('st-date').value = today;
   $('tk-due').value = MHSCalendar.nextSchoolDay(info.calendar, today) || '';
-  await Promise.all([loadTasks(), mine.length ? loadSessions() : null]);
+  $('ce-due').min = today;
+  $('ce-due').value = MHSCalendar.nextSchoolDay(info.calendar, today) || '';
+  await Promise.all([loadTasks(), mine.length ? loadSessions() : null, mine.length ? loadClassItems() : null]);
 })();

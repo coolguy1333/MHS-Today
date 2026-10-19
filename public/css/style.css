@@ -538,3 +538,16 @@ a.stat:hover { border-color: var(--primary); }
 fieldset.plain { border: 0; padding: 0; margin: 0; }
 .report-summary { margin: 6px 0; padding: 8px 10px; background: var(--bg); border-radius: 8px; }
 .report-reasons { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+
+/* ---- class events ---- */
+.badge.kind-test { background: #fde2e1; color: #8a1c14; }
+.badge.kind-quiz { background: #fdf3c4; color: #5c4a00; }
+.badge.kind-assignment { background: #dbe4ff; color: #183890; }
+.badge.kind-project { background: #dcf3e4; color: #13562f; }
+@media (prefers-color-scheme: dark) {
+  .badge.kind-test { background: #4d1d1a; color: #ffc1bb; }
+  .badge.kind-quiz { background: #4a3f0e; color: #fde58a; }
+  .badge.kind-assignment { background: #22345f; color: #c9d6ff; }
+  .badge.kind-project { background: #173d27; color: #a6e7bf; }
+}
+.due-line { font-size: 0.82rem; margin-top: 2px; }

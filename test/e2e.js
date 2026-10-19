@@ -241,14 +241,22 @@ const step = (m) => console.log('•', m);
   await sp.screenshot({ path: path.join(SHOTS, 'dashboard-weeks.png'), fullPage: true });
   step('day navigation skips the break; special schedule shown; advisory row; two-week calendar opens a day; back to today works');
 
-  // ---------------------------------------------------------------- assignments: "coming soon" (GOOGLE_TASKS is off by default)
-  assert.equal(await sp.locator('#tasks-card').isHidden(), true, 'no "Due soon" card while assignments are coming soon');
-  await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#soon-card:not([hidden])');
+  // ---------------------------------------------------------------- assignments: classmates' tests; Google Tasks "coming soon"
+  await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#class-card:not([hidden])');
   assert.match(await text(sp, '#soon-card'), /Coming soon/);
   assert.equal(await sp.locator('#connect-card').isHidden(), true);
+  await sp.click('#class-add summary');
+  await sp.selectOption('#ce-block', 'pink'); await sp.selectOption('#ce-kind', 'quiz');
+  await sp.fill('#ce-title', 'Moles quiz'); await sp.fill('#ce-due', '2026-10-02');
+  await sp.click('#class-form button[type=submit]');
+  await sp.waitForSelector('#class-items .list-row:has-text("Moles quiz")');
+  assert.match(await text(sp, '#class-items'), /Quiz[\s\S]*Moles quiz[\s\S]*Chemistry · Due tomorrow/);
   assert.equal(await sp.locator('#study-card').isVisible(), true, 'study sessions still work');
   await sp.screenshot({ path: path.join(SHOTS, 'assignments.png'), fullPage: true });
-  step('assignments: "coming soon" card; study sessions still there; no Due soon card on Today');
+  await sp.goto(base + '/index.html'); await sp.waitForSelector('#tasks-preview .list-row');
+  assert.match(await text(sp, '#tasks-preview'), /Quiz[\s\S]*Moles quiz[\s\S]*Due tomorrow · Chemistry/);
+  assert.match(await text(sp, '#schedule-body tr[data-hour="3"]'), /Chemistry[\s\S]*Quiz Moles quiz · tomorrow/);
+  step('assignments: a classmate quiz added for Chemistry shows on Assignments, Due soon and next to the class; Google Tasks "coming soon"');
 
   // ---------------------------------------------------------------- friends (Ben on a phone-sized screen)
   await sp.goto(base + '/friends.html'); await sp.waitForSelector('#my-code:not(:text("…"))');

@@ -1,7 +1,7 @@
 'use strict';
 // Push notifications and reminders. People turn notifications on per device (on iPhone, the site
 // has to be added to the home screen first) and choose which kinds they get:
-//   classwork  the evening before something in their Google Tasks is due
+//   classwork  the evening before a test or assignment is due (class events, and Google Tasks when on)
 //   events     an hour before an event they made, signed up for or were invited to, or a study session they're going to
 //   groups     announcements in their groups
 // The server's VAPID keys are made on first start and kept in db.json.
@@ -85,22 +85,29 @@ module.exports = function push(app) {
     const now = cal.schoolNow(config.tz);
     const t = now.date;
     const tasks = features.find((f) => f.tasksDueOn);
+    const classEvents = features.find((f) => f.classEventsDueOn);
     const study = features.find((f) => f.studySessions);
     const groups = features.find((f) => f.eventsForReminders);
     const jobs = [];
     let changed = false;
 
-    // the evening before: everything due tomorrow in your Google Tasks, in one notification
+    // the evening before: what's due tomorrow (classmates' tests and assignments for your classes,
+    // and your Google Tasks when they're on), in one notification
     // (the "classwork" kind keeps its name so saved notification choices still apply)
-    if (tasks && now.minutes >= EVENING[0] && now.minutes < EVENING[1]) {
+    if (now.minutes >= EVENING[0] && now.minutes < EVENING[1]) {
       const tomorrow = cal.addDays(t, 1);
       for (const u of Object.values(state.users)) {
-        if (!subsOf(u).length || !prefsOf(u).classwork || !tasks.connected(u) || !once(`cw:${t}:${u.id}`, 3)) continue;
+        if (!subsOf(u).length || !prefsOf(u).classwork) continue;
+        const fromClass = classEvents ? classEvents.classEventsDueOn(u, tomorrow) : [];
+        const withTasks = !!tasks && tasks.enabled && tasks.connected(u);
+        if ((!fromClass.length && !withTasks) || !once(`cw:${t}:${u.id}`, 3)) continue;
         changed = true;
-        jobs.push(tasks.tasksDueOn(u, tomorrow).then((due) => (due.length ? notify([u.id], 'classwork', {
-          title: due.length === 1 ? `Due tomorrow: ${due[0].title}` : `${due.length} things due tomorrow`,
-          body: due.map((i) => i.title).join('\n'), url: '/classwork.html'
-        }) : null)));
+        jobs.push((withTasks ? tasks.tasksDueOn(u, tomorrow) : Promise.resolve([])).then((mine) => {
+          const due = [...fromClass, ...mine.map((i) => i.title)];
+          return due.length ? notify([u.id], 'classwork', {
+            title: due.length === 1 ? `Due tomorrow: ${due[0]}` : `${due.length} things due tomorrow`, body: due.join('\n'), url: '/classwork.html'
+          }) : null;
+        }));
       }
     }
     // an hour before: events you made, signed up for or were invited to, and study sessions you're going to

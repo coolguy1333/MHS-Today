@@ -489,7 +489,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const calendarFeed = require('./icalendar')(shared);
   const tasks = require('./tasks')(shared);
   feedbackFeature = require('./feedback')(shared);
-  features.push(reports, require('./study')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, calendarFeed);
+  features.push(reports, require('./study')(shared), require('./classevents')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, calendarFeed);
   push = require('./push')(shared);
   features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();

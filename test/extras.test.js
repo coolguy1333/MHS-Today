@@ -389,6 +389,32 @@ test('push: evening reminders from Google Tasks and an hour-before reminders, ea
   }
 });
 
+test('push: the evening reminder lists classmates\' tests for your classes (Google Tasks off)', async () => {
+  const phone = fakeDevice();
+  const svc = fakePushService([phone]);
+  const ctx = await startApp({ mock, fetchFn: svc.fetch });
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  const ben = await as(ctx, 2, { given_name: 'Ben' });
+  for (const c of [ann, ben]) await c.put('/api/classes', { yellow: { name: 'Algebra II', teacher: 'Smith' } });
+  await ann.post('/api/push/subscribe', phone.sub);
+  const realNow = Date.now;
+  try {
+    const t = today();
+    await ben.post('/api/classwork', { block: 'yellow', kind: 'quiz', title: 'Unit 3', due: cal.addDays(t, 1) });
+    await ben.post('/api/classwork', { block: 'yellow', kind: 'test', title: 'Later', due: cal.addDays(t, 4) });
+    for (const off of [5, 6]) { // 7:30 pm school time today
+      const ms = Date.parse(`${t}T19:30:00Z`) + off * 3600e3;
+      if (cal.schoolNow('America/Chicago', new Date(ms)).date === t && Math.round(cal.schoolNow('America/Chicago', new Date(ms)).minutes) === 19 * 60 + 30) Date.now = () => ms;
+    }
+    await ctx.app.runReminders();
+    assert.deepEqual(svc.got.map((g) => [g.msg.title, g.msg.body]), [['Due tomorrow: Quiz: Unit 3 (Algebra II)', 'Quiz: Unit 3 (Algebra II)']]);
+    await ctx.app.runReminders();
+    assert.equal(svc.got.length, 1, 'once');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 test('word filter: harmless look-alikes pass, disguised admin words are caught', () => {
   const f = createFilter(() => ['h8er', 'B00B']);
   for (const ok of ['Shiitake mushrooms', 'a niggling doubt', 'assessment', 'Scunthorpe', 'hater']) assert.equal(f.find(ok), null, ok);
