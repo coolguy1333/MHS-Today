@@ -32,7 +32,7 @@ const MAX_POLLS = 50;
 module.exports = function groups(app) {
   const {
     route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
-    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, notify
+    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, notify, reports
   } = app;
   if (!Array.isArray(state.groups)) state.groups = [];
   const isId = (v) => typeof v === 'string' && /^[0-9a-f]{16}$/.test(v);
@@ -214,18 +214,23 @@ module.exports = function groups(app) {
     return g;
   };
   const canRemove = (g, user, authorId) => authorId === user.id || canManage(g, user);
+  // Reported things (three reports) are hidden from everyone but their author and admins.
+  const shows = (kind, x, user) => reports.visible(kind, x.id, x.by, user);
   function boardView(g, user) {
     return {
-      posts: g.posts.slice().sort((a, b) => (b.announcement - a.announcement) || b.created - a.created).map((p) => ({
+      posts: g.posts.filter((p) => shows('post', p, user)).sort((a, b) => (b.announcement - a.announcement) || b.created - a.created).map((p) => ({
         id: p.id, text: p.text, announcement: p.announcement, created: p.created, by: card(p.by), canDelete: canRemove(g, user, p.by),
-        replies: p.replies.map((r) => ({ id: r.id, text: r.text, created: r.created, by: card(r.by), canDelete: canRemove(g, user, r.by) }))
+        mine: p.by === user.id, hidden: reports.hidden('post', p.id),
+        replies: p.replies.filter((r) => shows('reply', r, user)).map((r) => ({
+          id: r.id, text: r.text, created: r.created, by: card(r.by), canDelete: canRemove(g, user, r.by), mine: r.by === user.id, hidden: reports.hidden('reply', r.id)
+        }))
       })),
-      polls: g.polls.slice().sort((a, b) => b.created - a.created).map((p) => {
+      polls: g.polls.filter((p) => shows('poll', p, user)).sort((a, b) => b.created - a.created).map((p) => {
         const counts = p.options.map(() => 0);
         for (const v of Object.values(p.votes)) if (counts[v] !== undefined) counts[v]++;
         return {
           id: p.id, question: p.question, options: p.options, counts, closed: p.closed, created: p.created, by: card(p.by),
-          myVote: hasOwn(p.votes, user.id) ? p.votes[user.id] : null, canManage: canManage(g, user)
+          myVote: hasOwn(p.votes, user.id) ? p.votes[user.id] : null, canManage: canManage(g, user), mine: p.by === user.id, hidden: reports.hidden('poll', p.id)
         };
       })
     };
@@ -389,7 +394,7 @@ module.exports = function groups(app) {
       description: e.description, visibility: e.visibility,
       group: g ? { id: g.id, name: g.name } : null,
       by: user ? (author ? author.name : 'Former student') : undefined,
-      mine: canEdit(e, user),
+      mine: canEdit(e, user), own: !!user && e.by === user.id, hidden: reports.hidden('event', e.id),
       invitees: org && e.visibility === 'private' ? e.invitees.map(getUser).filter(Boolean).map(publicCard) : undefined,
       signup: e.signup ? {
         limit: e.signup.limit, count: e.signup.people.length, me: !!user && e.signup.people.includes(user.id),
@@ -402,7 +407,7 @@ module.exports = function groups(app) {
   route('GET', '/api/events', { auth: 'none' }, ({ user, url }) => {
     const only = url.searchParams.get('group');
     return state.events
-      .filter((e) => canSee(e, user) && (!only || e.groupId === only))
+      .filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && (!only || e.groupId === only))
       .sort(byDateTime).map((e) => eventView(e, user));
   });
 
@@ -464,17 +469,60 @@ module.exports = function groups(app) {
     return eventView(e, user);
   });
 
+  // ---------- what can be reported ----------
+  const groupLink = (g) => `/group.html?id=${g.id}`;
+  const onBoard = (ref, user) => { // the group, if `user` can see its board
+    const g = isId(ref.group) ? findGroup(ref.group) : null;
+    return g && (roleIn(g, user) || isAdmin(user)) ? g : null;
+  };
+  reports.register('event', {
+    locate(ref, user) {
+      const e = state.events.find((x) => x.id === ref.id);
+      return e && canSee(e, user) ? { id: e.id, ref: { id: e.id }, author: e.by, summary: [e.title, e.location, e.description].filter(Boolean).join(' · '), link: '/events.html' } : null;
+    },
+    remove(ref) { state.events = state.events.filter((e) => e.id !== ref.id); },
+    exists: (ref) => state.events.some((e) => e.id === ref.id)
+  });
+  reports.register('post', {
+    locate(ref, user) {
+      const g = onBoard(ref, user);
+      const p = g && g.posts.find((x) => x.id === ref.id);
+      return p ? { id: p.id, ref: { group: g.id, id: p.id }, author: p.by, summary: `${g.name}: ${p.text}`, link: groupLink(g) } : null;
+    },
+    remove(ref) { const g = findGroup(ref.group); if (g) g.posts = g.posts.filter((p) => p.id !== ref.id); },
+    exists: (ref) => { const g = findGroup(ref.group); return !!g && g.posts.some((p) => p.id === ref.id); }
+  });
+  const replyAt = (g, ref) => { const p = g && g.posts.find((x) => x.id === ref.post); return p ? [p, p.replies.find((r) => r.id === ref.id)] : [null, null]; };
+  reports.register('reply', {
+    locate(ref, user) {
+      const g = onBoard(ref, user);
+      const [, r] = replyAt(g, ref);
+      return r ? { id: r.id, ref: { group: g.id, post: ref.post, id: r.id }, author: r.by, summary: `${g.name} (reply): ${r.text}`, link: groupLink(g) } : null;
+    },
+    remove(ref) { const [p] = replyAt(findGroup(ref.group), ref); if (p) p.replies = p.replies.filter((r) => r.id !== ref.id); },
+    exists: (ref) => !!replyAt(findGroup(ref.group), ref)[1]
+  });
+  reports.register('poll', {
+    locate(ref, user) {
+      const g = onBoard(ref, user);
+      const p = g && g.polls.find((x) => x.id === ref.id);
+      return p ? { id: p.id, ref: { group: g.id, id: p.id }, author: p.by, summary: `${g.name} (poll): ${p.question} – ${p.options.join(' / ')}`, link: groupLink(g) } : null;
+    },
+    remove(ref) { const g = findGroup(ref.group); if (g) g.polls = g.polls.filter((p) => p.id !== ref.id); },
+    exists: (ref) => { const g = findGroup(ref.group); return !!g && g.polls.some((p) => p.id === ref.id); }
+  });
+
   // ---------- backup, cleanup ----------
   // Events for someone's calendar feed: theirs, ones they signed up for or were invited to, and their groups'.
   const mineForCalendar = (e, user) => e.by === user.id || e.invitees.includes(user.id) || (e.signup && e.signup.people.includes(user.id))
     || (e.groupId && !!findGroup(e.groupId) && !!roleIn(findGroup(e.groupId), user));
   return {
     // timed events and who to remind: the author, people signed up, people invited
-    eventsForReminders: () => state.events.filter((e) => e.time).map((e) => ({
+    eventsForReminders: () => state.events.filter((e) => e.time && !reports.hidden('event', e.id)).map((e) => ({
       id: e.id, date: e.date, time: e.time, title: e.title,
       people: [...new Set([e.by, ...e.invitees, ...(e.signup ? e.signup.people : [])].filter(Boolean))]
     })),
-    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && mineForCalendar(e, user)).map((e) => {
+    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && mineForCalendar(e, user)).map((e) => {
       const g = e.groupId ? findGroup(e.groupId) : null;
       return {
         uid: `ev-${e.id}`, date: e.date, time: e.time || null, endDate: e.endDate, endTime: e.endTime, title: e.title, location: e.location,

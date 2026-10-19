@@ -532,3 +532,9 @@ a.stat:hover { border-color: var(--primary); }
 .audit-detail { max-width: 360px; overflow-wrap: anywhere; }
 .audit-table .mono { font-size: 0.8em; }
 .reply-form { margin-top: 10px; }
+
+/* ---- reporting ---- */
+.report-btn { color: var(--muted); font-size: 0.85em; }
+fieldset.plain { border: 0; padding: 0; margin: 0; }
+.report-summary { margin: 6px 0; padding: 8px 10px; background: var(--bg); border-radius: 8px; }
+.report-reasons { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }

@@ -187,6 +187,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     return 'Student';
   }
   // Fields added after the first release get their defaults (old db.json files, backups).
+  // What a reset profile goes back to: Google first name and last initial, nothing else.
+  const resetFields = (u) => ({ name: nameFrom(u.givenName, u.familyName), grade: null, bio: '', pronouns: '', interests: [], avatar: avatars.clean(null) });
   // Everyone agrees to the Privacy & Terms page before using the site; a new version asks again.
   // Change TERMS_VERSION (and the date on public/terms.html) whenever that page changes.
   const TERMS_VERSION = '2026-10-19';
@@ -472,10 +474,22 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     notify: (...a) => (push ? push.notify(...a) : undefined)
   };
   let push = null;
+  // reports first: the other features register what can be reported
+  const reports = require('./reports')(shared);
+  shared.reports = reports;
+  reports.register('profile', {
+    hide: false, // a reported profile stays up; an admin can reset it
+    locate(ref, user) {
+      const t = typeof ref.id === 'string' ? getUser(ref.id) : null;
+      return t ? { id: t.id, ref: { id: t.id }, author: t.id, summary: [t.name, t.pronouns, t.bio, t.interests.join(', ')].filter(Boolean).join(' · '), link: '' } : null;
+    },
+    remove(ref) { const t = getUser(ref.id); if (t) { Object.assign(t, resetFields(t)); db.save(); } },
+    exists: (ref) => !!getUser(ref.id)
+  });
   const calendarFeed = require('./icalendar')(shared);
   const tasks = require('./tasks')(shared);
   feedbackFeature = require('./feedback')(shared);
-  features.push(require('./study')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, calendarFeed);
+  features.push(reports, require('./study')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, calendarFeed);
   push = require('./push')(shared);
   features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();
@@ -719,9 +733,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (isOwner(target)) throw bad('This person is an owner (in ADMIN_EMAILS); change that setting to remove them');
       if (target.id === user.id) throw bad("You can't change your own admin role");
     }
-    const fields = body.reset
-      ? { name: nameFrom(target.givenName, target.familyName), grade: null, bio: '', pronouns: '', interests: [], avatar: avatars.clean(null) }
-      : cleanProfileFields(body);
+    const fields = body.reset ? resetFields(target) : cleanProfileFields(body);
     const changed = [...Object.keys(fields), ...['verified', 'profileLocked', 'admin'].filter((k) => body[k] !== undefined)];
     if (!changed.length) throw bad('Nothing to change');
     Object.assign(target, fields);

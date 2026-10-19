@@ -350,6 +350,38 @@ function friendNowText(friend, live) {
 }
 // One event in a list: when, who can see it, its group, the sign-up list, and delete for organizers.
 // `reload` runs after a change.
+// ---- reporting something someone else posted ----
+const REPORT_REASONS = [['mean', 'Mean or bullying'], ['inappropriate', 'Inappropriate'], ['spam', 'Spam or nonsense'], ['private', "Shares someone's private info"], ['other', 'Something else']];
+// A small "Report" button; `what` names it for screen readers ("Pep rally", "Sam's post").
+function reportButton(kind, ref, what) {
+  return h('button', { class: 'linklike report-btn', type: 'button', 'aria-label': `Report ${what}`, onclick: () => openReport(kind, ref, what) }, 'Report');
+}
+function openReport(kind, ref, what) {
+  const note = h('input', { type: 'text', maxlength: '300', placeholder: 'What happened? (optional)' });
+  const dlg = h('dialog', { class: 'dialog', 'aria-labelledby': 'report-title' });
+  const form = h('form', { class: 'stack' },
+    h('div', { class: 'dialog-head' }, h('h2', { id: 'report-title' }, 'Report this?'),
+      h('button', { class: 'linklike', type: 'button', 'aria-label': 'Close', onclick: () => dlg.close() }, '×')),
+    h('p', { class: 'small muted' }, `Admins will look at ${what}. They won't tell anyone who reported it.`),
+    h('fieldset', { class: 'stack plain' }, h('legend', { class: 'field-label' }, "What's wrong?"),
+      REPORT_REASONS.map(([v, label], i) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'reason', value: v, checked: i === 0 }), h('span', null, label)))),
+    h('label', null, h('span', null, 'Anything else'), note),
+    h('div', { class: 'row' }, h('button', { class: 'btn danger', type: 'submit' }, 'Report'), h('button', { class: 'btn secondary', type: 'button', onclick: () => dlg.close() }, 'Cancel')));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      const r = await api('POST', '/api/reports', { kind, ref, reason: form.querySelector('input[name=reason]:checked').value, note: note.value });
+      dlg.close();
+      toast(r.already ? 'You already reported this. Admins will take a look.' : 'Thanks for telling us. Admins will take a look.');
+    });
+  });
+  add(dlg, form);
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+}
+const hiddenBadge = (x) => (x.hidden ? h('span', { class: 'badge urgent', title: 'Hidden because people reported it; an admin will check it' }, 'Hidden (reported)') : null);
+
 // ---- events ----
 const EVENT_CATEGORIES = { school: 'School', sports: 'Sports', clubs: 'Clubs', community: 'Community', holidays: 'Holidays' };
 const eventEnd = (e) => e.endDate || e.date; // multi-day events end on endDate
@@ -379,6 +411,7 @@ function eventRow(e, today, reload) {
     h('div', null,
       h('strong', null, e.title),
       EVENT_CATEGORIES[e.category] ? [' ', h('span', { class: `badge cat cat-${e.category}` }, EVENT_CATEGORIES[e.category])] : null,
+      e.hidden ? [' ', hiddenBadge(e)] : null,
       VIS[e.visibility] ? [' ', h('span', { class: 'badge vis' }, VIS[e.visibility])] : null,
       h('div', { class: 'small muted' },
         fmtEventWhen(e, today),
@@ -388,6 +421,7 @@ function eventRow(e, today, reload) {
       e.description ? h('div', { class: 'small' }, e.description) : null,
       e.invitees && e.invitees.length ? h('div', { class: 'small muted' }, `Invited: ${e.invitees.map((p) => p.name).join(', ')}`) : null,
       signupLine),
+    e.by !== undefined && !e.own ? reportButton('event', { id: e.id }, `"${e.title}"`) : null,
     e.mine ? h('button', {
       class: 'linklike danger', type: 'button', 'aria-label': `Delete ${e.title}`,
       onclick: (ev) => busy(ev.currentTarget, async () => {

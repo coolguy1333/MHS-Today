@@ -24,6 +24,7 @@
     <div id="admin-body" hidden>
       <div class="tabs" role="tablist" aria-label="Admin sections" id="tabs">
         <button type="button" role="tab" data-tab="overview">Overview <span class="count" id="count-overview" hidden></span></button>
+        <button type="button" role="tab" data-tab="review">Review <span class="count" id="count-review" hidden></span></button>
         <button type="button" role="tab" data-tab="calendar">Calendar</button>
         <button type="button" role="tab" data-tab="people">People</button>
         <button type="button" role="tab" data-tab="notices">Announcements</button>
@@ -47,6 +48,23 @@
         <details class="card">
           <summary>Site settings</summary>
           <ul class="checklist" id="setup"></ul>
+        </details>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" id="tab-review" aria-label="Review" hidden>
+        <div class="card" id="photo-card" hidden>
+          <h2>Profile photos to approve</h2>
+          <p class="small muted">Nobody else sees a photo until it's approved. Approve only clear, school-appropriate photos of the person.</p>
+          <div class="photo-queue" id="photo-queue"></div>
+        </div>
+        <div class="card">
+          <h2>Reported</h2>
+          <p class="small muted">Three reports hide something until you decide. Keep it to show it again, or remove it. (A reported profile isn't hidden; remove resets it.)</p>
+          <div id="report-list"><p class="muted small">Loading…</p></div>
+        </div>
+        <details class="card" id="report-done-card" hidden>
+          <summary>Recently handled</summary>
+          <div id="report-done"></div>
         </details>
       </section>
 

@@ -91,7 +91,7 @@
     const b = blockInfo(s.block);
     return h('div', { class: 'list-row' },
       h('div', null,
-        h('strong', null, s.title),
+        h('strong', null, s.title), s.hidden ? [' ', hiddenBadge(s)] : null,
         h('div', { class: 'small' }, colorDot(b && b.color), s.className, ' · ', fmtRelativeDay(s.date, today),
           s.time ? ` · ${MHSBell.formatTime(s.time)}` : '', s.place ? ` · ${s.place}` : ''),
         s.notes ? h('div', { class: 'small' }, s.notes) : null,
@@ -104,7 +104,8 @@
         s.canDelete ? h('button', {
           class: 'linklike danger', type: 'button', 'aria-label': `Delete ${s.title}`,
           onclick: (e) => { if (confirm(`Delete "${s.title}"?`)) busy(e.currentTarget, async () => { await api('DELETE', `/api/study/${s.id}`); await loadSessions(); }); }
-        }, 'Delete') : null));
+        }, 'Delete') : null,
+        s.mine ? null : reportButton('study', { id: s.id }, `the study session "${s.title}"`)));
   }
   async function loadSessions() {
     try {

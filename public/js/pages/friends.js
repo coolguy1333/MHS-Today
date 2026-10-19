@@ -57,10 +57,12 @@
             lunch ? h('div', { class: 'small' + (lunch.same ? '' : ' muted') }, `Today: ${lunch.text}`) : null),
           h('div', { class: 'friend-actions' },
             h('label', { class: 'small muted' }, 'They can see', level),
-            h('button', {
-              class: 'linklike danger', type: 'button', 'aria-label': `Remove ${f.name}`,
-              onclick: (e) => { if (confirm(`Remove ${f.name} from your friends?`)) act(e, () => api('DELETE', `/api/friends/${f.id}`), `${f.name} removed`); }
-            }, 'Remove')));
+            h('div', { class: 'row small' },
+              reportButton('profile', { id: f.id }, `${f.name}'s profile`),
+              h('button', {
+                class: 'linklike danger', type: 'button', 'aria-label': `Remove ${f.name}`,
+                onclick: (e) => { if (confirm(`Remove ${f.name} from your friends?`)) act(e, () => api('DELETE', `/api/friends/${f.id}`), `${f.name} removed`); }
+              }, 'Remove'))));
       })
       : h('p', { class: 'muted' }, "No friends yet. Search for someone's name, or share your code."));
   }

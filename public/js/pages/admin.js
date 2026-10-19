@@ -123,6 +123,7 @@
       stat(status.groups, status.groups === 1 ? 'group' : 'groups', 'groups.html'),
       stat(status.feedbackNew || 0, 'new feedback', '#feedback'));
     setCount('count-feedback', status.feedbackNew || 0);
+    setCount('count-review', (status.reportsOpen || 0) + (status.photosPending || 0));
   }
   async function renderQueue() {
     const [groups, ideas] = await Promise.all([api('GET', '/api/groups'), api('GET', '/api/admin/tool-suggestions')]);
@@ -141,6 +142,10 @@
         h('div', { class: 'row nowrap' },
           h('button', { class: 'btn small', type: 'button', onclick: act(() => api('POST', `/api/admin/tool-suggestions/${t.id}/accept`, {}), 'Added to Tools') }, 'Add to tools'),
           h('button', { class: 'linklike danger', type: 'button', onclick: act(() => api('DELETE', `/api/admin/tool-suggestions/${t.id}`), 'Dismissed') }, 'Dismiss')))),
+      status.reportsOpen ? h('div', { class: 'list-row' }, h('div', null, h('span', { class: 'badge urgent' }, 'Reported'), ` ${plural(status.reportsOpen, 'thing')} to review`),
+        h('button', { class: 'btn small', type: 'button', onclick: () => openTab('review') }, 'Review')) : null,
+      status.photosPending ? h('div', { class: 'list-row' }, h('div', null, h('span', { class: 'badge vis' }, 'Photos'), ` ${plural(status.photosPending, 'profile photo')} to approve`),
+        h('button', { class: 'btn small', type: 'button', onclick: () => openTab('review') }, 'Review')) : null,
       status.feedbackNew ? h('div', { class: 'list-row' }, h('div', null, h('span', { class: 'badge vis' }, 'Feedback'), ` ${plural(status.feedbackNew, 'new message')}`),
         h('button', { class: 'btn small', type: 'button', onclick: () => openTab('feedback') }, 'Read')) : null
     ].filter(Boolean);
@@ -149,6 +154,37 @@
   }
   async function reloadStatus() { status = await api('GET', '/api/admin/status'); renderSetup(); }
   loaders.overview = async () => { await reloadStatus(); await renderQueue(); };
+
+  // ======================================================================= Review: reports (and photos)
+  const KIND_NAMES = { event: 'Event', post: 'Group post', reply: 'Group reply', poll: 'Poll', study: 'Study session', classwork: 'Class event', profile: 'Profile' };
+  const REASON_NAMES = Object.fromEntries(REPORT_REASONS);
+  function reportItem(r, open) {
+    const reasons = r.reports.map((x) => `${REASON_NAMES[x.reason] || x.reason}${x.note ? `: "${x.note}"` : ''} (${x.by})`);
+    const act = (path, message) => (e) => busy(e.currentTarget, async () => { await api('POST', `/api/admin/reports/${r.id}/${path}`, {}); toast(message); await loadReview(); await reloadStatus(); });
+    return h('div', { class: 'list-row report-item' },
+      h('div', { class: 'grow' },
+        h('div', null, h('span', { class: 'badge vis' }, KIND_NAMES[r.kind] || r.kind), ' ', r.hidden ? h('span', { class: 'badge urgent' }, 'hidden') : null,
+          ' ', h('strong', null, plural(r.reports.length, 'report'))),
+        h('p', { class: 'pre report-summary' }, r.summary),
+        h('div', { class: 'small muted' }, r.author ? `By ${r.author.name} (${r.author.email})` : 'By a former student', r.link ? [' · ', h('a', { href: r.link }, 'Open')] : null),
+        h('ul', { class: 'small report-reasons' }, reasons.map((x) => h('li', null, x))),
+        r.resolved ? h('div', { class: 'small muted' }, `${r.resolved.action === 'kept' ? 'Kept' : 'Removed'} ${fmtWhen(r.resolved.at)}`) : null),
+      open ? h('div', { class: 'row nowrap' },
+        h('button', { class: 'btn small secondary', type: 'button', onclick: act('keep', 'Kept') }, 'Keep'),
+        h('button', {
+          class: 'btn small danger', type: 'button',
+          onclick: (e) => { if (confirm(r.kind === 'profile' ? 'Reset this profile (name, avatar, bio…)?' : 'Remove it for good?')) act('remove', r.kind === 'profile' ? 'Profile reset' : 'Removed')(e); }
+        }, r.kind === 'profile' ? 'Reset profile' : 'Remove')) : null);
+  }
+  async function loadReview() {
+    const q = await api('GET', '/api/admin/reports');
+    fill($('report-list'), q.open.length ? q.open.map((r) => reportItem(r, true)) : h('p', { class: 'muted small' }, 'Nothing reported. 🎉'));
+    $('report-done-card').hidden = !q.done.length;
+    fill($('report-done'), q.done.map((r) => reportItem(r, false)));
+    if (loadPhotos) await loadPhotos();
+  }
+  let loadPhotos = null; // set up with profile photos below
+  loaders.review = async () => { await reloadStatus(); await loadReview(); };
 
   // ======================================================================= Calendar
   async function saveCalendar(next, message) {
