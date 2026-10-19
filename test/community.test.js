@@ -143,7 +143,7 @@ test('suggestions: friends of friends and classmates, ranked; respects search op
   let s = await list();
   assert.deepEqual(s.map((x) => x.name), ['Dee T.', 'Eve T.', 'Fay T.']);
   assert.deepEqual(s.map((x) => [x.mutual, x.sharedClasses]), [[2, 0], [1, 0], [0, 1]]);
-  assert.deepEqual(Object.keys(s[0]).sort(), ['avatar', 'grade', 'id', 'mutual', 'name', 'sharedClasses']);
+  assert.deepEqual(Object.keys(s[0]).sort(), ['avatar', 'grade', 'id', 'mutual', 'name', 'photo', 'sharedClasses']);
   assert.ok(!JSON.stringify(s).includes('Algebra'), 'never says which class');
 
   // a pending request removes them from suggestions; hiding works and is per person

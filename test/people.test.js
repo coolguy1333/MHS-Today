@@ -42,7 +42,7 @@ test('search: by first or last name, partial and in any order, accents ignored; 
   assert.deepEqual(await search(me, 'zzz'), []);
 
   const r = (await me.post('/api/friends/search', { q: 'joseph smith' })).data;
-  assert.deepEqual(Object.keys(r.results[0]).sort(), ['avatar', 'grade', 'id', 'name', 'status']);
+  assert.deepEqual(Object.keys(r.results[0]).sort(), ['avatar', 'grade', 'id', 'name', 'photo', 'status']);
   const text = JSON.stringify(r);
   assert.ok(!text.includes('Smith') && !text.includes('@'), 'no full last name or email');
 
