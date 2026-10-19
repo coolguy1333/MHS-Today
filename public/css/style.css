@@ -308,3 +308,20 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 @media (max-width: 560px) { .weekday-grid { grid-template-columns: repeat(2, 1fr); } }
 .table-wrap { overflow-x: auto; }
 code { background: var(--bg); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+
+/* ---- two weeks at a glance (Today) ---- */
+.weeks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.wk-day {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 8px 2px;
+  border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text); font: inherit; text-align: center;
+}
+button.wk-day { cursor: pointer; }
+button.wk-day:hover { border-color: var(--link); }
+.wk-date { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+.wk-letter { font-size: 1.25rem; line-height: 1.2; }
+.wk-note { font-size: 0.7rem; color: var(--muted); min-height: 1em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-day.off { background: var(--bg); }
+.wk-day.off .wk-letter { color: var(--muted); }
+.wk-day.past { opacity: 0.55; }
+.wk-day.today { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.wk-day.viewing { background: var(--current); }

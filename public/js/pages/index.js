@@ -114,6 +114,37 @@
     }
   }
 
+  // Two weeks at a glance, Monday to Friday: this week and next (next two on a weekend).
+  // A school day opens its schedule above.
+  const SHORT_TYPES = { advisory: 'Advisory', early_release: 'Early rel.' };
+  const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  function renderWeeks(m) {
+    const today = m.now.date;
+    const wd = dayInfo(m.cal, today).weekday;
+    const monday = MHSCalendar.addDays(today, wd === 0 ? 1 : wd === 6 ? 2 : 1 - wd);
+    const cells = [];
+    for (let i = 0; i < 14; i++) {
+      if (i % 7 > 4) continue;
+      const d = MHSCalendar.addDays(monday, i);
+      const v = dayInfo(m.cal, d);
+      const note = v.schoolDay ? SHORT_TYPES[v.scheduleType] || '' : v.label || 'No school';
+      const cls = ['wk-day', v.schoolDay ? null : 'off', d < today ? 'past' : null, d === today ? 'today' : null, d === m.viewDate ? 'viewing' : null].filter(Boolean).join(' ');
+      const body = [
+        h('span', { class: 'wk-date' }, `${WEEKDAYS[i % 7]} ${Number(d.slice(5, 7))}/${Number(d.slice(8))}`),
+        h('strong', { class: 'wk-letter' }, v.schoolDay ? v.dayLetter || '?' : '–'),
+        h('span', { class: 'wk-note' }, note)
+      ];
+      cells.push(v.schoolDay
+        ? h('button', {
+          type: 'button', class: cls, 'aria-current': d === m.viewDate ? 'date' : null,
+          'aria-label': `${fmtLongDay(d)}: Day ${v.dayLetter || 'unknown'}${note ? `, ${SCHEDULE_NAMES[v.scheduleType]}` : ''}${d === today ? ' (today)' : ''}`,
+          onclick: () => { go(d); $('day-head').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        }, body)
+        : h('div', { class: cls }, body));
+    }
+    fill($('weeks'), cells);
+  }
+
   // The "now" card and the highlighted row. Runs every few seconds and never rebuilds anything focusable.
   function updateLive(m) {
     const card = $('status');
@@ -235,6 +266,7 @@
     const m = model();
     renderHead(m);
     renderTable(m);
+    renderWeeks(m);
     updateLive(m);
     renderEvents(m);
     renderFriends();
