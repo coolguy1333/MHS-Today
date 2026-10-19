@@ -62,7 +62,8 @@ test('menu: months are cached, refreshed after an hour, and the last good copy s
   const svc = fakeService({ '2026-10': [entry('2026-10-15', SAMPLE)] });
   const logs = [];
   const menu = createMenu({ district: '2534', menuId: '133305', fetchFn: svc.fetch, now: () => clock, log: (m) => logs.push(m) });
-  assert.equal(menu.pageUrl, 'https://www.myschoolmenus.com/organizations/2534/menus/133305');
+  assert.equal(menu.pageUrl, 'https://www.myschoolmenus.com/organizations/2534/menus/133305', 'no site number: the My School Menus page');
+  assert.equal(createMenu({ district: '2534', menuId: '133305', site: '15466' }).pageUrl, 'https://menus.healthepro.com/organizations/2534/sites/15466/menus/133305');
 
   const d = await menu.day('2026-10-15');
   assert.equal(d.available, true); assert.equal(d.sections.length, 2);
@@ -98,7 +99,7 @@ test('lunch API: anyone can read it, dates are limited, the source link is inclu
   assert.equal(r.status, 200);
   assert.equal(r.data.date, t); assert.equal(r.data.available, true);
   assert.equal(r.data.sections[0].title, "Muk Way Cafe' ($4.00)");
-  assert.equal(r.data.source, 'https://www.myschoolmenus.com/organizations/2534/menus/133305');
+  assert.equal(r.data.source, 'https://menus.healthepro.com/organizations/2534/sites/15466/menus/133305');
   assert.equal((await anon.get(`/api/lunch?date=${t}`)).data.available, true);
   for (const bad of ['2026-02-31', 'tomorrow', cal.addDays(t, 61), cal.addDays(t, -61)]) {
     assert.equal((await anon.get(`/api/lunch?date=${bad}`)).status, 400, bad);

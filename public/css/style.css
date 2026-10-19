@@ -225,11 +225,13 @@ tr.note-row td { padding: 4px 10px; font-size: 0.82rem; color: var(--muted); bor
 .rotation-table td.rot-cell .small { opacity: 0.9; }
 .slot { display: grid; grid-template-columns: 110px 1.6fr 1.2fr 0.6fr 7.5rem; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .slot-hour { font-weight: 600; }
+.slot-head { padding: 0 0 4px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
 .slot-hour .muted { font-weight: 400; }
 @media (max-width: 720px) {
   .slot { grid-template-columns: 1fr 1fr auto; }
   .slot-hour, .slot .name { grid-column: 1 / -1; }
   .slot-hour { display: flex; gap: 8px; align-items: baseline; }
+  .slot-head { display: none; }
 }
 
 /* ---- lunch ---- */
@@ -269,9 +271,11 @@ dialog.profile-card::backdrop { background: rgba(0, 0, 0, 0.5); }
   background: var(--gold); color: var(--on-gold); font-weight: 600; }
 .banner.urgent { background: #c62828; color: #fff; }
 .banner .linklike { color: inherit; font-size: 1.2rem; line-height: 1; text-decoration: none; }
-.countdowns { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-.countdown { border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
-.countdown .big { display: block; font-size: 1.8rem; font-weight: 800; color: var(--primary); }
+.countdowns { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.countdown { display: flex; align-items: baseline; gap: 8px; }
+.countdown .big { font-size: 1.5rem; font-weight: 800; color: var(--primary); }
+#countdown-card { padding: 14px 20px; }
+#countdown-card h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
 
 /* ---- classwork, groups, events ---- */
 .badge.vis { background: var(--border); color: var(--text); }
@@ -395,3 +399,13 @@ button.wk-day:hover { border-color: var(--link); }
 .jump a { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); text-decoration: none; font-size: 0.9rem; }
 .jump a:hover { border-color: var(--link); }
 html { scroll-padding-top: 12px; }
+
+/* ---- Assignments: add in one line ---- */
+.quick-add { margin-bottom: 12px; }
+.quick-row { display: flex; gap: 8px; }
+.quick-row #tk-title { flex: 1; min-width: 0; }
+.quick-row #tk-due { width: auto; flex: none; }
+.more-opts { margin-top: 6px; }
+.more-opts summary { cursor: pointer; color: var(--muted); }
+.more-opts .form-grid { margin-top: 8px; }
+@media (max-width: 480px) { .quick-row { flex-wrap: wrap; } .quick-row #tk-title { flex-basis: 100%; } .quick-row #tk-due { flex: 1; } }

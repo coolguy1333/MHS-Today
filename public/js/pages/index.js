@@ -66,20 +66,20 @@
     if (p.hour === 'advisory') {
       if (!cls) return h('span', { class: 'muted' }, 'Advisory', S.me ? [' · ', h('a', { class: 'small', href: 'schedule.html#advisory' }, 'Add your advisory')] : null);
       const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes.advisory, cls)).map((f) => f.name);
-      const meta = [cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
       return [
         h('div', null, h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
-        meta.length ? h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))) : null
+        cls.teacher ? h('div', { class: 'small muted' }, cls.teacher) : null,
+        buddies.length ? h('div', { class: 'with' }, `With ${listNames(buddies)}`) : null
       ];
     }
     const block = blockInfo(blockFor(m.view.dayLetter, p.hour));
     if (cls) {
       const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[block.key], cls)).map((f) => f.name);
-      // line 1: the class; line 2: block, teacher and which friends are in it
-      const meta = [block.label, cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
+      // the class; then block and teacher; then which friends are in it
       return [
         h('div', null, colorDot(block.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
-        h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))),
+        h('div', { class: 'small muted' }, [block.label, cls.teacher].filter(Boolean).join(' · ')),
+        buddies.length ? h('div', { class: 'with' }, `With ${listNames(buddies)}`) : null,
         p.hour === LUNCH_HOUR ? lunchLine(m) : null
       ];
     }
@@ -257,8 +257,8 @@
       for (let d = m.now.date; d < c.date && school < 400; d = MHSCalendar.addDays(d, 1)) if (MHSCalendar.dayInfo(m.cal, d).schoolDay) school++;
       return h('div', { class: 'countdown' },
         h('span', { class: 'big' }, days === 0 ? 'Today' : String(days)),
-        h('span', null, days === 0 ? c.title : `day${days === 1 ? '' : 's'} until ${c.title}`),
-        days > 1 ? h('div', { class: 'small muted' }, `${school} school day${school === 1 ? '' : 's'}`) : null);
+        h('span', null, days === 0 ? h('strong', null, c.title) : [`day${days === 1 ? '' : 's'} until `, h('strong', null, c.title)],
+          days > 1 ? h('span', { class: 'small muted' }, ` (${school} school day${school === 1 ? '' : 's'})`) : null));
     }));
   }
 

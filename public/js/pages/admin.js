@@ -307,7 +307,7 @@
         h('div', null, h('span', { class: 'badge vis' }, 'Tool idea'), ' ', h('strong', null, t.name),
           h('div', { class: 'small muted' }, [t.url, t.description, t.by ? `from ${t.by.name}` : null].filter(Boolean).join(' · '))),
         h('div', { class: 'row nowrap' },
-          h('button', { class: 'btn small', type: 'button', onclick: act(async () => toolsEditor.set(await api('POST', `/api/admin/tool-suggestions/${t.id}/accept`, {})), 'Added to Links & tools') }, 'Add to tools'),
+          h('button', { class: 'btn small', type: 'button', onclick: act(async () => toolsEditor.set(await api('POST', `/api/admin/tool-suggestions/${t.id}/accept`, {})), 'Added to the Tools section on Links') }, 'Add to tools'),
           h('button', { class: 'linklike danger', type: 'button', onclick: act(() => api('DELETE', `/api/admin/tool-suggestions/${t.id}`), 'Dismissed') }, 'Dismiss'))))
     ];
     fill($('queue'), rows.length ? rows : h('p', { class: 'muted small' }, 'Nothing waiting. 🎉'));

@@ -32,6 +32,10 @@
       "description": "Optional. My School Menus menu number for the lunch menu. Default: 133305, Mukwonago High School Lunch Menu. Set to off to hide the menu."
     },
     {
+      "name": "MENU_SITE",
+      "description": "Optional. The site number in the menu page's address (menus.healthepro.com/organizations/2534/sites/15466/menus/133305), used for the 'full menu' link. Default: 15466, Mukwonago High School."
+    },
+    {
       "name": "EVENT_POSTING",
       "description": "Who can add events to the shared events board: verified (admins and people an admin verifies on the Admin page), everyone, or admins.",
       "default": "verified",

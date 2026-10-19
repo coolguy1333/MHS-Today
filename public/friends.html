@@ -20,17 +20,15 @@
   <main class="container" id="main">
     <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
     <h1>Friends</h1>
+    <div class="card" id="requests-card" hidden>
+      <h2>Requests</h2>
+      <div id="requests"></div>
+    </div>
+    <div class="card">
+      <h2>Your friends</h2>
+      <div id="friends"><p class="muted">Loading…</p></div>
+    </div>
     <div class="grid grid-even">
-      <div class="card">
-        <h2>Your friend code</h2>
-        <p class="muted small">Share this with people you want as friends. People can also find you by name unless you turn that off on your <a href="account.html">Account</a> page.</p>
-        <p><span class="code-box mono" id="my-code">…</span></p>
-        <div class="row">
-          <button class="btn small" type="button" id="copy-code">Copy code</button>
-          <button class="btn small secondary" type="button" id="copy-link">Copy invite link</button>
-          <button class="btn small secondary" type="button" id="new-code">Get a new code</button>
-        </div>
-      </div>
       <div class="card">
         <h2>Add a friend</h2>
         <form id="search-form" class="stack" role="search">
@@ -48,14 +46,16 @@
         </form>
         <div id="confirm-box" class="notice" hidden></div>
       </div>
-    </div>
-    <div class="card" id="requests-card" hidden>
-      <h2>Requests</h2>
-      <div id="requests"></div>
-    </div>
-    <div class="card">
-      <h2>Your friends</h2>
-      <div id="friends"><p class="muted">Loading…</p></div>
+      <div class="card">
+        <h2>Your friend code</h2>
+        <p class="muted small">Share this with people you want as friends. People can also find you by name unless you turn that off on your <a href="account.html">Account</a> page.</p>
+        <p><span class="code-box mono" id="my-code">…</span></p>
+        <div class="row">
+          <button class="btn small" type="button" id="copy-code">Copy code</button>
+          <button class="btn small secondary" type="button" id="copy-link">Copy invite link</button>
+          <button class="btn small secondary" type="button" id="new-code">Get a new code</button>
+        </div>
+      </div>
     </div>
     <div class="card" id="suggest-card" hidden>
       <h2>People you may know</h2>

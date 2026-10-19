@@ -190,7 +190,7 @@ test('tools: admins manage the list; students suggest, admins accept or dismiss'
   const boss = await owner(ctx);
   const kid = await as(ctx, 1, { given_name: 'Kim' });
   const start = (await ctx.client().get('/api/tools')).data;
-  // the old Tools page now lives on Links & tools
+  // the old Tools page is now the Tools section on Links
   for (const pth of ['/tools', '/tools.html']) {
     const r = await ctx.client().raw('GET', pth);
     assert.equal(r.status, 302); assert.equal(r.headers.get('location'), '/links.html#tools');

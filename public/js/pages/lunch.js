@@ -1,6 +1,7 @@
 // Lunch: the day's menu from the district's menu service, your lunch time, and who shares it.
 (async function () {
   renderNav('lunch');
+  await requireLogin();
   const { dayInfo, nextSchoolDay } = MHSCalendar;
   const { formatTime, lunchFor, lunchTimes } = MHSBell;
   const S = { info: null, me: null, classes: {}, friends: [], viewDate: null };
@@ -54,7 +55,7 @@
     }
     const src = $('menu-source');
     src.hidden = !data.source;
-    if (data.source) fill(src, 'From the district\'s ', h('a', { href: data.source, target: '_blank', rel: 'noopener noreferrer' }, 'My School Menus'), ' page. Prices and items can change.');
+    if (data.source) fill(src, 'From the ', h('a', { href: data.source, target: '_blank', rel: 'noopener noreferrer' }, 'high school lunch menu'), ' (Health-e Pro). Prices and items can change.');
   }
 
   let seq = 0;

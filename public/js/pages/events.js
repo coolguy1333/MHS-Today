@@ -2,6 +2,7 @@
 // to add one: for everyone, for a group you lead, or privately for friends you invite.
 (async function () {
   renderNav('events');
+  await requireLogin();
   let events = [];
   let info = null;
   let me = null;
@@ -83,8 +84,8 @@
 
   try {
     me = (await getMe()).user;
-    if (!me) $('signin-card').hidden = false;
-    else { $('add-card').hidden = false; await setUpForm(); }
+    $('add-card').hidden = false;
+    await setUpForm();
   } catch (e) { /* the list below reports problems */ }
   await load();
   if (info) {

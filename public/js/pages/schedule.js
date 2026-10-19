@@ -47,7 +47,8 @@
     $('save-bar').classList.toggle('dirty', on); // keeps Save in view while there's something to save
   }
 
-  // ---- one row per block, then Advisory
+  // ---- column headings (wide screens; on phones each box keeps its placeholder), one row per block, then Advisory
+  add(panel, h('div', { class: 'slot slot-head', 'aria-hidden': 'true' }, h('span', null, 'Block'), h('span', null, 'Class'), h('span', null, 'Teacher'), h('span', null, 'Room'), h('span', null, 'Lunch')));
   const ADV_ROW = { key: ADVISORY, label: 'Advisory' };
   for (const b of [...BLOCKS, ADV_ROW]) {
     const adv = b === ADV_ROW;

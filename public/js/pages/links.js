@@ -1,7 +1,8 @@
-// Links & tools: the admin-managed tools (a card each; no address = "Coming soon") and important
-// links grouped by category, both in the order admins set, plus a form to suggest a tool.
+// Links: a Tools section (admin-managed; a card each, no address = "Coming soon"), then the
+// important links grouped by category, both in the order admins set, plus a form to suggest a tool.
 (async function () {
   renderNav('links');
+  await requireLogin();
   const host = (url) => new URL(url).hostname.replace(/^www\./, '');
   const card = (title, url, description) => (url
     ? h('a', { class: 'link-card', href: url, target: '_blank', rel: 'noopener noreferrer' },

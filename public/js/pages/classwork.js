@@ -76,9 +76,11 @@
     e.preventDefault();
     busy(e.submitter, async () => {
       await api('POST', '/api/tasks', { title: $('tk-title').value, due: $('tk-due').value || null, notes: $('tk-notes').value, listId: $('tk-list').value || null });
-      $('tk-title').value = ''; $('tk-notes').value = ''; $('tk-due').value = '';
+      $('tk-title').value = ''; $('tk-notes').value = '';
+      $('tk-due').value = MHSCalendar.nextSchoolDay(info.calendar, schoolClock(info).date) || ''; // the usual: due next class day
       toast('Added to Google Tasks');
       await loadTasks();
+      $('tk-title').focus(); // ready for the next one
     });
   });
   $('disconnect-btn').addEventListener('click', (e) => {

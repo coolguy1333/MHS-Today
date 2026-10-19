@@ -14,7 +14,7 @@ src/menu.js          lunch menu from Health-e Pro (My School Menus), cached per 
 src/tasks.js         Assignments: connect Google Tasks, and the server-side Tasks API proxy
 src/study.js         study sessions
 src/groups.js        groups and events (visibility, invitations, sign-up lists)
-src/tools.js         the tools (on Links & tools) and students' tool suggestions
+src/tools.js         the Tools section on Links and students' tool suggestions
 src/notices.js       announcement banners, countdowns, admin-added blocked words
 src/wordfilter.js    the word filter (whole words, common disguises undone)
 public/js/icimport.js  reads a schedule copied from Infinite Campus ("Period Yellow", "Teacher: Last, First", "Lunch: B …") into color blocks, in the browser
