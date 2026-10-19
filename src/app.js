@@ -214,6 +214,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   function upsertUser(claims) {
     const email = claims.email.toLowerCase();
     let user = Object.values(state.users).find((u) => u.sub === claims.sub);
+    if (user && user.archived) throw new AuthError('account archived after graduation', 'archived');
     const isNew = !user;
     const names = googleNames(claims);
     if (!user) {
@@ -254,7 +255,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const photoUrl = (u) => (isPlainObject(u.photo) && u.photo.approved ? `/photos/${u.photo.approved}.jpg` : null);
   const publicCard = (u) => ({ id: u.id, name: u.name, grade: u.grade, avatar: u.avatar, photo: photoUrl(u) });
   // Ids of people who are friends with `u` both ways.
-  const confirmedFriends = (u) => u.friends.filter((id) => { const o = getUser(id); return o && o.friends.includes(u.id); });
+  const confirmedFriends = (u) => u.friends.filter((id) => { const o = getUser(id); return o && !o.archived && o.friends.includes(u.id); });
   // What friends see: the card plus the rest of the profile.
   const friendCard = (u) => ({ ...publicCard(u), bio: u.bio, pronouns: u.pronouns, interests: u.interests });
   // What `owner` lets `viewer` (a friend) see. The Account page's master switch turns everything off.
@@ -376,7 +377,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels,
         grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
         pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions,
-        calendarToken: u.calendarToken, agreed: u.agreed, photo: u.photo
+        calendarToken: u.calendarToken, agreed: u.agreed, photo: u.photo, archived: u.archived
       })),
       events: state.events,
       calendar: state.calendar,
@@ -418,6 +419,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       } catch { /* keep the defaults */ }
       if (typeof u.calendarToken === 'string' && /^[0-9a-f]{48}$/.test(u.calendarToken)) users[u.id].calendarToken = u.calendarToken;
       if (isPlainObject(u.agreed) && typeof u.agreed.version === 'string' && u.agreed.version.length <= 20) users[u.id].agreed = { version: u.agreed.version, at: num(u.agreed.at) };
+      if (isPlainObject(u.archived)) users[u.id].archived = { at: num(u.archived.at), deleteAfter: num(u.archived.deleteAfter) };
       users[u.id].rawHidden = Array.isArray(u.hiddenSuggestions) ? u.hiddenSuggestions : [];
       users[u.id].rawLevels = isPlainObject(u.shareLevels) ? u.shareLevels : {};
     }
@@ -587,7 +589,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const incoming = [];
     for (const id of user.friends) {
       const o = getUser(id);
-      if (!o) continue;
+      if (!o || o.archived) continue; // archived at graduation: hidden (they come back if restored)
       if (o.friends.includes(user.id)) {
         const level = shareLevel(o, user.id);
         friends.push({
@@ -600,7 +602,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       } else outgoing.push(publicCard(o));
     }
     for (const o of Object.values(state.users)) {
-      if (o.friends.includes(user.id) && !user.friends.includes(o.id)) incoming.push(publicCard(o));
+      if (!o.archived && o.friends.includes(user.id) && !user.friends.includes(o.id)) incoming.push(publicCard(o));
     }
     const byName = (a, b) => a.name.localeCompare(b.name);
     return { friends: friends.sort(byName), incoming: incoming.sort(byName), outgoing: outgoing.sort(byName) };
@@ -620,7 +622,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (!limiter.hit(`fsearch:${user.id}`, 120, 3600e3)) throw new HttpError(429, 'Too many searches. Wait a bit and try again.');
     const results = [];
     for (const o of Object.values(state.users)) {
-      if (o.id === user.id || !o.searchable) continue;
+      if (o.id === user.id || !o.searchable || o.archived) continue;
       const names = nameWords(`${o.givenName} ${o.familyName} ${o.name}`);
       if (!words.every((w) => names.some((n) => n.startsWith(w)))) continue;
       const mine = user.friends.includes(o.id), theirs = o.friends.includes(user.id);
@@ -635,7 +637,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     let other;
     if (body.id !== undefined) {
       other = getUser(body.id);
-      if (!other || !(other.searchable || other.friends.includes(user.id))) throw new HttpError(404, 'That person can\'t be found');
+      if (!other || other.archived || !(other.searchable || other.friends.includes(user.id))) throw new HttpError(404, 'That person can\'t be found');
       if (other.id === user.id) throw bad("That's you");
     } else {
       other = findByCode(body.code);
@@ -666,7 +668,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const myFriends = new Set(confirmedFriends(user));
     const out = [];
     for (const o of Object.values(state.users)) {
-      if (o.id === user.id || !o.searchable || user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
+      if (o.id === user.id || !o.searchable || o.archived || user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
       const mutual = confirmedFriends(o).filter((id) => myFriends.has(id)).length;
       const shared = o.shareSchedule ? bell.BLOCK_KEYS.filter((k) => sameClass(user.classes[k], o.classes[k])).length : 0;
       if (!mutual && !shared) continue;
@@ -716,6 +718,9 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     events: state.events.length,
     ...Object.assign({}, ...features.map((f) => f.status())),
     lastSnapshot: db.lastSnapshot(),
+    graduation: isPlainObject(state.school) ? state.school.graduation : null,
+    seniors: Object.values(state.users).filter((u) => u.grade === 12 && !u.archived && !isAdmin(u)).length,
+    archived: Object.values(state.users).filter((u) => u.archived).length,
     tz: config.tz,
     today: today(),
     secureCookies: config.secure
@@ -726,7 +731,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       verified: u.verified === true, friends: u.friends.length, fullName: `${u.givenName} ${u.familyName}`.trim(),
       grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable,
       owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, photo: photoUrl(u),
-      pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null
+      pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null,
+      archived: u.archived ? { at: u.archived.at, deleteAfter: u.archived.deleteAfter } : null
     }))
     .sort((a, b) => b.lastLogin - a.lastLogin));
   // Admins can verify people, edit or reset anyone's profile, and lock a profile against changes.
@@ -734,6 +740,13 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const target = getUser(params.id);
     if (!target) throw new HttpError(404, 'No such user');
     for (const k of ['verified', 'profileLocked', 'admin']) if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
+    if (body.archived !== undefined) { // only un-archiving: someone archived at graduation by mistake
+      if (body.archived !== false) throw bad('Invalid setting');
+      delete target.archived;
+      log(`User ${target.id} un-archived by admin ${user.id}`);
+      db.save();
+      return { ok: true };
+    }
     if (body.reset !== undefined && body.reset !== true) throw bad('Invalid setting');
     if (body.admin !== undefined) {
       if (isOwner(target)) throw bad('This person is an owner (in ADMIN_EMAILS); change that setting to remove them');
@@ -1028,9 +1041,47 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }
 
   // ---------- lifecycle ----------
+  // Graduation: on the day an admin set, seniors' accounts (grade 12, not admins) are archived (they
+  // can't sign in and disappear from search and friends lists) and everyone else moves up a grade.
+  // Archived accounts are deleted ARCHIVE_DAYS later, unless an admin restores one.
+  const ARCHIVE_DAYS = 90;
+  function graduate(now) {
+    if (!isPlainObject(state.school)) state.school = { graduation: null, graduated: null };
+    const day = state.school.graduation;
+    if (day && today() >= day && state.school.graduated !== day) {
+      let archived = 0, movedUp = 0;
+      for (const u of Object.values(state.users)) {
+        if (u.archived) continue;
+        if (u.grade === 12 && !isAdmin(u)) {
+          u.archived = { at: now, deleteAfter: now + ARCHIVE_DAYS * 86400e3 };
+          for (const [h, s] of Object.entries(state.sessions)) if (s.userId === u.id) delete state.sessions[h];
+          archived++;
+        } else if (GRADES.includes(u.grade) && u.grade < 12) { u.grade += 1; movedUp++; }
+      }
+      state.school.graduated = day;
+      log(`Graduation (${day}): ${archived} senior accounts archived, ${movedUp} students moved up a grade`);
+      auditLog.record('graduation', { detail: { date: day, archived, movedUp } });
+    }
+    for (const u of Object.values(state.users)) {
+      if (u.archived && u.archived.deleteAfter < now) {
+        auditLog.record('archived account deleted', { target: { id: u.id, name: u.name, email: u.email } });
+        deleteUser(u.id);
+      }
+    }
+  }
+  route('PUT', '/api/admin/school', { auth: 'admin' }, ({ body }) => {
+    const day = body.graduation;
+    if (day !== null && (typeof day !== 'string' || cal.parseDate(day) === null)) throw bad('Pick a valid date');
+    if (day && (day < cal.addDays(today(), -7) || day > cal.addDays(today(), 400))) throw bad('Pick a date in the next year');
+    state.school = { ...(isPlainObject(state.school) ? state.school : {}), graduation: day };
+    db.save();
+    return state.school;
+  });
+
   function maintain() {
     const now = Date.now();
     for (const [h, s] of Object.entries(state.sessions)) if (s.expires < now) delete state.sessions[h];
+    graduate(now);
     for (const f of features) f.maintain();
     db.save();
     try { db.dailySnapshot(); } catch (e) { log(`Could not write the daily snapshot: ${e.message}`); }
@@ -1072,7 +1123,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     });
   }
 
-  return { server, listen, close, config, state, db, google: !!google, runReminders: () => push.runReminders() };
+  return { server, listen, close, config, state, db, google: !!google, runReminders: () => push.runReminders(), runMaintenance: maintain };
 }
 
 module.exports = { createApp };

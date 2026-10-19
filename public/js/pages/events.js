@@ -45,7 +45,7 @@
 
   async function setUpForm() {
     const [groups, friends] = await Promise.all([api('GET', '/api/groups'), api('GET', '/api/friends')]);
-    led = groups.filter((g) => g.myRole === 'leader');
+    led = groups.filter((g) => g.myRole === 'leader' || g.myRole === 'advisor');
     const options = [
       me.canPostEvents || led.some((g) => g.approved) ? ['public', 'Everyone'] : null,
       led.length ? ['group', 'Members of a group I lead'] : null,

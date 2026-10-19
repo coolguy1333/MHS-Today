@@ -8,6 +8,7 @@
   const groupLink = (g) => `group.html?id=${encodeURIComponent(g.id)}`;
   function joinButton(g) {
     if (g.myRole === 'leader') return h('span', { class: 'badge' }, 'Leader');
+    if (g.myRole === 'advisor') return h('span', { class: 'badge' }, 'Advisor');
     if (g.myRole === 'member') return h('span', { class: 'badge' }, 'Member');
     if (g.myRole === 'requested') return h('span', { class: 'small muted' }, 'Request sent');
     if (!g.approved) return null;
@@ -24,7 +25,7 @@
   function render() {
     const q = $('q').value.trim().toLowerCase();
     const kind = $('kind').value;
-    const shown = groups.filter((g) => (!kind || g.kind === kind) && (!$('mine').checked || g.myRole === 'leader' || g.myRole === 'member')
+    const shown = groups.filter((g) => (!kind || g.kind === kind) && (!$('mine').checked || ['leader', 'member', 'advisor'].includes(g.myRole))
       && (!q || `${g.name} ${g.description}`.toLowerCase().includes(q)));
     fill($('groups'), shown.length ? shown.map((g) => h('div', { class: 'group-card' },
       h('h3', null, h('a', { href: groupLink(g) }, g.name)),
@@ -44,7 +45,7 @@
     try {
       groups = await api('GET', '/api/groups');
       // pending first for admins, then mine, then the rest
-      const rank = (g) => (me.admin && !g.approved ? 0 : g.myRole === 'leader' || g.myRole === 'member' ? 1 : 2);
+      const rank = (g) => (me.admin && !g.approved ? 0 : ['leader', 'member', 'advisor'].includes(g.myRole) ? 1 : 2);
       groups.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
       render();
     } catch (e) {

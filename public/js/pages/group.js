@@ -9,7 +9,7 @@
 
   function renderHead() {
     document.title = `${g.name} · MHS Today`;
-    const member = g.myRole === 'leader' || g.myRole === 'member';
+    const member = ['leader', 'member', 'advisor'].includes(g.myRole);
     const action = member
       ? h('button', {
         class: 'btn small secondary', type: 'button',
@@ -32,8 +32,10 @@
       h('h1', { class: 'day-title' }, g.name),
       h('p', { class: 'muted' }, `${GROUP_KINDS[g.kind]} · ${g.memberCount} member${g.memberCount === 1 ? '' : 's'}`,
         g.myRole === 'leader' ? [' · ', h('span', { class: 'badge' }, 'You lead this group')] : null,
+        g.myRole === 'advisor' ? [' · ', h('span', { class: 'badge' }, "You're the advisor")] : null,
         g.approved ? null : [' · ', h('span', { class: 'badge vis' }, 'Waiting for an admin to approve it')]),
       g.description ? h('p', null, g.description) : null,
+      g.advisor ? h('p', { class: 'small' }, h('strong', null, 'Advisor: '), g.advisor) : null,
       g.links.length ? h('ul', { class: 'menu-items' }, g.links.map((l) => h('li', null, h('a', { href: l.url, target: '_blank', rel: 'noopener noreferrer' }, l.title)))) : null,
       h('div', { class: 'row' }, action,
         me.admin && !g.approved ? h('button', {
@@ -55,10 +57,12 @@
         h('button', { class: 'btn small secondary', type: 'button', onclick: (e) => setRole(e, p, null, 'Request declined') }, 'Decline')))));
     $('members-card').hidden = !g.members;
     fill($('members'), (g.members || []).map((p) => h('div', { class: 'list-row' },
-      h('div', { class: 'person' }, avatarEl(p, 32), h('div', null, h('strong', null, p.name), p.role === 'leader' ? h('span', { class: 'small muted' }, ' · leader') : null)),
+      h('div', { class: 'person' }, avatarEl(p, 32), h('div', null, h('strong', null, p.name), p.role !== 'member' ? h('span', { class: 'small muted' }, ` · ${p.role}`) : null)),
       g.canManage && p.id !== me.id ? h('div', { class: 'row nowrap' },
-        h('button', { class: 'linklike', type: 'button', onclick: (e) => setRole(e, p, p.role === 'leader' ? 'member' : 'leader', p.role === 'leader' ? `${p.name} is no longer a leader` : `${p.name} is now a leader`) },
+        p.role === 'advisor' ? null : h('button', { class: 'linklike', type: 'button', onclick: (e) => setRole(e, p, p.role === 'leader' ? 'member' : 'leader', p.role === 'leader' ? `${p.name} is no longer a leader` : `${p.name} is now a leader`) },
           p.role === 'leader' ? 'Remove leader' : 'Make leader'),
+        me.admin ? h('button', { class: 'linklike', type: 'button', onclick: (e) => setRole(e, p, p.role === 'advisor' ? 'member' : 'advisor', p.role === 'advisor' ? `${p.name} is no longer the advisor` : `${p.name} is now an advisor`) },
+          p.role === 'advisor' ? 'Remove advisor' : 'Make advisor') : null,
         h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm(`Remove ${p.name} from the group?`)) setRole(e, p, null, `${p.name} removed`); } }, 'Remove'))
         : null)));
   }
@@ -115,7 +119,7 @@
   }
   const boardAct = (e, method, path, body) => busy(e.currentTarget, async () => renderBoard(await api(method, `/api/groups/${g.id}/${path}`, body)));
   async function loadBoard() {
-    const member = g.myRole === 'leader' || g.myRole === 'member';
+    const member = ['leader', 'member', 'advisor'].includes(g.myRole);
     $('board-card').hidden = !member && !me.admin;
     if ($('board-card').hidden) { $('polls-card').hidden = true; return; }
     $('announce-field').hidden = !g.canManage;
@@ -152,6 +156,7 @@
     $('g-name').value = g.name;
     $('g-kind').value = g.kind;
     $('g-description').value = g.description;
+    $('g-advisor').value = g.advisor || '';
     $('g-join').value = g.joinPolicy;
     $('g-links').value = g.links.map((l) => `${l.title} | ${l.url}`).join('\n');
   }
@@ -202,7 +207,7 @@
         return i < 0 ? { title: line, url: '' } : { title: line.slice(0, i).trim(), url: line.slice(i + 1).trim() };
       });
       await api('PUT', `/api/groups/${g.id}`, {
-        name: $('g-name').value, kind: $('g-kind').value, description: $('g-description').value, joinPolicy: $('g-join').value, links
+        name: $('g-name').value, kind: $('g-kind').value, description: $('g-description').value, advisor: $('g-advisor').value, joinPolicy: $('g-join').value, links
       });
       toast('Group saved');
       await load();

@@ -14,6 +14,7 @@
 // Each group also has a board for its members: posts with replies (leaders can mark a post as an
 // announcement, which notifies members) and polls (leaders ask, members vote once, may change it).
 const KINDS = ['club', 'sport', 'group'];
+const ROLE_ORDER = ['advisor', 'leader', 'member'];
 const VISIBILITY = ['public', 'group', 'private'];
 // What kind of event it is (a filter on the Events page). Group events default to their group's kind.
 const CATEGORIES = ['school', 'sports', 'clubs', 'community', 'holidays'];
@@ -40,9 +41,12 @@ module.exports = function groups(app) {
   // ---------- groups ----------
   const findGroup = (id) => state.groups.find((g) => g.id === id) || null;
   const roleIn = (g, user) => (user && hasOwn(g.members, user.id) ? g.members[user.id] : null);
-  const isLeader = (g, user) => roleIn(g, user) === 'leader';
+  // Roles: 'member', 'leader' (students who run it) and 'advisor' (a staff advisor: same powers as a
+  // leader, but only admins can make or unmake one).
+  const MANAGERS = ['leader', 'advisor'];
+  const isLeader = (g, user) => MANAGERS.includes(roleIn(g, user));
   const canManage = (g, user) => isLeader(g, user) || isAdmin(user);
-  const leaders = (g) => Object.keys(g.members).filter((id) => g.members[id] === 'leader');
+  const leaders = (g) => Object.keys(g.members).filter((id) => MANAGERS.includes(g.members[id]));
   // Anyone may see an approved group; a pending one only its members and admins.
   const canSeeGroup = (g, user) => g.approved || !!roleIn(g, user) || isAdmin(user);
 
@@ -57,6 +61,8 @@ module.exports = function groups(app) {
       out.kind = b.kind;
     }
     if (!partial || b.description !== undefined) out.description = cleanText(b.description, 600);
+    // the staff advisor's name, shown on the group page (whether or not they use MHS Today)
+    if (!partial || b.advisor !== undefined) out.advisor = cleanText(b.advisor, 60);
     if (!partial || b.joinPolicy !== undefined) {
       if (!['open', 'approval'].includes(b.joinPolicy)) throw bad('Pick who can join');
       out.joinPolicy = b.joinPolicy;
@@ -81,7 +87,7 @@ module.exports = function groups(app) {
   function groupCard(g, user) {
     const role = roleIn(g, user);
     return {
-      id: g.id, name: g.name, kind: g.kind, description: g.description, joinPolicy: g.joinPolicy, approved: g.approved,
+      id: g.id, name: g.name, kind: g.kind, description: g.description, joinPolicy: g.joinPolicy, approved: g.approved, advisor: g.advisor || '',
       memberCount: Object.keys(g.members).length,
       myRole: role || (user && g.requests.includes(user.id) ? 'requested' : null)
     };
@@ -93,7 +99,7 @@ module.exports = function groups(app) {
       ...groupCard(g, user), links: g.links, canManage: manage,
       members: seeMembers
         ? Object.entries(g.members).map(([id, role]) => (getUser(id) ? { ...publicCard(getUser(id)), role } : null)).filter(Boolean)
-          .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === 'leader' ? -1 : 1))
+          .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || a.name.localeCompare(b.name))
         : null,
       requests: manage ? g.requests.map(getUser).filter(Boolean).map(publicCard) : null
     };
@@ -184,8 +190,11 @@ module.exports = function groups(app) {
     const target = getUser(params.uid);
     const known = target && (hasOwn(g.members, target.id) || g.requests.includes(target.id));
     if (!known) throw new HttpError(404, 'Not a member and no request');
-    if (body.role !== null && !['leader', 'member'].includes(body.role)) throw bad('Invalid role');
-    if (g.members[target.id] === 'leader' && body.role !== 'leader' && leaders(g).length === 1) throw bad('A group needs at least one leader');
+    if (body.role !== null && !['leader', 'member', 'advisor'].includes(body.role)) throw bad('Invalid role');
+    if ((body.role === 'advisor' || g.members[target.id] === 'advisor') && body.role !== g.members[target.id] && !isAdmin(user)) {
+      throw new HttpError(403, 'Only admins can make someone an advisor or change an advisor');
+    }
+    if (MANAGERS.includes(g.members[target.id]) && !MANAGERS.includes(body.role) && leaders(g).length === 1) throw bad('A group needs at least one leader');
     g.requests = g.requests.filter((id) => id !== target.id);
     if (body.role === null) delete g.members[target.id];
     else {
@@ -571,11 +580,11 @@ module.exports = function groups(app) {
           if (out.some((x) => x.name.toLowerCase() === f.name.toLowerCase())) continue;
           const members = {};
           for (const [id, role] of Object.entries(isPlainObject(g.members) ? g.members : {})) {
-            if (hasOwn(users, id) && ['leader', 'member'].includes(role)) members[id] = role;
+            if (hasOwn(users, id) && ['leader', 'member', 'advisor'].includes(role)) members[id] = role;
           }
           const ids = Object.keys(members);
           if (!ids.length) continue;
-          if (!ids.some((id) => members[id] === 'leader')) members[ids[0]] = 'leader';
+          if (!ids.some((id) => MANAGERS.includes(members[id]))) members[ids[0]] = 'leader';
           const text = (t) => cleanText(t, 1000);
           const posts = (Array.isArray(g.posts) ? g.posts : []).filter((p) => isPlainObject(p) && isId(p.id) && text(p.text)).slice(-MAX_POSTS).map((p) => ({
             id: p.id, by: hasOwn(users, p.by) ? p.by : null, text: text(p.text), announcement: p.announcement === true, created: num(p.created),
@@ -638,7 +647,7 @@ module.exports = function groups(app) {
         delete g.members[id];
         const ids = Object.keys(g.members);
         if (!ids.length) deleteGroup(g);
-        else if (!ids.some((x) => g.members[x] === 'leader')) g.members[ids[0]] = 'leader';
+        else if (!ids.some((x) => MANAGERS.includes(g.members[x]))) g.members[ids[0]] = 'leader';
       }
     },
     // Events saved before groups existed are public, with no group, invitees or sign-up list.

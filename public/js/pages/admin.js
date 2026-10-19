@@ -360,12 +360,15 @@
     const f = $('people-filter').value;
     const DAYS_30 = 30 * 86400000;
     const shown = users.filter((u) => (!q || `${u.name} ${u.fullName} ${u.email}`.toLowerCase().includes(q))
-      && (!f || (f === 'admin' && u.admin) || (f === 'verified' && u.verified) || (f === 'locked' && u.profileLocked) || (f === 'inactive' && Date.now() - u.lastLogin > DAYS_30)));
+      && (f === 'archived' ? !!u.archived : !u.archived || f === '')
+      && (!f || f === 'archived' || (f === 'admin' && u.admin) || (f === 'verified' && u.verified) || (f === 'locked' && u.profileLocked)
+        || (f === 'inactive' && Date.now() - u.lastLogin > DAYS_30) || (f === 'seniors' && u.grade === 12)));
     $('people-count').textContent = `${shown.length} of ${users.length} ${users.length === 1 ? 'person' : 'people'}`;
     fill($('users'), shown.length ? shown.map((u) => h('button', { class: 'person-card', type: 'button', dataset: { id: u.id }, 'aria-label': `${u.name}, ${u.email}`, onclick: () => personDialog(u) },
       avatarEl(u, 40),
       h('span', { class: 'pc-main' }, h('strong', null, u.name), h('span', { class: 'small muted pc-email' }, u.email),
-        h('span', { class: 'pc-badges' }, badge(u.owner, 'owner'), badge(u.admin && !u.owner, 'admin'), badge(u.verified, 'verified', 'vis'), badge(u.profileLocked, 'locked', 'vis'))),
+        h('span', { class: 'pc-badges' }, badge(u.owner, 'owner'), badge(u.admin && !u.owner, 'admin'), badge(u.verified, 'verified', 'vis'), badge(u.profileLocked, 'locked', 'vis'),
+          badge(!!u.archived, 'archived', 'urgent'), badge(!!u.pendingPhoto, 'photo to approve', 'vis'))),
       h('span', { class: 'small muted pc-seen' }, fmtAgo(u.lastLogin)))) : h('p', { class: 'muted' }, 'No one matches.'));
   }
   $('people-q').addEventListener('input', renderUsers);
@@ -389,6 +392,8 @@
         h('div', { class: 'small muted' }, details.join(' · ')))),
       u.bio ? h('p', { class: 'small' }, u.bio) : null,
       u.interests && u.interests.length ? h('p', { class: 'small muted' }, `Interests: ${u.interests.join(', ')}`) : null,
+      u.archived ? h('p', { class: 'notice small' }, `Archived at graduation; deleted ${fmtShortDay(new Date(u.archived.deleteAfter).toISOString().slice(0, 10))} unless you restore it. `,
+        h('button', { class: 'btn small', type: 'button', onclick: change({ archived: false }, `${u.name} restored`) }, 'Restore account')) : null,
       h('div', { class: 'action-list' },
         u.admin ? h('p', { class: 'small muted' }, 'Admins can always post events.') : h('button', {
           class: 'btn small' + (u.verified ? ' secondary' : ''), type: 'button', 'aria-label': `${u.verified ? 'Unverify' : 'Verify'} ${u.name}`,
@@ -435,7 +440,16 @@
       toast('Profile saved');
     });
   }
-  loaders.people = reloadUsers;
+  function renderGraduation() {
+    $('grad-date').value = status.graduation || '';
+    $('grad-note').textContent = status.graduation
+      ? `${status.graduation <= today() ? 'Graduation was' : 'Graduation is'} ${fmtLongDay(status.graduation)}. ${status.seniors} senior${status.seniors === 1 ? '' : 's'} (12th grade) ${status.graduation <= today() ? 'left' : 'will be archived'}${status.archived ? `; ${status.archived} archived account${status.archived === 1 ? '' : 's'}` : ''}.`
+      : `No graduation day set. ${status.seniors} senior${status.seniors === 1 ? '' : 's'} (12th grade).`;
+  }
+  const saveGraduation = (graduation) => async () => { await api('PUT', '/api/admin/school', { graduation }); await reloadStatus(); renderGraduation(); toast('Saved'); };
+  $('grad-form').addEventListener('submit', (e) => { e.preventDefault(); busy(e.submitter, saveGraduation($('grad-date').value || null)); });
+  $('grad-clear').addEventListener('click', (e) => busy(e.currentTarget, saveGraduation(null)));
+  loaders.people = async () => { await reloadUsers(); await reloadStatus(); renderGraduation(); };
 
   // ======================================================================= lists edited in a dialog
   // links, tools, announcements, countdowns: each change saves the whole list right away.

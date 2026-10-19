@@ -120,11 +120,22 @@
           <select id="people-filter" aria-label="Show">
             <option value="">Everyone</option><option value="admin">Admins</option><option value="verified">Can post events</option>
             <option value="locked">Locked profiles</option><option value="inactive">Not seen in 30+ days</option>
+            <option value="seniors">Seniors (12th grade)</option><option value="archived">Archived (graduated)</option>
           </select>
           <span class="small muted" id="people-count" role="status"></span>
         </div>
         <p class="small muted">Owners come from the <code>ADMIN_EMAILS</code> setting. Click someone to verify them, make them an admin, edit or lock their profile, or remove them.</p>
         <div class="people-grid" id="users"></div>
+        <details class="card grad-card" id="grad-card">
+          <summary>Graduation</summary>
+          <p class="small muted">On graduation day, seniors' accounts (12th grade, not admins) are archived: they can't sign in and drop out of search and friends lists, and they're deleted 90 days later unless you restore one. Everyone else moves up a grade. The grade is what each student picked on their profile.</p>
+          <form id="grad-form" class="row">
+            <label><span>Graduation day</span><input type="date" id="grad-date" /></label>
+            <button class="btn" type="submit">Save</button>
+            <button class="linklike" type="button" id="grad-clear">Clear</button>
+          </form>
+          <p class="small" id="grad-note" role="status"></p>
+        </details>
       </section>
 
       <section class="tab-panel" role="tabpanel" id="tab-notices" aria-label="Announcements" hidden>

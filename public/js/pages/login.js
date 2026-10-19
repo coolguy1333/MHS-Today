@@ -12,7 +12,8 @@
     failed: 'Something went wrong while talking to Google. Please try again.',
     config: 'Sign-in has not been set up yet. Ask the site owner.',
     busy: 'Too many people are signing in right now. Wait a minute and try again.',
-    full: 'This site has reached its account limit.'
+    full: 'This site has reached its account limit.',
+    archived: 'Your class has graduated, so your account was archived. Congratulations! If this is a mistake, ask an admin.'
   };
 
   let me;
