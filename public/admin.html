@@ -22,117 +22,174 @@
     <h1>Admin</h1>
     <div id="admin-error" class="notice error" hidden></div>
     <div id="admin-body" hidden>
-      <nav class="jump" aria-label="Admin sections">
-        <a href="#queue-card">Needs attention</a><a href="#calendar-card">School calendar</a><a href="#people-card">People</a>
-        <a href="#notices-card">Announcements</a><a href="#links-card">Links</a><a href="#tools-card">Tools</a><a href="#backup-card">Backup</a>
-      </nav>
-      <div class="card"><h2>Setup check</h2><ul class="checklist" id="setup"></ul></div>
-
-      <div class="card" id="queue-card">
-        <h2>Needs attention</h2>
-        <p class="small muted">Groups waiting for approval, and tool ideas.</p>
-        <div id="queue"><p class="muted small">Loading…</p></div>
+      <div class="tabs" role="tablist" aria-label="Admin sections" id="tabs">
+        <button type="button" role="tab" data-tab="overview">Overview <span class="count" id="count-overview" hidden></span></button>
+        <button type="button" role="tab" data-tab="calendar">Calendar</button>
+        <button type="button" role="tab" data-tab="people">People</button>
+        <button type="button" role="tab" data-tab="notices">Announcements</button>
+        <button type="button" role="tab" data-tab="words">Blocked words</button>
+        <button type="button" role="tab" data-tab="links">Links &amp; tools</button>
+        <button type="button" role="tab" data-tab="feedback">Feedback <span class="count" id="count-feedback" hidden></span></button>
+        <button type="button" role="tab" data-tab="audit" id="audit-tab" hidden>Audit log</button>
+        <button type="button" role="tab" data-tab="backup">Backup</button>
       </div>
 
-      <div class="card" id="calendar-card">
-        <h2>School calendar</h2>
-        <p class="muted small">The day letter moves forward by one on every school day (weekdays that are not marked no-school below), so you only need to correct it if it drifts.</p>
-        <h3>Day letter</h3>
-        <form id="anchor-form" class="row">
-          <label><span>Date</span><input type="date" id="anchor-date" required /></label>
-          <label><span>That school day is</span>
-            <select id="anchor-letter"><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
-          <button class="btn" type="submit">Set</button>
-        </form>
-        <h3>Usual schedule by weekday</h3>
-        <div class="weekday-grid" id="weekday-types"></div>
-        <h3>No school (holidays, breaks, teacher days)</h3>
-        <form id="noschool-form" class="row">
-          <label><span>From</span><input type="date" id="ns-from" required /></label>
-          <label><span>To (optional)</span><input type="date" id="ns-to" /></label>
-          <label><span>Name</span><input type="text" id="ns-label" maxlength="60" placeholder="Thanksgiving break" /></label>
-          <button class="btn" type="submit">Add</button>
-        </form>
-        <div id="noschool-list"></div>
-        <h3>Special schedules for one day</h3>
-        <form id="type-form" class="row">
-          <label><span>Date</span><input type="date" id="ty-date" required /></label>
-          <label><span>Schedule</span>
-            <select id="ty-type"><option value="advisory">Advisory day</option><option value="early_release">Early release</option><option value="daily">Regular daily</option></select></label>
-          <button class="btn" type="submit">Add</button>
-        </form>
-        <div id="type-list"></div>
-        <h3>Next school days (check this looks right)</h3>
-        <div class="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Day</th><th scope="col">Schedule</th></tr></thead><tbody id="preview"></tbody></table></div>
-      </div>
-
-      <div class="card" id="people-card">
-        <h2>People</h2>
-        <p class="small muted">Owners come from the <code>ADMIN_EMAILS</code> setting and can't be changed here. Any admin can make someone else an admin, verify people so they can post events, and edit, reset or lock a profile.</p>
-        <div class="table-wrap"><table>
-          <thead><tr><th scope="col">Person</th><th scope="col">Google email</th><th scope="col">Last sign-in</th><th scope="col">Can post events</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
-          <tbody id="users"></tbody>
-        </table></div>
-      </div>
-
-      <div class="card" id="notices-card">
-        <h2>Announcements</h2>
-        <p class="small muted">A banner at the top of every page from the start date to the end date (for example a snow day or spirit week). People can close it on their device.</p>
-        <div id="ann-editor"></div>
-        <div class="row">
-          <button class="btn secondary small" type="button" id="ann-add">Add an announcement</button>
-          <button class="btn small" type="button" id="ann-save">Save announcements</button>
-          <span class="small muted" id="ann-state" role="status"></span>
+      <section class="tab-panel" role="tabpanel" id="tab-overview" aria-label="Overview" hidden>
+        <div class="card problems" id="problems-card" hidden>
+          <h2>Needs fixing</h2>
+          <ul class="checklist" id="problems"></ul>
         </div>
-        <h3>Countdowns</h3>
-        <p class="small muted">Shown on the Today page until the date passes (finals, prom, winter break…).</p>
-        <div id="cd-editor"></div>
-        <div class="row">
-          <button class="btn secondary small" type="button" id="cd-add">Add a countdown</button>
-          <button class="btn small" type="button" id="cd-save">Save countdowns</button>
-          <span class="small muted" id="cd-state" role="status"></span>
+        <div class="stats" id="stats"></div>
+        <div class="card" id="queue-card">
+          <h2>Waiting for you</h2>
+          <div id="queue"><p class="muted small">Loading…</p></div>
         </div>
-        <h3>Blocked words</h3>
-        <p class="small muted">Added to the built-in filter for names, bios, events, study sessions, groups, posts and polls. One word per line; whole words only.</p>
-        <form id="words-form" class="stack">
-          <textarea id="words" rows="4" aria-label="Blocked words, one per line"></textarea>
-          <div><button class="btn small" type="submit">Save words</button></div>
-        </form>
-      </div>
+        <details class="card">
+          <summary>Site settings</summary>
+          <ul class="checklist" id="setup"></ul>
+        </details>
+      </section>
 
-      <div class="card" id="links-card">
-        <h2>Important links</h2>
-        <p class="small muted">The <a href="links.html">Links</a> page shows these, after the Tools section, grouped by category in this order. Web addresses must start with https:// (or http://).</p>
-        <div id="links-editor"></div>
-        <div class="row">
-          <button class="btn secondary small" type="button" id="links-add">Add a link</button>
-          <button class="btn small" type="button" id="links-save">Save links</button>
-          <span class="small muted" id="links-state" role="status"></span>
+      <section class="tab-panel" role="tabpanel" id="tab-calendar" aria-label="Calendar" hidden>
+        <div class="card">
+          <div class="row between month-head">
+            <h2 id="month-title">Month</h2>
+            <div class="row nowrap">
+              <button class="btn small secondary" type="button" id="month-prev" aria-label="Previous month">←</button>
+              <button class="btn small secondary" type="button" id="month-today">This month</button>
+              <button class="btn small secondary" type="button" id="month-next" aria-label="Next month">→</button>
+            </div>
+          </div>
+          <p class="small muted">Click a school day to change it: regular, advisory, early release, or no school. The day letter moves forward by one on every school day by itself.</p>
+          <div class="month" id="month" aria-describedby="month-title"></div>
+          <div class="legend small"><span class="key adv">Advisory</span><span class="key er">Early release</span><span class="key off">No school</span><span class="key today">Today</span></div>
+          <div class="day-panel" id="day-panel" hidden></div>
         </div>
-      </div>
-
-      <div class="card" id="tools-card">
-        <h2>Tools</h2>
-        <p class="small muted">The Tools section at the top of the <a href="links.html">Links</a> page, in this order. A tool with no web address shows "Coming soon". Students' suggestions appear under <a href="#queue-card">Needs attention</a>.</p>
-        <div id="tools-editor"></div>
-        <div class="row">
-          <button class="btn secondary small" type="button" id="tools-add">Add a tool</button>
-          <button class="btn small" type="button" id="tools-save">Save tools</button>
-          <span class="small muted" id="tools-state" role="status"></span>
+        <div class="grid grid-even">
+          <div class="card">
+            <h2>Day letter</h2>
+            <p class="small muted">Only needed once, or if the letter drifts.</p>
+            <form id="anchor-form" class="row">
+              <label><span>Date</span><input type="date" id="anchor-date" required /></label>
+              <label><span>is Day</span><select id="anchor-letter"><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+              <button class="btn" type="submit">Set</button>
+            </form>
+          </div>
+          <div class="card">
+            <h2>Several days off</h2>
+            <form id="noschool-form" class="form-grid">
+              <label><span>From</span><input type="date" id="ns-from" required /></label>
+              <label><span>To</span><input type="date" id="ns-to" /></label>
+              <label class="wide"><span>Name</span><input type="text" id="ns-label" maxlength="60" placeholder="Thanksgiving break" /></label>
+              <div class="wide"><button class="btn" type="submit">Add days off</button></div>
+            </form>
+          </div>
         </div>
-      </div>
+        <div class="card">
+          <h2>Breaks and special days</h2>
+          <div class="grid grid-even">
+            <div><h3>No school</h3><div id="noschool-list"></div></div>
+            <div><h3>Special schedules</h3><div id="type-list"></div></div>
+          </div>
+          <h3>Usual schedule by weekday</h3>
+          <div class="weekday-grid" id="weekday-types"></div>
+        </div>
+      </section>
 
-      <div class="card" id="backup-card">
-        <h2>Backup and restore</h2>
-        <p class="small muted">Everything lives in one file on the server (<code>/data/db.json</code>). WebManager backs up <code>/data</code> before each restart or update, and the site keeps a daily copy in <code>/data/backups</code>. For a copy you control, download one here.</p>
-        <p><a class="btn" id="backup-link" href="/api/admin/backup" download>Download backup</a></p>
-        <form id="restore-form" class="stack">
-          <label><span>Restore from a backup file (replaces everything; a safety copy of the current data is saved first)</span><input type="file" id="restore-file" accept="application/json,.json" required /></label>
-          <label><span>Type <strong>RESTORE</strong> to confirm</span><input type="text" id="restore-confirm" autocomplete="off" /></label>
-          <button class="btn danger" type="submit" id="restore-btn" disabled>Restore backup</button>
-        </form>
-      </div>
+      <section class="tab-panel" role="tabpanel" id="tab-people" aria-label="People" hidden>
+        <div class="toolbar">
+          <input type="search" id="people-q" placeholder="Search names and emails" aria-label="Search people" />
+          <select id="people-filter" aria-label="Show">
+            <option value="">Everyone</option><option value="admin">Admins</option><option value="verified">Can post events</option>
+            <option value="locked">Locked profiles</option><option value="inactive">Not seen in 30+ days</option>
+          </select>
+          <span class="small muted" id="people-count" role="status"></span>
+        </div>
+        <p class="small muted">Owners come from the <code>ADMIN_EMAILS</code> setting. Click someone to verify them, make them an admin, edit or lock their profile, or remove them.</p>
+        <div class="people-grid" id="users"></div>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" id="tab-notices" aria-label="Announcements" hidden>
+        <div class="card">
+          <div class="row between"><h2>Announcements</h2><button class="btn small" type="button" id="ann-add">Add an announcement</button></div>
+          <p class="small muted">A banner at the top of every page from the start date to the end date (a snow day, spirit week). People can close it on their device.</p>
+          <div id="ann-list"></div>
+        </div>
+        <div class="card">
+          <div class="row between"><h2>Countdowns</h2><button class="btn small" type="button" id="cd-add">Add a countdown</button></div>
+          <p class="small muted">Shown on Today until the date passes (finals, prom, winter break…).</p>
+          <div id="cd-list"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" id="tab-words" aria-label="Blocked words" hidden>
+        <div class="card">
+          <h2>Blocked words</h2>
+          <p class="small muted">A built-in filter already catches common swear words and disguises like <code>sh1t</code>. Add more here: they're blocked in names, bios, events, study sessions, groups, posts and polls. Whole words only.</p>
+          <div class="chips" id="word-chips"></div>
+          <form id="word-form" class="inline-field">
+            <input type="text" id="word-new" maxlength="40" placeholder="Add a word" aria-label="Word to block" required />
+            <button class="btn" type="submit">Block it</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" id="tab-links" aria-label="Links and tools" hidden>
+        <div class="card">
+          <div class="row between"><h2>Tools</h2><button class="btn small" type="button" id="tools-add">Add a tool</button></div>
+          <p class="small muted">The Tools section at the top of <a href="links.html">Links</a>. A tool with no web address shows "Coming soon". Students' ideas show up on the Overview tab.</p>
+          <div id="tools-list"></div>
+        </div>
+        <div class="card">
+          <div class="row between"><h2>Links</h2><button class="btn small" type="button" id="links-add">Add a link</button></div>
+          <p class="small muted">Grouped by category on the <a href="links.html">Links</a> page, in this order.</p>
+          <div id="links-list"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" id="tab-feedback" aria-label="Feedback" hidden>
+        <div class="toolbar">
+          <select id="fb-filter" aria-label="Show">
+            <option value="open">New and seen</option><option value="new">New</option><option value="seen">Seen</option><option value="done">Done</option><option value="">All</option>
+          </select>
+          <span class="small muted" id="fb-count" role="status"></span>
+        </div>
+        <div id="fb-list"></div>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" id="tab-audit" aria-label="Audit log" hidden>
+        <div class="card">
+          <div class="row between">
+            <h2>Audit log</h2>
+            <div class="row nowrap">
+              <a class="btn small secondary" href="/api/admin/audit/download?format=csv" download>Download (spreadsheet)</a>
+              <a class="btn small secondary" href="/api/admin/audit/download" download>Download (JSON)</a>
+            </div>
+          </div>
+          <p class="small muted">Every sign-in and change on the site, kept forever for the district. Only owners can see it.</p>
+          <form id="audit-form" class="inline-field" role="search">
+            <input type="search" id="audit-q" maxlength="100" placeholder="Search: a name, email, action, word…" aria-label="Search the audit log" />
+            <button class="btn" type="submit">Search</button>
+          </form>
+          <div class="table-wrap"><table class="audit-table"><thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">What</th><th scope="col">Details</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
+          <p><button class="btn small secondary" type="button" id="audit-more" hidden>Older</button></p>
+        </div>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" id="tab-backup" aria-label="Backup" hidden>
+        <div class="card">
+          <h2>Backup and restore</h2>
+          <p class="small muted">Everything lives in one file on the server (<code>/data/db.json</code>). WebManager backs up <code>/data</code> before each restart or update, and the site keeps a daily copy in <code>/data/backups</code>. For a copy you control, download one here. (The audit log is in <code>/data/audit.log</code> and is not part of this download.)</p>
+          <p><a class="btn" id="backup-link" href="/api/admin/backup" download>Download backup</a></p>
+          <form id="restore-form" class="stack">
+            <label><span>Restore from a backup file (replaces everything; a safety copy of the current data is saved first)</span><input type="file" id="restore-file" accept="application/json,.json" required /></label>
+            <label><span>Type <strong>RESTORE</strong> to confirm</span><input type="text" id="restore-confirm" autocomplete="off" /></label>
+            <button class="btn danger" type="submit" id="restore-btn" disabled>Restore backup</button>
+          </form>
+        </div>
+      </section>
     </div>
+    <dialog id="dlg" class="dialog" aria-labelledby="dlg-title"></dialog>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>

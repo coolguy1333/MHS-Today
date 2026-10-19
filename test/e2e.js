@@ -98,38 +98,48 @@ const step = (m) => console.log('•', m);
   step('admin signed in, nav shows Admin link');
   await ap.goto(base + '/admin.html');
   await ap.waitForSelector('#admin-body:not([hidden])');
-  assert.match(await text(ap, '#setup'), /Google sign-in is configured/);
-  assert.match(await text(ap, '#setup'), /Only these Google Workspace domains/);
-  assert.match(await text(ap, '#setup'), /day letter has not been set/i);
+  // the Overview shows only what needs fixing; everything else is under "Site settings"
+  assert.match(await text(ap, '#problems'), /day letter has not been set/i);
+  assert.doesNotMatch(await text(ap, '#problems'), /Google sign-in is configured|Workspace domains/);
+  assert.match(await ap.locator('#setup').textContent(), /Google sign-in is configured[\s\S]*Only these Google Workspace domains/);
+  const dayCell = (label) => ap.locator(`#month .mday[aria-label^="${label}:"]`);
+  await ap.click('#tabs [data-tab="calendar"]');
+  assert.match(ap.url(), /#calendar$/);
   await ap.fill('#anchor-date', '2026-09-28');
   await ap.selectOption('#anchor-letter', 'B');
   await ap.click('#anchor-form button');
-  await ap.waitForFunction(() => /Day letter rotation is set/.test(document.querySelector('#setup').innerText));
-  assert.match(await text(ap, '#preview'), /Thu, Oct 1\s+Day A/);   // Mon 9/28=B, Tue=C, Wed=D, Thu=A
-  step('day letter rotation: Oct 1 is Day A');
+  await ap.waitForFunction(() => !/day letter has not been set/i.test(document.querySelector('#problems').textContent));
+  assert.match(await dayCell('Thursday, October 1').getAttribute('aria-label'), /Day A, Regular/); // Mon 9/28=B, Tue=C, Wed=D, Thu=A
+  step('day letter rotation: Oct 1 is Day A (month calendar)');
   await ap.selectOption('select[aria-label="Wednesday schedule"]', 'advisory');
-  await ap.waitForFunction(() => /Advisory/.test(document.querySelector('#preview').innerText));
+  await ap.waitForFunction(() => /Advisory/.test(document.querySelector('#month .mday[aria-label^="Wednesday, September 30:"]').getAttribute('aria-label')));
   await ap.fill('#ns-from', '2026-10-05'); await ap.fill('#ns-to', '2026-10-07'); await ap.fill('#ns-label', 'Fall break');
   await ap.click('#noschool-form button');
   await ap.waitForFunction(() => /Fall break/.test(document.querySelector('#noschool-list').innerText));
-  assert.doesNotMatch(await text(ap, '#preview'), /Oct 5|Oct 6|Oct 7/);
-  assert.match(await text(ap, '#preview'), /Oct 8\s+Day C/); // Fri 10/2=B, then 10/5-7 skipped, Thu 10/8 = C
-  await ap.fill('#ty-date', '2026-10-09'); await ap.selectOption('#ty-type', 'early_release');
-  await ap.click('#type-form button');
+  assert.match(await dayCell('Monday, October 5').getAttribute('aria-label'), /Fall break/);
+  assert.match(await dayCell('Thursday, October 8').getAttribute('aria-label'), /Day C/); // Fri 10/2=B, then 10/5-7 skipped, Thu 10/8 = C
+  // one special day: click it in the month, pick Early release
+  await dayCell('Friday, October 9').click();
+  await ap.click('#day-panel button:has-text("Early release")');
   await ap.waitForFunction(() => /Early release/.test(document.querySelector('#type-list').innerText));
-  step('calendar: weekday pattern, break and special day saved; preview updates');
+  assert.match(await dayCell('Friday, October 9').getAttribute('aria-label'), /Early release/);
+  step('calendar: weekday pattern, a break and a special day (clicked in the month); the month updates');
   // a tool added on the Admin page shows in the Tools section of Links
+  await ap.click('#tabs [data-tab="links"]');
+  await ap.waitForSelector('#tools-list .list-row');
   await ap.click('#tools-add');
-  await ap.fill('input[aria-label="Tool 2 Name"]', 'GPA calculator');
-  await ap.fill('input[aria-label="Tool 2 https://… (empty = coming soon)"]', 'https://gpa.example.test/');
-  await ap.fill('input[aria-label="Tool 2 What it does"]', 'Work out your GPA');
-  await ap.click('#tools-save'); await ap.waitForFunction(() => document.querySelector('#tools-state').innerText === '');
+  await ap.locator('#dlg').getByLabel('Name', { exact: true }).fill('GPA calculator');
+  await ap.locator('#dlg').getByLabel('Web address (empty = coming soon)').fill('https://gpa.example.test/');
+  await ap.locator('#dlg').getByLabel('What it does').fill('Work out your GPA');
+  await ap.click('#dlg button[type=submit]');
+  await ap.waitForFunction(() => /GPA calculator/.test(document.querySelector('#tools-list').innerText));
+  assert.equal(await ap.locator('#dlg').isVisible(), false, 'the dialog closes after saving');
+  await ap.screenshot({ path: path.join(SHOTS, 'admin.png'), fullPage: true });
   await ap.goto(base + '/links.html'); await ap.waitForSelector('#tools .link-card');
   assert.match(await text(ap, 'h1'), /^Links$/);
   assert.deepEqual((await ap.locator('#tools .link-card strong').allInnerTexts()), ['Class Cards', 'GPA calculator']);
   assert.equal(await ap.locator('#tools a.link-card').getAttribute('href'), 'https://gpa.example.test/');
-  step('tools: added on the Admin page, shown in the Tools section of Links');
-  await ap.screenshot({ path: path.join(SHOTS, 'admin.png'), fullPage: true });
+  step('tools: added in Admin → Links & tools, shown in the Tools section of Links');
 
   // ---------------------------------------------------------------- two students
   const ann = await newUser('ann', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' });
@@ -288,10 +298,12 @@ const step = (m) => console.log('•', m);
   // unverified: only private events for friends; no "Everyone" choice
   assert.equal(await ep.locator('#ev-visibility option[value="public"]').count(), 0);
   assert.match(await text(ep, '#post-note'), /admins, verified people/);
-  await ap.goto(base + '/admin.html'); await ap.waitForSelector('#users tr');
-  await ap.click('#users button[aria-label="Verify Ann L."]');
+  await ap.goto(base + '/admin.html#people'); await ap.waitForSelector('#users .person-card');
+  await ap.click('#users .person-card[aria-label^="Ann L."]');
+  await ap.click('#dlg button[aria-label="Verify Ann L."]');
   await ap.waitForSelector('.toast:has-text("Ann L. can now post events")');
-  assert.match(await text(ap, '#users'), /Ann L\.\s*verified/);
+  await ap.keyboard.press('Escape');
+  assert.match(await text(ap, '#users .person-card[aria-label^="Ann L."]'), /verified/);
   step('events: unverified student cannot post; admin verifies Ann');
   await ep.reload(); await ep.waitForSelector('#ev-visibility option[value="public"]', { state: 'attached' });
   await ep.click('#add-card summary');
@@ -327,11 +339,33 @@ const step = (m) => console.log('•', m);
   await bp.waitForFunction(() => /Schedule hidden/.test(document.querySelector('#friends').innerText));
   assert.match(await text(bp, '#friends'), /Annie/);
   step('account: rename shows in the nav; privacy switch hides the schedule from friends');
+
+  // ---------------------------------------------------------------- feedback, answered in the app; the audit log
+  await sp.goto(base + '/feedback.html'); await sp.waitForSelector('#feedback-form');
+  await sp.check('input[name="type"][value="idea"]');
+  await sp.fill('#fb-message', 'Could Today show bus changes?');
+  await sp.click('#feedback-form button[type=submit]');
+  await sp.waitForSelector('#mine .feedback-item');
+  assert.match(await text(sp, '#mine'), /An idea[\s\S]*Sent[\s\S]*Could Today show bus changes\?/);
+  await ap.goto(base + '/admin.html#feedback'); await ap.waitForSelector('#fb-list .feedback-item');
+  assert.match(await text(ap, '#count-feedback'), /^1$/);
+  await ap.fill('#fb-list textarea', 'Good idea! We\'re on it.');
+  await ap.click('#fb-list button:has-text("Send reply")');
+  await ap.waitForSelector('.toast:has-text("Reply sent")');
+  await sp.goto(base + '/index.html'); await sp.waitForSelector('#day-head .notice:has-text("We answered your feedback")');
+  await sp.click('#day-head a[href="feedback.html"]');
+  await sp.waitForSelector('#mine .reply');
+  assert.match(await text(sp, '#mine .reply'), /Ada M\.[\s\S]*Good idea! We're on it\./);
+  await ap.click('#tabs [data-tab="audit"]'); await ap.waitForSelector('#audit-rows tr');
+  assert.match(await text(ap, '#audit-rows'), /Replied to feedback[\s\S]*Sent feedback/);
+  await ap.fill('#audit-q', 'bus changes'); await ap.click('#audit-form button');
+  await ap.waitForFunction(() => document.querySelectorAll('#audit-rows tr').length === 1);
+  step('feedback: sent, answered in Admin, reply shown on Today and Feedback; audit log lists and searches it');
   await sp.screenshot({ path: path.join(SHOTS, 'account.png'), fullPage: true });
 
   // ---------------------------------------------------------------- backup + restore through the UI
-  await ap.goto(base + '/admin.html'); await ap.waitForSelector('#users tr');
-  assert.equal(await ap.locator('#users tr').count(), 3);
+  await ap.goto(base + '/admin.html#backup'); await ap.waitForSelector('#users .person-card', { state: 'attached' });
+  assert.equal(await ap.locator('#users .person-card').count(), 3);
   const [download] = await Promise.all([ap.waitForEvent('download'), ap.click('#backup-link')]);
   const backupPath = path.join(SHOTS, 'backup.json');
   await download.saveAs(backupPath);
@@ -344,21 +378,21 @@ const step = (m) => console.log('•', m);
   await carl.page.fill('#confirm-delete', 'delete'); await carl.page.click('#delete-btn');
   await carl.page.waitForURL(/index\.html$/);
   assert.equal(Object.keys(ctx.app.state.users).length, 3);
-  await ap.reload(); await ap.waitForSelector('#users tr');
+  await ap.reload(); await ap.waitForSelector('#users .person-card', { state: 'attached' });
   await ap.setInputFiles('#restore-file', backupPath);
   assert.equal(await ap.locator('#restore-btn').isDisabled(), true);
   await ap.fill('#restore-confirm', 'RESTORE');
   await ap.click('#restore-btn');
   await ap.waitForSelector('.toast:has-text("Restored 3 people and 0 events")');
-  await ap.waitForLoadState('load'); await ap.waitForSelector('#users tr');   // the page reloads itself after a restore
-  assert.equal(await ap.locator('#users tr').count(), 3);
+  await ap.waitForLoadState('load'); await ap.waitForSelector('#users .person-card', { state: 'attached' });   // the page reloads itself after a restore
+  assert.equal(await ap.locator('#users .person-card').count(), 3);
   assert.equal(Object.keys(ctx.app.state.users).length, 3);
   step('backup downloaded; account deleted; restore through the UI brought everyone back');
 
   // ---------------------------------------------------------------- phones: no sideways scrolling anywhere
   const phone = await newUser('phone', { sub: 'a1', email: 'admin@school.test', given_name: 'Ada', family_name: 'Min' }, { viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
   await signIn(phone);
-  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'account', 'admin', 'login']) {
+  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'account', 'admin', 'login', 'feedback', 'terms', 'about']) {
     await phone.page.goto(`${base}/${pg}.html`);
     await phone.page.waitForLoadState('networkidle');
     await phone.page.waitForTimeout(250);

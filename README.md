@@ -2,22 +2,24 @@
 
 Schedule, events and friends for Mukwonago High School students.
 
-- **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown ("B Lunch · 12 min left" at lunch), your own classes, what's next, and the next two weeks of day letters at a glance. New students get a short "Get set up" checklist (classes, Google Tasks, a friend).
+- **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown ("B Lunch · 12 min left" at lunch), your own classes, what's next, and the next two weeks of day letters at a glance. New students get a short "Get set up" checklist (classes, a friend).
 - **My Schedule**: enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D). Or paste your schedule copied from Infinite Campus and it fills everything in, lunches included (read on your device; nothing is sent until you save).
-- **Assignments**: your own **Google Tasks** (the same list as in Gmail, Google Calendar and the Tasks app). Connect once, then see what's due on Today, add assignments and check them off. Only you see them. Classmates can also plan **study sessions** for a class and say they're going.
+- **Assignments**: *coming soon*: each student's own **Google Tasks** (built, and switched off with `GOOGLE_TASKS` until the district allows the Tasks API). Classmates can already plan **study sessions** for a class and say they're going.
 - **Made for phones**: a tab bar at the bottom (Today, Schedule, Assignments, Friends, More), Save that stays in view while you edit your schedule, and no sideways scrolling.
-- **Reminders and the app**: add MHS Today to your phone's home screen (on iPhone: Safari → Share → Add to Home Screen) to use it like an app, offline included, and turn on notifications on the Account page: Google Tasks due tomorrow, an hour before your events and study sessions, and group announcements.
+- **Reminders and the app**: add MHS Today to your phone's home screen (on iPhone: Safari → Share → Add to Home Screen) to use it like an app, offline included, and turn on notifications on the Account page: an hour before your events and study sessions, and group announcements.
 - **Calendar sync**: a private link that puts every school day (7:00 until the last bell, 12:45 on early-release days, titled "Day B", "Day C · Early release"…), your events, study sessions and no-school days into your iPhone or Google calendar.
 - **Announcements and countdowns**: admins put a banner on every page (snow day, spirit week) and countdowns on Today (finals, winter break).
 - **Word filter** on everything students type, plus words admins add.
 - **Groups**: clubs, sports and student groups, each with its own page, links, members, events calendar, a members-only board (posts, replies, announcements) and polls. Anyone can start one; admins approve it before it's listed. Leaders accept members and post the group's events.
 - **Lunch**: today's high school lunch menu, pulled from the district's My School Menus page, with your lunch time and which friends share it. A short version is on the Today page.
-- **Events**: for everyone (posted by admins, verified people and leaders of approved groups), for a group's members, or private for friends you invite. Any event can have a sign-up list with a limit. Admins can remove anything.
+- **Events**: for everyone (posted by admins, verified people and leaders of approved groups), for a group's members, or private for friends you invite. Events have a start and end time, can last several days, say where they are (a room or an address), and have a kind (School, Sports, Clubs, Community, Holidays) you can filter by. Any event can have a sign-up list with a limit. Admins can remove anything.
 - **Links**: important links, with a **Tools** section at the top (students can suggest tools), and the other links (event tickets, athletic schedules, Infinite Campus, counseling…), kept up to date by admins from the Admin page.
 - **Friends**: add people by searching their name, or with a private code or invite link, or from **People you may know** (friends of friends and classmates). For each friend you choose what they see: classes + lunch, lunch only, or nothing. See what class they're in right now (or that they're at lunch), which classes you share, and whether you have the same lunch today. Friends only see your classes if you allow it.
 - **Sign in with Google** only. No passwords are stored; you can limit sign-in to your school's Google Workspace domain.
 - **Profiles**: display name, avatar (an emoji or initials on a color), pronouns, grade, bio and up to 5 interests; friends can open your profile card. Admins can edit or reset anyone's profile and lock it against changes.
-- **Admin page**: set the day letter and breaks, see setup problems, manage people (make admins, verify, edit, lock, remove), edit the links, download or restore a backup.
+- **Feedback, About, Privacy & Terms**: students send bugs, ideas and questions from the Feedback page and see admins' answers there. Everyone reads and agrees to the Privacy & Terms on first sign-in (and again if they change), and can download their data or delete their account.
+- **Admin page**, in tabs: Overview (only what needs fixing, and what's waiting), Calendar (click a day in the month to make it advisory, early release or no school), People (search and filter; click someone to verify, make admin, edit, lock or remove), Announcements, Blocked words, Links & tools, Feedback (reply in the app), Audit log (owners only) and Backup.
+- **Audit log, kept forever** for the district: every sign-in and change, who did it and when, in `/data/audit.log`. Owners can search it and download it as a spreadsheet.
 
 It is a small Node app with no dependencies (`server.js`, `src/`, pages in `public/`). All data is one file, `db.json`.
 
@@ -29,7 +31,7 @@ This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`), so [app ho
 2. **Create Google credentials** ([Google Cloud Console](https://console.cloud.google.com/) → *APIs & Services → Credentials → Create credentials → OAuth client ID → Web application*):
    - *Authorized redirect URI*: `https://YOUR-ADDRESS/auth/google/callback` (exactly; the Admin page shows it too).
    - If asked for a consent screen: choose **Internal** when your school's Google Workspace owns the project (only school accounts can sign in); otherwise **External** and publish it. Sign-in only asks for `openid email profile`, which needs no Google review.
-   - For **Assignments**, turn on the **Google Tasks API** (*APIs & Services → Library → Google Tasks API → Enable*). Connecting asks for the `…/auth/tasks` scope, which Google calls *sensitive*: an **Internal** app needs nothing more; an **External** app shows an "unverified app" warning (and is limited to 100 people) until Google verifies it. Your Workspace admin may also need to allow the app under *Security → API controls*.
+   - *Later, for Assignments* (off for now, see `GOOGLE_TASKS`): turn on the **Google Tasks API** (*APIs & Services → Library → Google Tasks API → Enable*). Connecting asks for the `…/auth/tasks` scope, which Google calls *sensitive*: an **Internal** app needs nothing more; an **External** app shows an "unverified app" warning (and is limited to 100 people) until Google verifies it. Your Workspace admin may also need to allow the app under *Security → API controls*.
 3. **Fill in the app's Variables** in WebManager, then save (saving starts the app):
 
    | Variable | Required | Meaning |
@@ -39,11 +41,14 @@ This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`), so [app ho
    | `ADMIN_EMAILS` | yes | Comma-separated Google emails of the owners: they are always admins. Owners and other admins can make more admins on the Admin page. |
    | `ALLOWED_DOMAINS` | no | Comma-separated Google Workspace domains allowed to sign in, e.g. `masd.k12.wi.us`. Empty = any Google account. Personal Gmail accounts can't pass a domain filter. |
    | `MENU_DISTRICT`, `MENU_SITE`, `MENU_ID` | no | The lunch menu, from its page's address: `menus.healthepro.com/organizations/<DISTRICT>/sites/<SITE>/menus/<ID>`. Defaults: `2534`, `15466` and `133305` ([Mukwonago High School Lunch Menu](https://menus.healthepro.com/organizations/2534/sites/15466/menus/133305)). The site number is only used for the "full menu" link. `MENU_ID=off` hides the menu. |
+| `GOOGLE_TASKS` | no | `on` turns on Assignments from Google Tasks (needs the Google Tasks API, step 2). Off by default: the page says "Coming soon". |
 | `EVENT_POSTING` | no | `verified` (default: admins and people an admin verifies on the Admin page), `everyone`, or `admins`. |
 
-4. **First sign-in**: open the site, sign in with an admin email, open **Admin**, and set the day letter ("this date is Day B"), the weekday pattern if some weekdays are always Advisory/Early Release, and your no-school dates. The day letter then advances by itself on every school day. The **Setup check** at the top of the Admin page points out anything missing.
+4. **First sign-in**: open the site, sign in with an admin email, open **Admin**, and set the day letter ("this date is Day B"), the weekday pattern if some weekdays are always Advisory/Early Release, and your no-school dates. The day letter then advances by itself on every school day. The Admin page's **Overview** points out anything missing (and only then).
 
 Sign-in works on the app's main address (the one you chose in step 1), not on extra domain aliases.
+
+The **audit log** (`/data/audit.log`) is never trimmed and is not in downloaded backups; WebManager's `/data` backups include it. Keep it as long as the district needs.
 
 **Google Tasks** connections are kept encrypted in `db.json` with a key in `/data/secret.key` (made on first start). Neither is in downloaded backups; restoring a backup on the same server keeps everyone's connection, and on a new server people press *Connect Google Tasks* again. WebManager's own `/data` backups include both.
 
