@@ -107,6 +107,33 @@ async function requireLogin() {
   return me.user;
 }
 
+// Line icons for the phone tab bar (24x24, drawn with the text color).
+const ICONS = {
+  dashboard: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
+  schedule: 'M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4',
+  classwork: 'M9 11l3 3 8-8 M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11',
+  friends: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7 M22 21v-1a6 6 0 0 0-4-5.6',
+  more: 'M4 6h16 M4 12h16 M4 18h16'
+};
+function icon(name) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'icon');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', ICONS[name]);
+  svg.append(path);
+  return svg;
+}
+async function signOut() {
+  await forgetThisDevice(); // before signing out: removing the subscription needs the session
+  try { await api('POST', '/api/logout', {}); } finally {
+    await clearOfflineCopy();
+    location.href = 'index.html';
+  }
+}
+
+// The site header. Wide screens: every page in one bar. Phones: a slim top bar (logo + you) and
+// a tab bar at the bottom with the four main pages and "More" for the rest.
 function renderNav(active) {
   const nav = $('site-nav');
   if (!nav) return;
@@ -115,31 +142,54 @@ function renderNav(active) {
     ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
     ['friends.html', 'Friends', 'friends'], ['links.html', 'Links & tools', 'links']
   ];
+  const TABS = ['dashboard', 'schedule', 'classwork', 'friends'];
+  const current = (key) => ({ class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null });
   const auth = h('span', { class: 'nav-auth' });
   fill(nav,
     h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Hub'),
-    h('nav', { 'aria-label': 'Main' },
-      links.map(([href, label, key]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)),
-      auth)
-  );
+    h('nav', { 'aria-label': 'Main', class: 'nav-wide' },
+      links.map(([href, label, key]) => h('a', { href, ...current(key) }, label))),
+    auth);
+
+  // phone tab bar + the "More" sheet
+  const sheetList = h('div', { class: 'sheet-links' },
+    links.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)));
+  const sheet = h('div', { class: 'more-sheet', id: 'more-sheet', hidden: true }, sheetList);
+  const moreBtn = h('button', {
+    type: 'button', class: 'tab' + (TABS.includes(active) ? '' : ' active'), 'aria-expanded': 'false', 'aria-controls': 'more-sheet',
+    onclick: () => setSheet(sheet.hidden)
+  }, icon('more'), h('span', null, 'More'));
+  function setSheet(open) {
+    sheet.hidden = !open;
+    moreBtn.setAttribute('aria-expanded', String(open));
+    if (open) (sheet.querySelector('a, button') || moreBtn).focus();
+  }
+  // the page may draw the nav again (after a rename): replace the old bar and its listeners
+  for (const el of document.querySelectorAll('body > .tabbar, body > .more-sheet')) el.remove();
+  if (renderNav.off) renderNav.off.abort();
+  renderNav.off = new AbortController();
+  const { signal } = renderNav.off;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) { setSheet(false); moreBtn.focus(); } }, { signal });
+  document.addEventListener('click', (e) => { if (!sheet.hidden && !sheet.contains(e.target) && !moreBtn.contains(e.target)) setSheet(false); }, { signal });
+  const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Main' },
+    links.filter(([, , key]) => TABS.includes(key)).map(([href, label, key]) => h('a', { href, class: 'tab' + (key === active ? ' active' : ''), 'aria-current': key === active ? 'page' : null }, icon(key), h('span', null, label))),
+    moreBtn);
+  document.body.append(sheet, tabbar);
+  document.body.classList.add('has-tabbar');
+
   getMe().then((me) => {
     if (me.user) {
       add(auth,
-        me.user.admin ? h('a', { href: 'admin.html', class: active === 'admin' ? 'active' : null }, 'Admin') : null,
-        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : '') }, avatarEl(me.user, 22), me.user.name),
-        h('button', {
-          class: 'linklike', type: 'button',
-          onclick: async () => {
-            await forgetThisDevice(); // before signing out: removing the subscription needs the session
-            try { await api('POST', '/api/logout', {}); } finally {
-              await clearOfflineCopy();
-              location.href = 'index.html';
-            }
-          }
-        }, 'Sign out')
-      );
+        me.user.admin ? h('a', { href: 'admin.html', class: 'nav-admin' + (active === 'admin' ? ' active' : '') }, 'Admin') : null,
+        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : ''), 'aria-label': `Your account (${me.user.name})` }, avatarEl(me.user, 22), h('span', { class: 'nav-name' }, me.user.name)),
+        h('button', { class: 'linklike nav-signout', type: 'button', onclick: signOut }, 'Sign out'));
+      add(sheetList,
+        h('a', { href: 'account.html', ...current('account') }, 'Account'),
+        me.user.admin ? h('a', { href: 'admin.html', ...current('admin') }, 'Admin') : null,
+        h('button', { class: 'linklike', type: 'button', onclick: signOut }, 'Sign out'));
     } else {
-      add(auth, h('a', { href: 'login.html' }, 'Sign in'));
+      add(auth, h('a', { href: 'login.html', class: 'nav-signin' }, 'Sign in'));
+      add(sheetList, h('a', { href: 'login.html' }, 'Sign in'));
     }
   }).catch(() => {});
   renderBanner(nav);
@@ -150,6 +200,7 @@ function renderBanner(nav) {
   let closed = [];
   try { closed = JSON.parse(localStorage.getItem('mhs-closed-notices') || '[]'); } catch { /* storage blocked */ }
   api('GET', '/api/notices').then(({ announcements }) => {
+    for (const old of document.querySelectorAll('.banners')) old.remove(); // the nav was drawn again
     const show = announcements.filter((a) => !closed.includes(a.id));
     if (!show.length) return;
     const box = h('div', { class: 'banners', role: 'region', 'aria-label': 'Announcements' }, show.map((a) => {
@@ -211,6 +262,8 @@ function fmtRelativeDay(d, today) {
   if (d === MHSCalendar.addDays(today, -1)) return 'Yesterday';
   return fmtShortDay(d);
 }
+// "Due tomorrow", "Due Mon, Oct 5"
+const fmtDue = (d, today) => `Due ${fmtRelativeDay(d, today).replace(/^(Today|Tomorrow)$/, (w) => w.toLowerCase())}`;
 function fmtMinutes(mins) {
   const n = Math.max(1, Math.ceil(mins));
   const hrs = Math.floor(n / 60);

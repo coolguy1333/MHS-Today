@@ -35,7 +35,7 @@
     $('ev-group').querySelector('option[value=""]').disabled = vis === 'group' || (vis === 'public' && !me.canPostEvents);
     if ($('ev-group').selectedOptions[0] && $('ev-group').selectedOptions[0].disabled) $('ev-group').value = (led[0] || {}).id || '';
     $('group-note').textContent = vis === 'public' && g && !g.approved ? 'This group is waiting for approval, so it can only post group-only events for now.' : '';
-    $('ev-limit').disabled = !$('ev-signup').checked;
+    $('limit-field').hidden = !$('ev-signup').checked;
   }
 
   async function setUpForm() {
@@ -75,6 +75,7 @@
       e.target.reset();
       $('date').value = schoolClock(info).date;
       syncForm();
+      $('add-card').open = false;
       toast('Event added');
       await load();
     });

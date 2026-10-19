@@ -36,10 +36,11 @@
         <label><span>Grade</span>
           <select id="grade"><option value="">Not set</option><option value="9">9th</option><option value="10">10th</option><option value="11">11th</option><option value="12">12th</option></select></label>
         <label class="wide"><span>Bio (optional, shown to friends)</span>
-          <textarea id="bio" maxlength="160" rows="2" placeholder="Clubs, sports, what you're into…"></textarea></label>
+          <textarea id="bio" maxlength="160" rows="2" placeholder="Clubs, sports, what you're into…" aria-describedby="bio-count"></textarea>
+          <span class="small muted" id="bio-count"></span></label>
         <label class="wide"><span>Interests (up to 5, separated by commas)</span>
           <input type="text" id="interests" maxlength="140" placeholder="Robotics, soccer, band" /></label>
-        <div class="wide row"><button class="btn" type="submit" id="profile-save">Save profile</button><span class="small muted" id="bio-count"></span></div>
+        <div class="wide row"><button class="btn" type="submit" id="profile-save">Save profile</button></div>
       </form>
       <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students.</p>
     </div>

@@ -46,9 +46,9 @@
       h('p', { class: 'day-sub muted' }, badge),
       notes,
       h('div', { class: 'day-nav' },
-        prev ? h('button', { class: 'btn secondary small', type: 'button', onclick: () => go(prev) }, '← Previous school day') : null,
+        prev ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Previous school day', onclick: () => go(prev) }, '← Previous') : null,
         S.viewDate ? h('button', { class: 'btn small', type: 'button', onclick: () => go(null) }, 'Back to today') : null,
-        next ? h('button', { class: 'btn secondary small', type: 'button', onclick: () => go(next) }, 'Next school day →') : null)
+        next ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Next school day', onclick: () => go(next) }, 'Next →') : null)
     );
   }
 
@@ -112,6 +112,33 @@
         h('td', { class: 'time small muted' }, `${formatTime(p.start)} – ${formatTime(p.end)}`),
         h('td', { class: 'cls' }, classCell(p, cls, m, hasAny))));
     }
+  }
+
+  // "Get set up": the few things that make the site useful, until they're done (or hidden on this device).
+  function renderSetup() {
+    const card = $('setup-card');
+    let hidden = false;
+    try { hidden = localStorage.getItem('mhs-setup-hidden') === '1'; } catch { /* storage blocked */ }
+    const steps = S.me ? [
+      { done: Object.keys(S.classes).length > 0, title: 'Add your classes', text: 'Paste your schedule from Infinite Campus, or type it in.', href: 'schedule.html', go: 'Add classes' },
+      S.tasks && S.tasks.available !== false
+        ? { done: !!S.tasks.connected, title: 'Connect Google Tasks', text: 'See your assignments and what is due here.', href: 'classwork.html', go: 'Connect' } : null,
+      { done: S.friends.length > 0, title: 'Add a friend', text: 'See where your friends are and who shares your lunch.', href: 'friends.html', go: 'Find friends' }
+    ].filter(Boolean) : [];
+    const left = steps.filter((s) => !s.done).length;
+    card.hidden = hidden || !left;
+    if (card.hidden) return;
+    fill(card,
+      h('div', { class: 'row between' }, h('h2', null, 'Get set up'), h('span', { class: 'small muted' }, `${steps.length - left} of ${steps.length} done`)),
+      h('ol', { class: 'setup-steps' }, steps.map((s, i) => h('li', { class: s.done ? 'done' : null },
+        h('span', { class: 'step-mark', 'aria-hidden': 'true' }, s.done ? '✓' : String(i + 1)),
+        h('div', { class: 'step-text' }, h('strong', null, s.title), s.done ? h('span', { class: 'sr-only' }, ' (done)') : h('div', { class: 'small muted' }, s.text)),
+        s.done ? null : h('a', { class: 'btn small', href: s.href }, s.go)))),
+      h('p', { class: 'small muted' }, 'Reminders and calendar sync are on your ', h('a', { href: 'account.html' }, 'Account'), ' page. ',
+        h('button', {
+          class: 'linklike', type: 'button',
+          onclick: () => { try { localStorage.setItem('mhs-setup-hidden', '1'); } catch { /* storage blocked */ } card.hidden = true; }
+        }, 'Hide this')));
   }
 
   // Two weeks at a glance, Monday to Friday: this week and next (next two on a weekend).
@@ -179,7 +206,7 @@
       detail = `First up: ${periodText(cur.next)}`;
     } else {
       title = "School's out for today";
-      detail = 'Use “Next school day” to see tomorrow.';
+      detail = 'Use “Next →” to see the next school day.';
     }
     card.hidden = false;
     fill(card, h('div', { class: 'status-big' }, title), detail ? h('p', { class: 'muted' }, detail) : null);
@@ -258,13 +285,14 @@
     const soon = S.tasks.tasks.filter((t) => t.due && t.due <= week).slice(0, 6);
     fill(box, soon.length ? soon.map((t) => h('div', { class: 'list-row' }, h('div', null,
       h('strong', null, t.title),
-      h('div', { class: 'small' + (t.due < m.now.date ? ' bad' : ' muted') }, t.due < m.now.date ? `Overdue · ${fmtRelativeDay(t.due, m.now.date)}` : `Due ${fmtRelativeDay(t.due, m.now.date)}`))))
+      h('div', { class: 'small' + (t.due < m.now.date ? ' bad' : ' muted') }, t.due < m.now.date ? `Overdue · ${fmtRelativeDay(t.due, m.now.date)}` : fmtDue(t.due, m.now.date)))))
       : h('p', { class: 'muted small' }, 'Nothing due in the next week.'));
   }
 
   function renderAll() {
     const m = model();
     renderHead(m);
+    renderSetup();
     renderTable(m);
     renderWeeks(m);
     updateLive(m);

@@ -22,7 +22,7 @@
     <h1>My Schedule</h1>
     <p class="muted">Each class belongs to a color block. Enter each class once, and the day letter decides which hour it meets in.</p>
     <details class="card" id="import-card">
-      <summary>Fill in from Infinite Campus</summary>
+      <summary>Fill in from Infinite Campus <span class="small muted">(fastest)</span></summary>
       <ol class="small">
         <li>In Infinite Campus, open <strong>Schedule</strong> (all days).</li>
         <li>Select the whole page (<kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>A</kbd>, or on a phone: press and hold, then <em>Select All</em>) and copy it.</li>
@@ -41,7 +41,7 @@
       <p class="small muted" id="lunch-help"></p>
       <div class="row"><button class="btn secondary small" type="button" id="clear-btn">Clear all</button></div>
     </div>
-    <div class="row">
+    <div class="row save-bar" id="save-bar">
       <button class="btn" type="button" id="save-btn">Save schedule</button>
       <span class="small muted" id="save-state" role="status"></span>
     </div>

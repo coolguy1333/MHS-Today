@@ -67,14 +67,46 @@ a { color: var(--link); }
 .nav a, .nav .linklike { color: #fff; }
 .nav .brand { font-weight: 700; font-size: 1.2rem; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
 .nav .brand img { width: 28px; height: 28px; flex: none; }
-.nav nav { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
-.nav nav a { padding: 6px 10px; border-radius: 8px; text-decoration: none; opacity: 0.88; }
-.nav nav a:hover { background: rgba(255, 255, 255, 0.14); opacity: 1; }
-.nav nav a.active { background: rgba(255, 255, 255, 0.22); opacity: 1; font-weight: 600; }
-.nav-auth { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
+.nav nav { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; flex: 1; }
+.nav nav a, .nav-auth a { padding: 6px 10px; border-radius: 8px; text-decoration: none; opacity: 0.88; }
+.nav nav a:hover, .nav-auth a:hover { background: rgba(255, 255, 255, 0.14); opacity: 1; }
+.nav nav a.active, .nav-auth a.active { background: rgba(255, 255, 255, 0.22); opacity: 1; font-weight: 600; }
+.nav-auth { display: inline-flex; align-items: center; gap: 6px; }
 .nav-auth .linklike { padding: 6px 10px; text-decoration: none; opacity: 0.88; border-radius: 8px; }
 .nav-auth .linklike:hover { background: rgba(255, 255, 255, 0.14); opacity: 1; }
-@media (max-width: 640px) { .nav-auth { margin-left: 0; } }
+
+/* phones: slim top bar, tab bar at the bottom */
+.tabbar, .more-sheet { display: none; }
+.icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 640px) {
+  .nav { padding: 8px 16px; flex-wrap: nowrap; }
+  .nav .nav-wide, .nav-auth .nav-name, .nav-auth .nav-signout, .nav-auth .nav-admin { display: none; }
+  .nav-auth .nav-me { padding: 4px; }
+  .tabbar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    background: var(--card); border-top: 1px solid var(--border);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+  }
+  .tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 6px 2px;
+    background: none; border: 0; border-radius: 10px; font: inherit; font-size: 0.72rem; color: var(--muted); text-decoration: none; cursor: pointer;
+  }
+  .tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab.active { color: var(--link); font-weight: 700; }
+  .tab.active .icon { stroke-width: 2.4; }
+  .more-sheet:not([hidden]) {
+    display: block; position: fixed; left: 8px; right: 8px; bottom: calc(66px + env(safe-area-inset-bottom)); z-index: 51;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+  .sheet-links { display: flex; flex-direction: column; }
+  .sheet-links a, .sheet-links .linklike {
+    display: block; width: 100%; text-align: left; padding: 13px 14px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 1rem;
+  }
+  .sheet-links a.active { color: var(--link); font-weight: 700; background: var(--bg); }
+  .sheet-links .linklike { color: var(--danger); border-top: 1px solid var(--border); border-radius: 0; margin-top: 4px; }
+  body.has-tabbar { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+}
 
 /* ---- layout ---- */
 .container { max-width: 1040px; margin: 0 auto; padding: 24px 20px 64px; }
@@ -139,6 +171,7 @@ input[type="file"] { padding: 7px; }
 .notice { padding: 10px 14px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-text); margin-bottom: 14px; }
 .notice.error { background: var(--danger); color: #fff; }
 #toasts { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; width: min(92vw, 420px); }
+@media (max-width: 640px) { #toasts { bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 52; } }
 .toast { background: #1f2937; color: #fff; padding: 10px 14px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
 .toast.error { background: var(--danger); }
 
@@ -325,3 +358,40 @@ button.wk-day:hover { border-color: var(--link); }
 .wk-day.past { opacity: 0.55; }
 .wk-day.today { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
 .wk-day.viewing { background: var(--current); }
+
+/* ---- "Get set up" (Today) ---- */
+.setup-card { border-left: 4px solid var(--gold); }
+.setup-steps { list-style: none; margin: 0 0 12px; padding: 0; }
+.setup-steps li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.setup-steps li:last-child { border-bottom: 0; }
+.step-mark {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--border); font-weight: 700; font-size: 0.9rem;
+}
+.setup-steps li.done .step-mark { background: var(--ok); color: #fff; }
+.setup-steps li.done strong { color: var(--muted); text-decoration: line-through; font-weight: 600; }
+.step-text { flex: 1; min-width: 0; }
+.setup-steps .btn { flex: none; }
+
+/* ---- My Schedule: Save stays in view while there are changes ---- */
+.save-bar.dirty {
+  position: sticky; bottom: 12px; z-index: 5; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 14px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+@media (max-width: 640px) {
+  .save-bar.dirty { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .rotation-table { min-width: 0; font-size: 0.8rem; }
+  .rotation-table th, .rotation-table td { padding: 6px 4px; }
+  .rotation-table tbody th .small { font-size: 0.68rem; white-space: nowrap; }
+}
+
+/* ---- sign-in page ---- */
+.perks { margin: 0; padding-left: 20px; }
+.perks li { margin: 6px 0; }
+#bio-count { margin: 4px 0 0; text-align: right; }
+
+/* ---- admin: jump to a section ---- */
+.jump { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.jump a { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); text-decoration: none; font-size: 0.9rem; }
+.jump a:hover { border-color: var(--link); }
+html { scroll-padding-top: 12px; }
