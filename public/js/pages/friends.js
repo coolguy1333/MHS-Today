@@ -50,13 +50,15 @@
             toast(`${f.name} can now see: ${LEVELS.find(([v]) => v === level.value)[1].toLowerCase()}`);
           } catch (err) { level.value = f.myLevel; throw err; }
         }));
-        return h('div', { class: 'list-row friend-row' },
-          person(f,
-            f.pronouns ? h('span', { class: 'small muted' }, ` · ${f.pronouns}`) : null,
-            h('div', { class: 'small' + (t.muted ? ' muted' : '') }, t.text),
-            lunch ? h('div', { class: 'small' + (lunch.same ? '' : ' muted') }, `Today: ${lunch.text}`) : null),
-          h('div', { class: 'friend-actions' },
-            h('label', { class: 'small muted' }, 'They can see', level),
+        // a card: who they are; where they are now; your lunch; what they can see of yours
+        return h('div', { class: 'friend-card friend-row' },
+          h('div', { class: 'fc-head' }, avatarEl(f, 48), h('div', null,
+            h('button', { class: 'linklike name-link', type: 'button', onclick: () => showProfileCard(f) }, h('strong', null, f.name)),
+            h('div', { class: 'small muted' }, [f.pronouns, gradeText(f.grade)].filter(Boolean).join(' · ') || null))),
+          h('div', { class: 'small fc-now' + (t.muted ? ' muted' : '') }, t.text),
+          lunch ? h('div', { class: 'small' + (lunch.same ? '' : ' muted') }, `Today: ${lunch.text}`) : null,
+          h('div', { class: 'fc-actions' },
+            h('label', { class: 'small muted' }, 'They see ', level),
             h('div', { class: 'row small' },
               reportButton('profile', { id: f.id }, `${f.name}'s profile`),
               h('button', {

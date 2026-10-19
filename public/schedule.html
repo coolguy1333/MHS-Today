@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#183890" />
-  <title>My Schedule · MHS Today</title>
+  <title>My classes · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -19,7 +19,8 @@
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
     <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
-    <h1>My Schedule</h1>
+    <div class="profile-hero" id="hero"></div>
+    <nav class="subtabs" id="profile-tabs" aria-label="Your profile"></nav>
     <p class="muted">Each class belongs to a color block. Enter each class once, and the day letter decides which hour it meets in.</p>
     <details class="card" id="import-card">
       <summary>Fill in from Infinite Campus <span class="small muted">(fastest)</span></summary>

@@ -341,12 +341,19 @@ const step = (m) => console.log('•', m);
   await sp.fill('#name', 'Annie'); await sp.click('#profile-save');
   await sp.waitForFunction(() => document.querySelector('.nav-auth').innerText.includes('Annie'));
   assert.equal(await sp.locator('body > .tabbar').count(), 1, 'drawing the nav again replaces the tab bar');
+  assert.match(await text(sp, '#hero'), /Annie/, 'the profile header follows the new name');
+  assert.deepEqual(await sp.locator('#profile-tabs a').allInnerTexts(), ['Profile', 'My classes', 'Privacy', 'Notifications & calendar', 'Account']);
+  await sp.click('#profile-tabs a:has-text("Privacy")');
+  await sp.waitForSelector('#sec-privacy:not([hidden])');
+  assert.equal(await sp.locator('#sec-profile').isHidden(), true, 'one section at a time');
   await sp.uncheck('#share');
   await sp.waitForSelector('.toast:has-text("hidden from all friends")');
   await bp.goto(base + '/friends.html');
   await bp.waitForFunction(() => /Schedule hidden/.test(document.querySelector('#friends').innerText));
   assert.match(await text(bp, '#friends'), /Annie/);
-  step('account: rename shows in the nav; privacy switch hides the schedule from friends');
+  await sp.click('#profile-tabs a:has-text("My classes")'); await sp.waitForURL(/schedule\.html/);
+  assert.equal(await sp.locator('#profile-tabs a.active').innerText(), 'My classes');
+  step('profile: sections (My classes is part of it); rename shows in the nav; privacy switch hides the schedule from friends');
 
   // ---------------------------------------------------------------- a profile photo: shrunk in the page, approved by an admin
   await sp.goto(base + '/account.html'); await sp.waitForSelector('#photo-status');
@@ -396,7 +403,7 @@ const step = (m) => console.log('•', m);
   // a student leaves; the admin then restores the backup and gets them back
   const carl = await newUser('carl', { sub: 's3', email: 'carl@school.test', given_name: 'Carl', family_name: 'Fox' });
   await signIn(carl);
-  await carl.page.goto(base + '/account.html'); await carl.page.waitForSelector('#name');
+  await carl.page.goto(base + '/account.html#account'); await carl.page.waitForSelector('#sec-account:not([hidden])');
   await carl.page.fill('#confirm-delete', 'delete'); await carl.page.click('#delete-btn');
   await carl.page.waitForURL(/index\.html$/);
   assert.equal(Object.keys(ctx.app.state.users).length, 3);
@@ -430,20 +437,21 @@ const step = (m) => console.log('•', m);
   const pp = phone.page;
   await pp.goto(base + '/index.html'); await pp.waitForSelector('.tabbar');
   assert.equal(await pp.locator('.nav-wide').isHidden(), true);
-  assert.deepEqual(await pp.locator('.tabbar .tab').allInnerTexts(), ['Today', 'Schedule', 'Assignments', 'Friends', 'More']);
+  assert.deepEqual(await pp.locator('.tabbar .tab').allInnerTexts(), ['Today', 'Assignments', 'Events', 'Friends', 'More']);
   assert.equal(await pp.locator('.tabbar a.active').innerText(), 'Today');
   await pp.click('.tabbar button.tab');
   assert.equal(await pp.locator('.tabbar button.tab').getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Events', 'Groups', 'Lunch', 'Links', 'Account', 'Feedback', 'Admin', 'Sign out']);
+  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Groups', 'Lunch', 'Links', 'Profile & my classes', 'Feedback', 'Admin', 'Sign out']);
   await pp.keyboard.press('Escape');
   assert.equal(await pp.locator('#more-sheet').isHidden(), true);
-  await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Events")');
-  await pp.waitForURL(/events\.html/);
+  await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Groups")');
+  await pp.waitForURL(/groups\.html/);
   assert.match(await pp.locator('.tabbar button.tab').getAttribute('class'), /active/, 'More is lit on its pages');
-  await pp.click('.tabbar a:has-text("Schedule")'); await pp.waitForURL(/schedule\.html/);
+  await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Profile & my classes")'); await pp.waitForURL(/account\.html/);
+  await pp.click('#profile-tabs a:has-text("My classes")'); await pp.waitForURL(/schedule\.html/);
   await pp.fill('#blocks [data-block="yellow"][data-field="room"]', '999');
   assert.equal(await pp.locator('#save-bar').evaluate((e) => getComputedStyle(e).position), 'sticky', 'Save stays in view with unsaved changes');
-  step('phone: tab bar, More sheet (Escape closes, active page lit), sticky Save on My Schedule');
+  step('phone: tab bar, More sheet (Escape closes, active page lit), profile → My classes, sticky Save');
 
   // ---------------------------------------------------------------- look & feel: dark mode + keyboard
   const dark = await newUser('dark', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' }, { colorScheme: 'dark' });

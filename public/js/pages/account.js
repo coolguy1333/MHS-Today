@@ -1,4 +1,5 @@
-// Account: profile (name, avatar, pronouns, grade, bio, interests), privacy switches, delete account.
+// Your profile, in sections: profile (name, avatar or photo, pronouns, grade, bio, interests), privacy,
+// notifications and calendar sync, and your account (download your data, delete it). My classes is schedule.html.
 (async function () {
   renderNav('account');
   const user = await requireLogin();
@@ -76,6 +77,15 @@
   const countBio = () => { $('bio-count').textContent = `${Array.from($('bio').value).length}/160`; };
   $('bio').addEventListener('input', countBio);
   showProfile(user);
+  // one section at a time: #profile (the default), #privacy, #alerts, #account
+  const SECTIONS = ['profile', 'privacy', 'alerts', 'account'];
+  function showSection() {
+    const key = SECTIONS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'profile';
+    for (const k of SECTIONS) $(`sec-${k}`).hidden = k !== key;
+    renderProfileHeader(user, key);
+  }
+  window.addEventListener('hashchange', () => { showSection(); window.scrollTo(0, 0); });
+  showSection();
   $('share').checked = user.shareSchedule;
   $('searchable').checked = user.searchable;
   $('admin-card').hidden = !user.admin;
@@ -91,6 +101,7 @@
       });
       Object.assign(user, updated);
       showProfile(updated);
+      showSection();
       renderNav('account');
       toast('Profile saved');
     });

@@ -111,7 +111,7 @@
     note.hidden = !(m.view.dayLetter && (!S.me || !hasAny));
     if (!note.hidden) {
       fill(note, S.me
-        ? h('span', null, 'Add your classes on ', h('a', { href: 'schedule.html' }, 'My Schedule'), ' to see them here.')
+        ? h('span', null, 'Add your classes on ', h('a', { href: 'schedule.html' }, 'My classes'), ' to see them here.')
         : h('span', null, h('a', { href: 'login.html' }, 'Sign in with Google'), ' to see your own classes here.'));
     }
     const schedule = SCHEDULES[m.view.scheduleType] || SCHEDULES.daily;

@@ -1,7 +1,7 @@
-// My Schedule: one row per color block plus Advisory; the rotation grid shows where each block lands on Days A-D.
+// My classes (part of your profile): one row per color block plus Advisory; the rotation grid shows where each block lands on Days A-D.
 (async function () {
-  renderNav('schedule');
-  await requireLogin();
+  renderNav('account'); // My classes is part of your profile
+  renderProfileHeader(await requireLogin(), 'classes');
 
   const { BLOCKS, ADVISORY, ROTATION, LUNCH_BLOCKS, LUNCH_NAMES, LUNCH_HOUR, LUNCHES, SCHEDULES, blockInfo, meetings, formatTime } = MHSBell;
   const DAYS = Object.keys(ROTATION);

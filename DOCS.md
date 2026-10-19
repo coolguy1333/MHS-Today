@@ -49,7 +49,7 @@ The letter advances one step per school day (a weekday not listed in `noSchool`)
 
 ## Friends: search and sharing levels
 
-Name search matches every typed word against the start of the person's Google first/last name or display name (accents and punctuation ignored), skips people who turned search off, and returns only display names and grades (120 searches an hour per person). `shareLevels` is what *you* let each friend see: missing = classes and lunch, `lunch` = only which lunch you have on each day letter (sent as `lunches: { A: 'B', ... }`), `none` = nothing. The Account page's "Let friends see my schedule" switch overrides every level.
+Name search matches every typed word against the start of the person's Google first/last name or display name (accents and punctuation ignored), skips people who turned search off, and returns only display names and grades (120 searches an hour per person). `shareLevels` is what *you* let each friend see: missing = classes and lunch, `lunch` = only which lunch you have on each day letter (sent as `lunches: { A: 'B', ... }`), `none` = nothing. The Profile → Privacy "Let friends see my schedule" switch overrides every level.
 
 ## Feature modules
 
@@ -65,11 +65,21 @@ Name search matches every typed word against the start of the person's Google fi
 
 ## Reminders, calendar sync and the installable app
 
-**Push**: each device that turns notifications on sends its subscription (endpoint + keys); endpoints must belong to a real browser push service (Apple, Google, Mozilla, Microsoft). Messages are encrypted for the device and signed with the server's VAPID key (`state.vapid`, made on first start, never exported). A 404/410 from the push service removes that device. Reminders run every five minutes: between 6 and 9 pm school time, one message per person listing their Google Tasks due tomorrow (the `classwork` preference); and about an hour before any timed event they made, signed up for or were invited to, or a study session they're going to. `state.sentReminders` makes each go out once. Group announcements notify members straight away. People choose the kinds on the Account page.
+**Push**: each device that turns notifications on sends its subscription (endpoint + keys); endpoints must belong to a real browser push service (Apple, Google, Mozilla, Microsoft). Messages are encrypted for the device and signed with the server's VAPID key (`state.vapid`, made on first start, never exported). A 404/410 from the push service removes that device. Reminders run every five minutes: between 6 and 9 pm school time, one message per person listing what's due tomorrow: class events for their classes, plus their Google Tasks when that's on (the `classwork` preference); and about an hour before any timed event they made, signed up for or were invited to, or a study session they're going to. `state.sentReminders` makes each go out once. Group announcements notify members straight away. People choose the kinds in Profile → Notifications.
 
 **Events** have `date`, `time`, `endDate` (null = same day; at most 31 days), `endTime` (needs `time`; after it on single-day events), `location` (a room or address) and `category` (`school`, `sports`, `clubs`, `community`, `holidays`; a group's events default to its kind: sports → sports, everything else → clubs). Multi-day events stay "upcoming" until their last day and are cleaned up 60 days after it.
 
 **Audit log** (`src/audit.js`): every successful POST/PUT/DELETE through the API is appended to `$DATA_DIR/audit.log` as `{ at, action: "<METHOD> <route pattern>", actor: { id, name, email }, target: <route params>, detail: <request body, cut at 2000 characters>, ip }`, plus sign-ins (`sign-in`, `sign-in (new account)`, `sign-in refused (domain)`), refused admin attempts and backup/audit downloads. Routes opt out with `audit: false` (look-ups, push settings) or keep the body out with `auditBody: false` (a restore file, someone's Google Tasks). The file is never trimmed or rotated, is not in in-app backups, and is readable only by owners (`ADMIN_EMAILS`): newest first, 100 at a time, read backwards from the end so memory stays small, with a text search; or downloaded whole as CSV (formula-safe) or JSON lines.
+
+**Reports** (`src/reports.js`): content kinds register `locate(ref, user)` (null if `user` can't see it), `remove(ref)` and `exists(ref)`; `POST /api/reports { kind, ref, reason, note }`. Reports on the same thing (open, not yet handled) collect in one entry; three different reporters set `hidden`, and lists then show it only to its author (marked hidden) and admins. Admins keep (unhide) or remove it (`profile` reports never hide; removing resets the profile). Kinds: `event`, `post`, `reply`, `poll` (`ref.group`), `study`, `classwork`, `profile`. Handled reports are kept a year; reports aren't in backups.
+
+**Class events** (`src/classevents.js`): `{ block, name, teacher, kind: test|quiz|assignment|project, title, due, notes, by }`. Visible when your class in that block has the same name and the same teacher (by last name; both must have one). Removed two weeks after they're due.
+
+**Repeating events**: `repeat: { days: [0-6], until, skipNoSchool }` (no `endDate`; up to a year). Lists sort by the next meeting (`next`), calendar feeds get one entry per meeting (`ev-<id>-<date>`), reminders go out per meeting, and the event is cleaned up two months after `until`.
+
+**Photos** (`src/photos.js`): `POST /api/me/photo { image: data:image/jpeg;base64 }` (the page crops and shrinks it to 256×256; at most 150 KB, must start like a JPEG). Files are `$DATA_DIR/photos/<32 hex>.jpg`; `user.photo = { approved, pending }`. `GET /photos/<id>.jpg` serves an approved photo to anyone signed in and a pending one only to its owner and admins; never to signed-out visitors. Unused files are removed by the six-hourly cleanup.
+
+**Advisors and graduation**: group roles are `member`, `leader` and `advisor` (leader powers; only admins set or unset it); groups also have an `advisor` name. `state.school.graduation` (set in Admin → People): on that day the six-hourly cleanup archives grade-12 non-admins (`user.archived = { at, deleteAfter: +90 days }`: no sign-in, hidden from search, suggestions and friends lists, sessions ended) and moves grades 9–11 up one, once per date; archived accounts are deleted after `deleteAfter`. Both are in the audit log.
 
 **Privacy & Terms**: `TERMS_VERSION` in `src/app.js` (match the date on `public/terms.html`). Until someone agrees to the current version (`POST /api/me/agree`), every change except agreeing, signing out and deleting the account answers 403 with `mustAgree`, and pages send them to `terms.html?agree=1&next=…`. The agreement is kept in backups.
 
@@ -113,6 +123,12 @@ State-changing requests must send `X-Requested-With: mhs` (and `Content-Type: ap
 | `POST /api/me/agree` (`{ version }`), `GET /api/me/export` | signed in | Agree to the Privacy & Terms; download my data |
 | `POST /api/feedback` (`{ type, message, page }`), `GET /api/feedback` | signed in | Send feedback; your feedback and the replies |
 | `GET /api/admin/feedback`, `PUT /api/admin/feedback/:id` (`{ status }`), `POST /api/admin/feedback/:id/reply` (`{ text }`), `DELETE /api/admin/feedback/:id` | admin | The feedback inbox |
+| `POST /api/reports` (`{ kind, ref, reason, note }`) | signed in | Report something someone else posted |
+| `GET /api/admin/reports`, `POST /api/admin/reports/:id/keep` `remove` | admin | The review queue |
+| `GET/POST /api/classwork` (`{ block, kind, title, due, notes }`), `DELETE /api/classwork/:id` | signed in (delete: author or admin) | Class events for your classes |
+| `POST/DELETE /api/me/photo`, `GET /photos/<id>.jpg` | signed in | Your photo; photos |
+| `GET /api/admin/photos`, `POST /api/admin/photos/:uid/approve` `reject`, `DELETE /api/admin/users/:id/photo` | admin | Photos to approve |
+| `PUT /api/admin/school` (`{ graduation }`), `PUT /api/admin/users/:id` (`{ archived: false }`) | admin | Graduation day; restore an archived account |
 | `GET /api/admin/audit?q=&before=`, `GET /api/admin/audit/download?format=csv` | owners | The audit log |
 | `GET /auth/google?connect=tasks` | signed in | Connect Google Tasks (when `GOOGLE_TASKS=on`) |
 | `GET/POST /api/tasks` (`{ title, due, notes, listId }`), `PUT /api/tasks/:list/:task` (`{ done }`), `DELETE /api/tasks/connection` | signed in (and connected) | Your Google Tasks: open tasks, add, check off, disconnect |

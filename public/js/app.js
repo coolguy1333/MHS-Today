@@ -117,7 +117,7 @@ async function requireLogin() {
 // Line icons for the phone tab bar (24x24, drawn with the text color).
 const ICONS = {
   dashboard: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
-  schedule: 'M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4',
+  events: 'M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4',
   classwork: 'M9 11l3 3 8-8 M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11',
   friends: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7 M22 21v-1a6 6 0 0 0-4-5.6',
   more: 'M4 6h16 M4 12h16 M4 18h16',
@@ -146,12 +146,13 @@ async function signOut() {
 function renderNav(active) {
   const nav = $('site-nav');
   if (!nav) return;
+  // (your classes are part of your profile: the avatar link, then "My classes")
   const ALL = [
-    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'Schedule', 'schedule'], ['classwork.html', 'Assignments', 'classwork'],
+    ['index.html', 'Today', 'dashboard'], ['classwork.html', 'Assignments', 'classwork'],
     ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
     ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links']
   ];
-  const TABS = ['dashboard', 'schedule', 'classwork', 'friends'];
+  const TABS = ['dashboard', 'classwork', 'events', 'friends'];
   const current = (key) => ({ class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null });
   const wide = h('nav', { 'aria-label': 'Main', class: 'nav-wide' });
   const auth = h('span', { class: 'nav-auth' });
@@ -171,7 +172,7 @@ function renderNav(active) {
     if (user) {
       add(auth,
         user.admin ? h('a', { href: 'admin.html', class: 'nav-admin' + (active === 'admin' ? ' active' : '') }, 'Admin') : null,
-        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : ''), 'aria-label': `Your account (${user.name})` }, avatarEl(user, 22), h('span', { class: 'nav-name' }, user.name)),
+        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : ''), 'aria-label': `Your profile (${user.name})` }, avatarEl(user, 22), h('span', { class: 'nav-name' }, user.name)),
         h('button', { class: 'linklike nav-signout', type: 'button', onclick: signOut }, 'Sign out'));
     } else {
       add(auth, h('a', { href: 'login.html', class: 'nav-signin' + (active === 'login' ? ' active' : '') }, 'Sign in'));
@@ -183,7 +184,7 @@ function renderNav(active) {
     if (user) {
       const sheet = h('div', { class: 'more-sheet', id: 'more-sheet', hidden: true }, h('div', { class: 'sheet-links' },
         ALL.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)),
-        h('a', { href: 'account.html', ...current('account') }, 'Account'),
+        h('a', { href: 'account.html', ...current('account') }, 'Profile & my classes'),
         h('a', { href: 'feedback.html', ...current('feedback') }, 'Feedback', user.unreadFeedback ? h('span', { class: 'dot', 'aria-label': ' (new reply)' }) : null),
         user.admin ? h('a', { href: 'admin.html', ...current('admin') }, 'Admin') : null,
         h('button', { class: 'linklike', type: 'button', onclick: signOut }, 'Sign out')));
@@ -207,6 +208,15 @@ function renderNav(active) {
     document.body.classList.add('has-tabbar');
   });
   renderBanner(nav);
+}
+
+// The top of your profile pages: who you are, and its sections (My classes is its own page).
+const PROFILE_TABS = [['profile', 'Profile', 'account.html#profile'], ['classes', 'My classes', 'schedule.html'], ['privacy', 'Privacy', 'account.html#privacy'],
+  ['alerts', 'Notifications & calendar', 'account.html#alerts'], ['account', 'Account', 'account.html#account']];
+function renderProfileHeader(user, active) {
+  fill($('hero'), avatarEl(user, 64), h('div', null, h('h1', null, user.name),
+    h('div', { class: 'muted small' }, [user.pronouns, gradeText(user.grade)].filter(Boolean).join(' · ') || 'Your profile')));
+  fill($('profile-tabs'), PROFILE_TABS.map(([key, label, href]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)));
 }
 
 // The footer on every page: About, Privacy & Terms, Feedback.

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#183890" />
-  <title>Account · MHS Today</title>
+  <title>Profile · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -19,9 +19,11 @@
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
     <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
-    <h1>Account</h1>
+    <div class="profile-hero" id="hero"></div>
+    <nav class="subtabs" id="profile-tabs" aria-label="Your profile"></nav>
+    <section class="profile-section" id="sec-profile" aria-labelledby="h-profile">
     <div class="card">
-      <h2>Profile</h2>
+      <h2 id="h-profile">Profile</h2>
       <p class="notice" id="locked-note" hidden>An admin has locked your profile, so it can't be changed right now.</p>
       <form id="profile-form" class="form-grid">
         <label class="wide"><span>Display name (shown to your friends, in name search and on events you add)</span>
@@ -51,16 +53,20 @@
           <input type="text" id="interests" maxlength="140" placeholder="Robotics, soccer, band" /></label>
         <div class="wide row"><button class="btn" type="submit" id="profile-save">Save profile</button></div>
       </form>
-      <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students.</p>
     </div>
+    </section>
+    <section class="profile-section" id="sec-privacy" aria-labelledby="h-privacy" hidden>
     <div class="card">
-      <h2>Privacy</h2>
+      <h2 id="h-privacy">Privacy</h2>
       <label class="check"><input type="checkbox" id="share" /><span>Let friends see my schedule (you can limit each friend on the Friends page)</span></label>
       <label class="check"><input type="checkbox" id="searchable" /><span>Let people find me by searching my name</span></label>
       <p class="small muted">Name search matches your first and last name from Google but only ever shows your display name.</p>
+      <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students. <a href="terms.html">Privacy &amp; Terms</a></p>
     </div>
+    </section>
+    <section class="profile-section" id="sec-alerts" aria-labelledby="h-alerts" hidden>
     <div class="card" id="notify-card">
-      <h2>Notifications</h2>
+      <h2 id="h-alerts">Notifications</h2>
       <div id="notify-body"><p class="muted small">Loading…</p></div>
       <fieldset id="notify-prefs" hidden>
         <legend class="field-label">Send me</legend>
@@ -74,6 +80,13 @@
       <p class="small muted">Put every school day (7:00 to the last bell, with the day letter), your groups' events, events you signed up for, study sessions and no-school days into your phone's calendar. It updates by itself.</p>
       <div id="cal-body"><p class="muted small">Loading…</p></div>
     </div>
+    </section>
+    <section class="profile-section" id="sec-account" aria-labelledby="h-account" hidden>
+    <div class="card">
+      <h2 id="h-account">Your data</h2>
+      <p class="small muted">Everything MHS Today keeps about you, as one file.</p>
+      <p><a class="btn secondary" href="/api/me/export" download>Download my data</a></p>
+    </div>
     <div class="card" id="admin-card" hidden>
       <h2>Admin</h2>
       <p><a href="admin.html">Open the admin page</a> to manage the school calendar, users and backups.</p>
@@ -86,6 +99,7 @@
         <button class="btn danger" type="submit" id="delete-btn" disabled>Delete my account</button>
       </form>
     </div>
+    </section>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>

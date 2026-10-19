@@ -170,7 +170,7 @@
   fill($('ce-block'), mine.map((b) => h('option', { value: b.key, disabled: !classes[b.key].teacher }, `${classes[b.key].name} (${b.label})${classes[b.key].teacher ? '' : ' – add the teacher first'}`)));
   const noTeacher = mine.filter((b) => !classes[b.key].teacher);
   $('ce-teacher-note').hidden = !noTeacher.length;
-  add($('ce-teacher-note'), 'To add things for a class, its teacher must be on ', h('a', { href: 'schedule.html' }, 'My Schedule'), '.');
+  add($('ce-teacher-note'), 'To add things for a class, its teacher must be on ', h('a', { href: 'schedule.html' }, 'My classes'), '.');
   const firstOk = mine.find((b) => classes[b.key].teacher);
   if (firstOk) $('ce-block').value = firstOk.key;
   fill($('st-block'), mine.map((b) => h('option', { value: b.key }, `${classes[b.key].name} (${b.label})`)));

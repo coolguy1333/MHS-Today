@@ -35,7 +35,7 @@
     if (!S.me) { fill(box, h('p', { class: 'muted' }, h('a', { href: 'login.html?next=lunch.html' }, 'Sign in'), ' to see your lunch time and who you eat with.')); return; }
     if (!v.schoolDay || !v.dayLetter) { fill(box, h('p', { class: 'muted' }, v.schoolDay ? "The day letter isn't set, so your lunch can't be worked out." : 'No school this day.')); return; }
     const lunch = lunchFor(S.classes, v.dayLetter);
-    if (!lunch) { fill(box, h('p', { class: 'muted' }, 'Pick your A, B or C lunch on ', h('a', { href: 'schedule.html' }, 'My Schedule'), ' to see it here.')); return; }
+    if (!lunch) { fill(box, h('p', { class: 'muted' }, 'Pick your A, B or C lunch on ', h('a', { href: 'schedule.html' }, 'My classes'), ' to see it here.')); return; }
     const t = lunchTimes(v.scheduleType, lunch);
     const buddies = S.friends.filter((f) => friendLunch(f, v.dayLetter) === lunch).map((f) => f.name);
     fill(box,
