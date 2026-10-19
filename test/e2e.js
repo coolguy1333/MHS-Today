@@ -348,6 +348,20 @@ const step = (m) => console.log('•', m);
   assert.match(await text(bp, '#friends'), /Annie/);
   step('account: rename shows in the nav; privacy switch hides the schedule from friends');
 
+  // ---------------------------------------------------------------- a profile photo: shrunk in the page, approved by an admin
+  await sp.goto(base + '/account.html'); await sp.waitForSelector('#photo-status');
+  await sp.setInputFiles('#photo-file', path.join(R, 'public', 'app-icon-512.png'));
+  await sp.waitForSelector('#photo-status:has-text("Waiting for an admin")');
+  const pendingSrc = await sp.locator('#photo-status img').getAttribute('src');
+  assert.match(pendingSrc, /^\/photos\/[0-9a-f]{32}\.jpg$/);
+  const shrunk = await sp.evaluate(async (src) => { const b = await (await fetch(src)).blob(); const i = await createImageBitmap(b); return [b.type, i.width, i.height]; }, pendingSrc);
+  assert.deepEqual(shrunk, ['image/jpeg', 256, 256], 'resized to a 256×256 JPEG before upload');
+  await ap.goto(base + '/admin.html#review'); await ap.waitForSelector('#photo-queue .photo-item');
+  await ap.click('#photo-queue button[aria-label="Approve Annie\'s photo"]');
+  await ap.waitForSelector('.toast:has-text("Approved")');
+  await bp.goto(base + '/friends.html'); await bp.waitForSelector('#friends img.avatar.photo');
+  step('profile photo: uploaded (shrunk to 256×256), approved in Admin → Review, friends see it');
+
   // ---------------------------------------------------------------- feedback, answered in the app; the audit log
   await sp.goto(base + '/feedback.html'); await sp.waitForSelector('#feedback-form');
   await sp.check('input[name="type"][value="idea"]');

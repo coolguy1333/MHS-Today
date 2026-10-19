@@ -181,9 +181,22 @@
     fill($('report-list'), q.open.length ? q.open.map((r) => reportItem(r, true)) : h('p', { class: 'muted small' }, 'Nothing reported. 🎉'));
     $('report-done-card').hidden = !q.done.length;
     fill($('report-done'), q.done.map((r) => reportItem(r, false)));
-    if (loadPhotos) await loadPhotos();
+    await loadPhotos();
   }
-  let loadPhotos = null; // set up with profile photos below
+  // profile photos waiting for approval
+  async function loadPhotos() {
+    const list = await api('GET', '/api/admin/photos');
+    $('photo-card').hidden = !list.length;
+    fill($('photo-queue'), list.map((p) => {
+      const act = (path, message) => (e) => busy(e.currentTarget, async () => { await api('POST', `/api/admin/photos/${p.user.id}/${path}`, {}); toast(message); await loadPhotos(); await reloadStatus(); });
+      return h('div', { class: 'photo-item' },
+        h('img', { src: p.pending, alt: `New photo from ${p.user.name}`, width: '128', height: '128' }),
+        h('div', null, h('strong', null, p.user.name), h('div', { class: 'small muted' }, p.user.email)),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn small', type: 'button', 'aria-label': `Approve ${p.user.name}'s photo`, onclick: act('approve', 'Approved') }, 'Approve'),
+          h('button', { class: 'btn small secondary', type: 'button', 'aria-label': `Reject ${p.user.name}'s photo`, onclick: act('reject', 'Rejected') }, 'Reject')));
+    }));
+  }
   loaders.review = async () => { await reloadStatus(); await loadReview(); };
 
   // ======================================================================= Calendar
@@ -382,6 +395,10 @@
           onclick: change({ verified: !u.verified }, u.verified ? `${u.name} can no longer post events` : `${u.name} can now post events`)
         }, u.verified ? 'Unverify (stop posting events)' : 'Verify (can post events for everyone)'),
         h('button', { class: 'btn small secondary', type: 'button', onclick: () => editProfile(u) }, 'Edit profile'),
+        u.photo || u.pendingPhoto ? h('button', {
+          class: 'btn small secondary', type: 'button',
+          onclick: (e) => { if (confirm(`Remove ${u.name}'s photo?`)) busy(e.currentTarget, async () => { await api('DELETE', `/api/admin/users/${u.id}/photo`); await reloadUsers(); toast('Photo removed'); personDialog(users.find((x) => x.id === u.id)); }); }
+        }, 'Remove photo') : null,
         h('button', {
           class: 'btn small secondary', type: 'button',
           onclick: (e) => { if (confirm(`Reset ${u.name}'s profile to their Google first name and last initial, and clear their avatar, pronouns, grade, bio and interests?`)) change({ reset: true }, 'Profile reset')(e); }

@@ -557,3 +557,12 @@ fieldset.plain { border: 0; padding: 0; margin: 0; }
 .day-checks { display: flex; flex-wrap: wrap; gap: 6px; }
 .day-check { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); cursor: pointer; }
 .day-check:has(input:checked) { border-color: var(--primary); background: var(--current); font-weight: 600; }
+
+/* ---- profile photos ---- */
+img.avatar.photo { display: inline-block; flex: none; border-radius: 50%; object-fit: cover; background: var(--border); }
+.photo-box { margin-top: 14px; display: grid; gap: 8px; }
+.file-btn { cursor: pointer; }
+.file-btn:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+.photo-queue { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.photo-item { display: grid; gap: 8px; justify-items: start; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.photo-item img { width: 128px; height: 128px; border-radius: 50%; object-fit: cover; }

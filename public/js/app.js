@@ -469,6 +469,9 @@ function eventRow(e, today, reload) {
 
 // A round avatar: the person's emoji, or their initials, on their color.
 function avatarEl(person, size = 32) {
+  if (person && person.photo) { // an approved profile photo
+    return h('img', { class: 'avatar photo', src: person.photo, alt: '', width: String(size), height: String(size), loading: 'lazy', style: { width: `${size}px`, height: `${size}px` } });
+  }
   const a = MHSAvatars.clean(person && person.avatar);
   return h('span', {
     class: 'avatar', 'aria-hidden': 'true',

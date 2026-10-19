@@ -31,6 +31,15 @@
           <div class="person" id="avatar-preview"></div>
           <div class="picker" id="color-picker" role="radiogroup" aria-label="Avatar color"></div>
           <div class="picker" id="emoji-picker" role="radiogroup" aria-label="Avatar picture"></div>
+          <div class="photo-box">
+            <span class="field-label">Or your own photo</span>
+            <div class="person" id="photo-status"></div>
+            <div class="row">
+              <label class="btn small secondary file-btn">Upload a photo<input type="file" id="photo-file" accept="image/*" class="sr-only" /></label>
+              <button class="linklike danger" type="button" id="photo-remove" hidden>Remove my photo</button>
+            </div>
+            <p class="small muted">An admin approves photos before anyone else sees them. Use a clear, school-appropriate photo of yourself.</p>
+          </div>
         </div>
         <label><span>Pronouns (optional)</span><input type="text" id="pronouns" maxlength="20" placeholder="she/her, he/him, they/them…" /></label>
         <label><span>Grade</span>

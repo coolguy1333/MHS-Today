@@ -17,6 +17,46 @@
   for (const id of ['color-picker', 'emoji-picker', 'name']) $(id).addEventListener('input', preview);
   const interestsOf = (text) => text.split(',').map((s) => s.trim()).filter(Boolean);
 
+  // ---- your own photo: shrunk to a 256×256 JPEG here, then waits for an admin
+  function showPhoto(u) {
+    const img = (src, alt) => h('img', { class: 'avatar photo', src, alt, width: '56', height: '56' });
+    fill($('photo-status'), u.pendingPhoto
+      ? [img(u.pendingPhoto, 'Your new photo'), h('span', { class: 'small' }, 'Waiting for an admin to approve it. Until then, people see ', u.photo ? 'your current photo.' : 'your avatar.')]
+      : u.photo ? [img(u.photo, 'Your photo'), h('span', { class: 'small' }, 'Approved: people see this photo instead of your avatar.')]
+        : h('span', { class: 'small muted' }, 'No photo: people see your avatar.'));
+    $('photo-remove').hidden = !u.photo && !u.pendingPhoto;
+  }
+  async function toJpeg(file) {
+    if (!/^image\//.test(file.type)) throw new Error('Pick a photo (JPG or PNG).');
+    let bmp;
+    try { bmp = await createImageBitmap(file); } catch { throw new Error("That photo couldn't be opened. Try a JPG or PNG."); }
+    const side = Math.min(bmp.width, bmp.height); // the middle square
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    c.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 256, 256);
+    return c.toDataURL('image/jpeg', 0.85);
+  }
+  $('photo-file').addEventListener('change', (e) => {
+    const file = e.currentTarget.files[0];
+    if (!file) return;
+    busy(null, async () => {
+      const r = await api('POST', '/api/me/photo', { image: await toJpeg(file) });
+      Object.assign(user, r);
+      showPhoto(user);
+      toast('Uploaded. An admin will take a look.');
+    }).finally(() => { e.target.value = ''; });
+  });
+  $('photo-remove').addEventListener('click', (e) => {
+    if (!confirm('Remove your photo?')) return;
+    busy(e.currentTarget, async () => {
+      await api('DELETE', '/api/me/photo');
+      Object.assign(user, { photo: null, pendingPhoto: null });
+      showPhoto(user);
+      renderNav('account');
+      toast('Photo removed');
+    });
+  });
+
   function showProfile(u) {
     $('name').value = u.name;
     $('grade').value = u.grade ? String(u.grade) : '';
@@ -30,6 +70,8 @@
     for (const el of $('profile-form').querySelectorAll('input, select, textarea, button')) el.disabled = !!u.profileLocked;
     countBio();
     preview();
+    showPhoto(u);
+    $('photo-file').disabled = !!u.profileLocked;
   }
   const countBio = () => { $('bio-count').textContent = `${Array.from($('bio').value).length}/160`; };
   $('bio').addEventListener('input', countBio);

@@ -24,7 +24,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;
-  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/cal/')) return;
+  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/cal/') || url.pathname.startsWith('/photos/')) return; // photos: private, not kept offline
   const isApi = url.pathname.startsWith('/api/');
   if (isApi && !KEEP_API.includes(url.pathname)) return;
   e.respondWith((async () => {

@@ -192,7 +192,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // Everyone agrees to the Privacy & Terms page before using the site; a new version asks again.
   // Change TERMS_VERSION (and the date on public/terms.html) whenever that page changes.
   const TERMS_VERSION = '2026-10-19';
-  let feedbackFeature = null; // set up with the other features below
+  let feedbackFeature = null, photosFeature = null; // set up with the other features below
   const agreedNow = (u) => !!u && isPlainObject(u.agreed) && u.agreed.version === TERMS_VERSION;
   function fillUserDefaults(u) {
     if (typeof u.givenName !== 'string') u.givenName = '';
@@ -246,10 +246,13 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     friendCode: u.friendCode, shareSchedule: u.shareSchedule, searchable: u.searchable,
     grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, pronouns: u.pronouns, interests: u.interests, avatar: u.avatar,
     mustAgree: !agreedNow(u), termsVersion: TERMS_VERSION,
+    photo: photoUrl(u), pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null,
     unreadFeedback: feedbackFeature ? feedbackFeature.unreadFor(u) : 0
   });
   // What anyone signed in may see of someone (search results, suggestions, requests).
-  const publicCard = (u) => ({ id: u.id, name: u.name, grade: u.grade, avatar: u.avatar });
+  // an approved profile photo, if they have one (src/photos.js)
+  const photoUrl = (u) => (isPlainObject(u.photo) && u.photo.approved ? `/photos/${u.photo.approved}.jpg` : null);
+  const publicCard = (u) => ({ id: u.id, name: u.name, grade: u.grade, avatar: u.avatar, photo: photoUrl(u) });
   // Ids of people who are friends with `u` both ways.
   const confirmedFriends = (u) => u.friends.filter((id) => { const o = getUser(id); return o && o.friends.includes(u.id); });
   // What friends see: the card plus the rest of the profile.
@@ -373,7 +376,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels,
         grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
         pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions,
-        calendarToken: u.calendarToken, agreed: u.agreed
+        calendarToken: u.calendarToken, agreed: u.agreed, photo: u.photo
       })),
       events: state.events,
       calendar: state.calendar,
@@ -404,7 +407,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
         verified: u.verified === true, givenName: cleanText(u.givenName, 30), familyName: cleanText(u.familyName, 40),
         searchable: u.searchable !== false, grade: GRADES.includes(u.grade) ? u.grade : null, bio: cleanText(u.bio, 160),
-        profileLocked: u.profileLocked === true, adminGranted: u.adminGranted === true, avatar: avatars.clean(u.avatar)
+        profileLocked: u.profileLocked === true, adminGranted: u.adminGranted === true, avatar: avatars.clean(u.avatar),
+        photo: isPlainObject(u.photo) ? u.photo : null // checked against the files by src/photos.js
       });
       try {
         Object.assign(users[u.id], cleanProfileFields({
@@ -483,13 +487,14 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       const t = typeof ref.id === 'string' ? getUser(ref.id) : null;
       return t ? { id: t.id, ref: { id: t.id }, author: t.id, summary: [t.name, t.pronouns, t.bio, t.interests.join(', ')].filter(Boolean).join(' · '), link: '' } : null;
     },
-    remove(ref) { const t = getUser(ref.id); if (t) { Object.assign(t, resetFields(t)); db.save(); } },
+    remove(ref) { const t = getUser(ref.id); if (t) { Object.assign(t, resetFields(t)); photosFeature.clear(t); db.save(); } },
     exists: (ref) => !!getUser(ref.id)
   });
   const calendarFeed = require('./icalendar')(shared);
   const tasks = require('./tasks')(shared);
   feedbackFeature = require('./feedback')(shared);
-  features.push(reports, require('./study')(shared), require('./classevents')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, calendarFeed);
+  photosFeature = require('./photos')(shared);
+  features.push(reports, require('./study')(shared), require('./classevents')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, photosFeature, calendarFeed);
   push = require('./push')(shared);
   features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();
@@ -720,7 +725,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u),
       verified: u.verified === true, friends: u.friends.length, fullName: `${u.givenName} ${u.familyName}`.trim(),
       grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable,
-      owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar
+      owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, photo: photoUrl(u),
+      pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null
     }))
     .sort((a, b) => b.lastLogin - a.lastLogin));
   // Admins can verify people, edit or reset anyone's profile, and lock a profile against changes.
@@ -737,6 +743,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const changed = [...Object.keys(fields), ...['verified', 'profileLocked', 'admin'].filter((k) => body[k] !== undefined)];
     if (!changed.length) throw bad('Nothing to change');
     Object.assign(target, fields);
+    if (body.reset) photosFeature.clear(target); // a reset removes their photo too
     if (body.verified !== undefined) target.verified = body.verified;
     if (body.profileLocked !== undefined) target.profileLocked = body.profileLocked;
     if (body.admin !== undefined) target.adminGranted = body.admin;
@@ -1006,6 +1013,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (url.pathname === '/auth/google/callback') return await authCallback(req, res, url);
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
       if (url.pathname.startsWith('/cal/')) return calendarFeed.feed(req, res, url);
+      if (url.pathname.startsWith('/photos/')) return photosFeature.serve(req, res, url, currentUser(req));
       if (url.pathname === '/tools' || url.pathname === '/tools.html') return redirect(res, '/links.html#tools'); // tools are a section of Links
       return await serveStatic(req, res, url);
     } catch (e) {
