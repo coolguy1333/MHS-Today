@@ -1,7 +1,7 @@
 'use strict';
 // Push notifications and reminders. People turn notifications on per device (on iPhone, the site
 // has to be added to the home screen first) and choose which kinds they get:
-//   classwork  the evening before something is due in one of their classes
+//   classwork  the evening before something in their Google Tasks is due
 //   events     an hour before an event they made, signed up for or were invited to, or a study session they're going to
 //   groups     announcements in their groups
 // The server's VAPID keys are made on first start and kept in db.json.
@@ -9,7 +9,7 @@ const webpush = require('./webpush');
 
 const KINDS = ['classwork', 'events', 'groups'];
 const MAX_SUBS = 5;
-const EVENING = [18 * 60, 21 * 60]; // classwork reminders go out between 6 and 9 pm school time
+const EVENING = [18 * 60, 21 * 60]; // due-tomorrow reminders go out between 6 and 9 pm school time
 
 module.exports = function push(app) {
   const { route, state, db, log, config, HttpError, bad, getUser, limiter, cal, bell, isPlainObject, fetchFn, features } = app;
@@ -84,32 +84,29 @@ module.exports = function push(app) {
   async function runReminders() {
     const now = cal.schoolNow(config.tz);
     const t = now.date;
-    const classwork = features.find((f) => f.dueOn);
+    const tasks = features.find((f) => f.tasksDueOn);
+    const study = features.find((f) => f.studySessions);
     const groups = features.find((f) => f.eventsForReminders);
     const jobs = [];
     let changed = false;
 
-    // the evening before: everything due tomorrow in your classes, in one notification
-    if (classwork && now.minutes >= EVENING[0] && now.minutes < EVENING[1]) {
-      const due = classwork.dueOn(cal.addDays(t, 1));
-      if (due.length) {
-        for (const u of Object.values(state.users)) {
-          if (!subsOf(u).length || !prefsOf(u).classwork) continue;
-          const mine = due.filter((i) => classwork.inClass(u, i));
-          if (!mine.length || !once(`cw:${t}:${u.id}`, 3)) continue;
-          changed = true;
-          const kind = { assignment: 'Assignment', quiz: 'Quiz', test: 'Test' };
-          jobs.push(notify([u.id], 'classwork', {
-            title: mine.length === 1 ? `${kind[mine[0].kind]} due tomorrow` : `${mine.length} things due tomorrow`,
-            body: mine.map((i) => `${kind[i.kind]}: ${i.title} (${i.name})`).join('\n'), url: '/classwork.html'
-          }));
-        }
+    // the evening before: everything due tomorrow in your Google Tasks, in one notification
+    // (the "classwork" kind keeps its name so saved notification choices still apply)
+    if (tasks && now.minutes >= EVENING[0] && now.minutes < EVENING[1]) {
+      const tomorrow = cal.addDays(t, 1);
+      for (const u of Object.values(state.users)) {
+        if (!subsOf(u).length || !prefsOf(u).classwork || !tasks.connected(u) || !once(`cw:${t}:${u.id}`, 3)) continue;
+        changed = true;
+        jobs.push(tasks.tasksDueOn(u, tomorrow).then((due) => (due.length ? notify([u.id], 'classwork', {
+          title: due.length === 1 ? `Due tomorrow: ${due[0].title}` : `${due.length} things due tomorrow`,
+          body: due.map((i) => i.title).join('\n'), url: '/classwork.html'
+        }) : null)));
       }
     }
     // an hour before: events you made, signed up for or were invited to, and study sessions you're going to
     const soon = [
       ...(groups ? groups.eventsForReminders().map((e) => ({ key: `ev:${e.id}`, date: e.date, time: e.time, title: e.title, people: e.people, url: '/events.html' })) : []),
-      ...(classwork ? classwork.studySessions().map((s) => ({ key: `st:${s.id}`, date: s.date, time: s.time, title: `Study session: ${s.title}`, people: s.going, url: '/classwork.html', where: s.place })) : [])
+      ...(study ? study.studySessions().map((s) => ({ key: `st:${s.id}`, date: s.date, time: s.time, title: `Study session: ${s.title}`, people: s.going, url: '/classwork.html', where: s.place })) : [])
     ];
     for (const e of soon) {
       if (e.date !== t || !e.time) continue;

@@ -118,5 +118,7 @@ test('code exchange sends the secret and verifier, and surfaces Google errors', 
   const idToken = await g.exchangeCode(code, verifier);
   assert.equal((await g.verifyIdToken(idToken, 'nn')).sub, 'sub-1');
   await reject(g.exchangeCode(code, verifier), /rejected/); // codes are single use
+  // a refresh token Google no longer accepts means "connect again"
+  await assert.rejects(g.refresh('nope'), (e) => e instanceof AuthError && e.code === 'revoked');
   await mock.close();
 });

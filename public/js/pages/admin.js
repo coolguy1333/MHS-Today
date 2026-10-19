@@ -291,10 +291,9 @@
     });
   });
 
-  // ---- needs attention: groups to approve, reported classwork, tool suggestions
+  // ---- needs attention: groups to approve, tool suggestions
   async function renderQueue() {
-    const [groups, reported, ideas] = await Promise.all([
-      api('GET', '/api/groups'), api('GET', '/api/admin/classwork'), api('GET', '/api/admin/tool-suggestions')]);
+    const [groups, ideas] = await Promise.all([api('GET', '/api/groups'), api('GET', '/api/admin/tool-suggestions')]);
     const pending = groups.filter((g) => !g.approved);
     const act = (fn, message) => (e) => busy(e.currentTarget, async () => { await fn(); toast(message); await renderQueue(); });
     const rows = [
@@ -304,18 +303,11 @@
         h('div', { class: 'row nowrap' },
           h('button', { class: 'btn small', type: 'button', onclick: act(() => api('PUT', `/api/admin/groups/${g.id}`, { approved: true }), `${g.name} approved`) }, 'Approve'),
           h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm(`Delete the group ${g.name}?`)) act(() => api('DELETE', `/api/groups/${g.id}`), 'Group deleted')(e); } }, 'Delete')))),
-      ...reported.map((i) => h('div', { class: 'list-row' },
-        h('div', null, h('span', { class: `badge kind-${i.kind}` }, KIND_NAMES[i.kind]), ' ', h('strong', null, i.title),
-          h('div', { class: 'small muted' }, `${i.className}${i.teacher ? ` · ${i.teacher}` : ''} · due ${fmtShortDay(i.due)} · by ${i.by} · ${i.reports} report${i.reports === 1 ? '' : 's'}${i.hidden ? ' · hidden' : ''}`),
-          i.notes ? h('div', { class: 'small' }, i.notes) : null),
-        h('div', { class: 'row nowrap' },
-          h('button', { class: 'btn small secondary', type: 'button', onclick: act(() => api('POST', `/api/admin/classwork/${i.id}/keep`, {}), 'Kept') }, 'Keep'),
-          h('button', { class: 'linklike danger', type: 'button', onclick: act(() => api('DELETE', `/api/classwork/${i.id}`), 'Deleted') }, 'Delete')))),
       ...ideas.map((t) => h('div', { class: 'list-row' },
         h('div', null, h('span', { class: 'badge vis' }, 'Tool idea'), ' ', h('strong', null, t.name),
           h('div', { class: 'small muted' }, [t.url, t.description, t.by ? `from ${t.by.name}` : null].filter(Boolean).join(' · '))),
         h('div', { class: 'row nowrap' },
-          h('button', { class: 'btn small', type: 'button', onclick: act(async () => toolsEditor.set(await api('POST', `/api/admin/tool-suggestions/${t.id}/accept`, {})), 'Added to Tools') }, 'Add to Tools'),
+          h('button', { class: 'btn small', type: 'button', onclick: act(async () => toolsEditor.set(await api('POST', `/api/admin/tool-suggestions/${t.id}/accept`, {})), 'Added to Links & tools') }, 'Add to tools'),
           h('button', { class: 'linklike danger', type: 'button', onclick: act(() => api('DELETE', `/api/admin/tool-suggestions/${t.id}`), 'Dismissed') }, 'Dismiss'))))
     ];
     fill($('queue'), rows.length ? rows : h('p', { class: 'muted small' }, 'Nothing waiting. 🎉'));

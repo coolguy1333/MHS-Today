@@ -1,7 +1,7 @@
 {
   "name": "MHS Hub",
   "short_name": "MHS Hub",
-  "description": "Schedule, lunch, classwork, events, groups and friends for Mukwonago High School.",
+  "description": "Schedule, lunch, assignments, events, groups and friends for Mukwonago High School.",
   "start_url": "/index.html",
   "scope": "/",
   "display": "standalone",

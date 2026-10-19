@@ -5,7 +5,7 @@
   const { SCHEDULES, getCurrentPeriod, formatTime, blockFor, blockInfo, LUNCH_HOUR, lunchFor, lunchTimes, atLunch } = MHSBell;
 
   // viewDate: null = automatic (today, or the next school day when there's no school today)
-  const S = { info: null, me: null, classes: {}, friends: [], events: [], classwork: [], notices: {}, viewDate: null, lastDate: null, key: '' };
+  const S = { info: null, me: null, classes: {}, friends: [], events: [], tasks: null, notices: {}, viewDate: null, lastDate: null, key: '' };
 
   function model() {
     const cal = S.info.calendar;
@@ -69,15 +69,10 @@
       const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[block.key], cls)).map((f) => f.name);
       // line 1: the class; line 2: block, teacher and which friends are in it
       const meta = [block.label, cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
-      // classwork for this class due in the next week
-      const week = MHSCalendar.addDays(m.viewDate, 7);
-      const due = S.classwork.filter((i) => i.block === block.key && i.due >= m.viewDate && i.due <= week);
       return [
         h('div', null, colorDot(block.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
         h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))),
-        p.hour === LUNCH_HOUR ? lunchLine(m) : null,
-        due.map((i) => h('a', { class: 'due-line', href: 'classwork.html' },
-          h('span', { class: `badge kind-${i.kind}` }, KIND_NAMES[i.kind]), ` ${i.title} · ${fmtRelativeDay(i.due, m.viewDate)}`))
+        p.hour === LUNCH_HOUR ? lunchLine(m) : null
       ];
     }
     if (!block) return null;
@@ -212,6 +207,22 @@
     }
   }
 
+  // Due soon: overdue and the next week from the person's Google Tasks.
+  function renderTasks(m) {
+    const card = $('tasks-card');
+    card.hidden = !S.me || !S.tasks || S.tasks.available === false;
+    if (card.hidden) return;
+    const box = $('tasks-preview');
+    if (!S.tasks.connected) return fill(box, h('p', { class: 'muted small' }, h('a', { href: 'classwork.html' }, 'Connect Google Tasks'), ' to see your assignments here.'));
+    if (S.tasks.error) return fill(box, h('p', { class: 'muted small' }, S.tasks.error));
+    const week = MHSCalendar.addDays(m.now.date, 7);
+    const soon = S.tasks.tasks.filter((t) => t.due && t.due <= week).slice(0, 6);
+    fill(box, soon.length ? soon.map((t) => h('div', { class: 'list-row' }, h('div', null,
+      h('strong', null, t.title),
+      h('div', { class: 'small' + (t.due < m.now.date ? ' bad' : ' muted') }, t.due < m.now.date ? `Overdue · ${fmtRelativeDay(t.due, m.now.date)}` : `Due ${fmtRelativeDay(t.due, m.now.date)}`))))
+      : h('p', { class: 'muted small' }, 'Nothing due in the next week.'));
+  }
+
   function renderAll() {
     const m = model();
     renderHead(m);
@@ -219,6 +230,7 @@
     updateLive(m);
     renderEvents(m);
     renderFriends();
+    renderTasks(m);
     renderLunchMenu(m);
     renderCountdowns(m);
   }
@@ -234,17 +246,19 @@
   async function load() {
     try {
       const [info, me, events, notices] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events'), api('GET', '/api/notices')]);
-      let classes = {}, friends = [], classwork = [];
+      let classes = {}, friends = [], tasks = null;
       if (me.user) {
-        const [c, f, w] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'), api('GET', '/api/classwork')]);
-        classes = c; friends = f.friends; classwork = w;
+        // Google Tasks can be slow or unreachable; the rest of the page doesn't wait on it failing
+        const [c, f, t] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
+          api('GET', '/api/tasks').catch((e) => (e.status === 409 ? { available: true, connected: false } : { connected: true, error: e.message, tasks: [] }))]);
+        classes = c; friends = f.friends; tasks = t;
       }
       S.info = info; // always keep the newest clock offset
-      const key = JSON.stringify([info.calendar, events, classes, friends, classwork, notices, me.user && me.user.admin]);
+      const key = JSON.stringify([info.calendar, events, classes, friends, tasks, notices, me.user && me.user.admin]);
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events, classwork, notices });
+      Object.assign(S, { me: me.user, classes, friends, events, tasks, notices });
       S.lastDate = schoolClock(info).date;
       renderAll();
     } catch (e) {

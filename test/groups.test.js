@@ -1,5 +1,5 @@
 'use strict';
-// Classwork, groups, event visibility and sign-up lists, and the tools list.
+// Groups, event visibility and sign-up lists, and the tools list.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const cal = require('../public/js/calendar.js');
@@ -22,64 +22,6 @@ async function befriend(a, b) {
   await a.post('/api/friends/request', { code: (await b.me()).friendCode });
   await b.post('/api/friends/request', { code: (await a.me()).friendCode });
 }
-
-// ---------------------------------------------------------------- classwork
-
-test('classwork: posted to your own class, seen only by classmates, validated', async () => {
-  const ctx = await startApp({ mock });
-  const ann = await as(ctx, 1, { given_name: 'Ann' });
-  const ben = await as(ctx, 2, { given_name: 'Ben' });
-  const cy = await as(ctx, 3, { given_name: 'Cy' });
-  await ann.put('/api/classes', { yellow: { name: 'Algebra II', teacher: 'Smith' }, red: { name: 'English' } });
-  await ben.put('/api/classes', { green: { name: 'algebra  ii', teacher: '' } }); // same class (no teacher given), different block
-  await cy.put('/api/classes', { yellow: { name: 'Algebra II', teacher: 'Jones' } }); // different teacher: different class
-
-  for (const bad of [{}, { block: 'red' }, { block: 'blue', kind: 'quiz', title: 'x', due: soon() }, { block: 'yellow', kind: 'essay', title: 'x', due: soon() },
-    { block: 'yellow', kind: 'quiz', title: ' ', due: soon() }, { block: 'yellow', kind: 'quiz', title: 'x', due: soon(-1) }, { block: 'yellow', kind: 'quiz', title: 'x', due: soon(200) }]) {
-    assert.equal((await ann.post('/api/classwork', bad)).status, 400, JSON.stringify(bad));
-  }
-  const r = await ann.post('/api/classwork', { block: 'yellow', kind: 'quiz', title: ' Unit 3 quiz ', due: soon(2), notes: 'Sections 3.1–3.4' });
-  assert.equal(r.status, 200);
-  assert.deepEqual([r.data.title, r.data.className, r.data.block, r.data.mine], ['Unit 3 quiz', 'Algebra II', 'yellow', true]);
-  assert.equal((await ann.post('/api/classwork', { block: 'yellow', kind: 'quiz', title: 'unit 3 QUIZ', due: soon(2) })).status, 409, 'duplicates are refused');
-  await ann.post('/api/classwork', { block: 'red', kind: 'assignment', title: 'Essay draft', due: soon(1) });
-
-  const benSees = (await ben.get('/api/classwork')).data;
-  assert.deepEqual(benSees.map((i) => [i.title, i.block, i.by, i.mine, i.canDelete]), [['Unit 3 quiz', 'green', 'Ann T.', false, false]]);
-  assert.deepEqual((await cy.get('/api/classwork')).data, [], "another teacher's section doesn't see it");
-  assert.deepEqual((await ann.get('/api/classwork')).data.map((i) => i.title), ['Essay draft', 'Unit 3 quiz'], 'sorted by due date');
-
-  assert.equal((await ben.del(`/api/classwork/${r.data.id}`)).status, 403);
-  assert.equal((await cy.post(`/api/classwork/${r.data.id}/report`)).status, 404, 'only classmates can report');
-  assert.equal((await ann.post(`/api/classwork/${r.data.id}/report`)).status, 400, 'not your own post');
-  assert.equal((await ann.del(`/api/classwork/${r.data.id}`)).status, 200);
-  assert.equal((await ben.get('/api/classwork')).data.length, 0);
-});
-
-test('classwork: three reports hide it until an admin keeps or deletes it', async () => {
-  const ctx = await startApp({ mock });
-  const boss = await owner(ctx);
-  const kids = [];
-  for (let n = 1; n <= 5; n++) {
-    const k = await as(ctx, n);
-    await k.put('/api/classes', { pink: { name: 'Chemistry' } });
-    kids.push(k);
-  }
-  const id = (await kids[0].post('/api/classwork', { block: 'pink', kind: 'test', title: 'Rude title', due: soon(5) })).data.id;
-  assert.equal((await kids[1].post(`/api/classwork/${id}/report`)).data.hidden, false);
-  await kids[1].post(`/api/classwork/${id}/report`); // a second report by the same person doesn't count
-  await kids[2].post(`/api/classwork/${id}/report`);
-  assert.equal((await kids[3].post(`/api/classwork/${id}/report`)).data.hidden, true);
-  assert.equal((await kids[4].get('/api/classwork')).data.length, 0, 'hidden from classmates');
-  assert.equal((await kids[0].get('/api/classwork')).data[0].hidden, true, 'the author still sees it, marked hidden');
-
-  assert.equal((await kids[1].get('/api/admin/classwork')).status, 403);
-  const reported = (await boss.get('/api/admin/classwork')).data;
-  assert.deepEqual(reported.map((i) => [i.title, i.reports, i.hidden]), [['Rude title', 3, true]]);
-  assert.equal((await boss.post(`/api/admin/classwork/${id}/keep`)).status, 200);
-  assert.equal((await kids[4].get('/api/classwork')).data.length, 1, 'visible again');
-  assert.equal((await boss.del(`/api/classwork/${id}`)).status, 200, 'admins can delete anything');
-});
 
 // ---------------------------------------------------------------- groups
 
@@ -213,14 +155,14 @@ test('events: sign-up lists with limits; organizers see names, others the count'
   assert.equal((await ann.get('/api/events')).data.find((x) => x.id === id).signup.count, 1);
 });
 
-test('backup keeps classwork, groups, event details and tools', async () => {
+test('backup keeps study sessions, groups, event details and tools', async () => {
   const one = await startApp({ mock });
   const boss = await owner(one);
   const ann = await as(one, 1, { given_name: 'Ann' });
   const ben = await as(one, 2, { given_name: 'Ben' });
   await befriend(ann, ben);
   await ann.put('/api/classes', { yellow: { name: 'Math' } });
-  await ann.post('/api/classwork', { block: 'yellow', kind: 'test', title: 'Final', due: soon(9) });
+  await ann.post('/api/study', { block: 'yellow', title: 'Final review', date: soon(9) });
   const gid = (await ann.post('/api/groups', { name: 'Band', kind: 'club', joinPolicy: 'approval' })).data.id;
   await ben.post('/api/groups', { name: 'Waiting', kind: 'group', joinPolicy: 'open' });
   await boss.put(`/api/admin/groups/${gid}`, { approved: true });
@@ -234,7 +176,7 @@ test('backup keeps classwork, groups, event details and tools', async () => {
   const boss2 = await owner(two);
   assert.deepEqual((await boss2.post('/api/admin/restore', backup)).data, { users: 3, events: 2, droppedEvents: 0 });
   const s = two.app.state;
-  assert.deepEqual(s.classwork.map((i) => i.title), ['Final']);
+  assert.deepEqual(s.studySessions.map((i) => i.title), ['Final review']);
   assert.deepEqual(s.groups.map((g) => [g.name, g.approved, g.requests.length]).sort(), [['Band', true, 1], ['Waiting', false, 0]]);
   assert.deepEqual(s.events.map((e) => [e.title, e.visibility, e.groupId === gid, e.invitees.length, e.signup && e.signup.limit]).sort(),
     [['Party', 'private', false, 1, null], ['Practice', 'group', true, 0, 5]]);
@@ -248,6 +190,11 @@ test('tools: admins manage the list; students suggest, admins accept or dismiss'
   const boss = await owner(ctx);
   const kid = await as(ctx, 1, { given_name: 'Kim' });
   const start = (await ctx.client().get('/api/tools')).data;
+  // the old Tools page now lives on Links & tools
+  for (const pth of ['/tools', '/tools.html']) {
+    const r = await ctx.client().raw('GET', pth);
+    assert.equal(r.status, 302); assert.equal(r.headers.get('location'), '/links.html#tools');
+  }
   assert.deepEqual(start.map((t) => [t.name, t.url]), [['Class Cards', '']]);
 
   for (const bad of [{}, { name: ' ' }, { name: 'x', url: 'ftp://x' }]) assert.equal((await kid.post('/api/tools/suggestions', bad)).status, 400);

@@ -1,12 +1,13 @@
 'use strict';
 // Calendar sync: a private, unguessable link (https://…/cal/<token>.ics) that calendar apps
-// (iPhone, Google, Outlook) subscribe to. It has your classwork, your groups' events, events you
-// made, signed up for or were invited to, your study sessions, and no-school days. Calendar apps
+// (iPhone, Google, Outlook) subscribe to. It has every school day (7:00 to the last bell, with the
+// day letter), your groups' events, events you made, signed up for or were invited to, your study
+// sessions, and no-school days. Calendar apps
 // can't sign in, so the token is the key: it can be replaced or turned off on the Account page.
 const crypto = require('node:crypto');
 
 module.exports = function icalendar(app) {
-  const { route, state, db, config, HttpError, limiter, today, cal, features } = app;
+  const { route, state, db, config, HttpError, limiter, today, cal, bell, features } = app;
 
   const feedUrl = (u) => (u.calendarToken ? `${config.publicUrl}/cal/${u.calendarToken}.ics` : null);
   const userByToken = (t) => (/^[0-9a-f]{48}$/.test(t) ? Object.values(state.users).find((u) => u.calendarToken === t) || null : null);
@@ -54,12 +55,36 @@ module.exports = function icalendar(app) {
     return guess;
   }
 
+  // One event per school day, from 7:00 until that day's last bell (2:45 PM, or 12:45 PM on early
+  // release days), titled with the day letter: "Day B", "Day C · Early release".
+  const DAY_START = '07:00';
+  const TYPE_NOTES = { advisory: 'Advisory day', early_release: 'Early release' };
+  function schoolDays(t) {
+    const out = [];
+    const c = state.calendar;
+    const last = cal.addDays(t, 180);
+    let d = cal.addDays(t, -14);
+    if (!cal.dayInfo(c, d).schoolDay) d = cal.nextSchoolDay(c, d);
+    for (let i = 0; d && d <= last && i < 200; i++, d = cal.nextSchoolDay(c, d)) {
+      const info = cal.dayInfo(c, d);
+      const periods = (bell.SCHEDULES[info.scheduleType] || bell.SCHEDULES.daily).periods;
+      const end = periods[periods.length - 1].end;
+      const title = [info.dayLetter ? `Day ${info.dayLetter}` : 'School day', TYPE_NOTES[info.scheduleType]].filter(Boolean).join(' · ');
+      out.push({
+        uid: `day-${d}`, date: d, time: DAY_START, minutes: bell.timeToMinutes(end) - bell.timeToMinutes(DAY_START), title,
+        description: `School day until ${bell.formatTime(end)}${info.dayLetter ? ` (Day ${info.dayLetter})` : ''}`
+      });
+    }
+    return out;
+  }
+
   function build(user) {
     const now = Date.now();
     const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MHS Hub//Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
       'X-WR-CALNAME:MHS Hub', `X-WR-TIMEZONE:${config.tz}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
     const items = features.flatMap((f) => (f.calendarItems ? f.calendarItems(user) : []));
     const t = today();
+    items.push(...schoolDays(t));
     for (const [date, label] of Object.entries(state.calendar.noSchool)) {
       if (date >= cal.addDays(t, -30)) items.push({ uid: `noschool-${date}`, date, title: label ? `No school: ${label}` : 'No school' });
     }

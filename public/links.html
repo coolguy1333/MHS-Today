@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1e3a8a" />
-  <title>Links · MHS Hub</title>
+  <title>Links &amp; tools · MHS Hub</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -19,10 +19,20 @@
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
     <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
-    <h1>Important links</h1>
-    <p class="muted">Tickets, schedules and other places you'll need for school and after-school activities. Links open the official sites in a new tab.</p>
+    <h1>Links &amp; tools</h1>
+    <p class="muted">Tools for MHS students, plus tickets, schedules and the other places you'll need for school and activities. They open in a new tab.</p>
     <div id="links"><p class="muted">Loading…</p></div>
-    <p class="small muted" id="admin-note" hidden>You're an admin: edit this list on the <a href="admin.html#links-card">Admin page</a>.</p>
+    <details class="card" id="suggest-card" hidden>
+      <summary>Suggest a tool</summary>
+      <p class="small muted">Know a useful site, or have an idea for one? Admins look at every suggestion.</p>
+      <form id="suggest-form" class="form-grid">
+        <label><span>Name</span><input type="text" id="t-name" maxlength="60" required /></label>
+        <label><span>Web address (if it exists)</span><input type="url" id="t-url" maxlength="500" placeholder="https://…" /></label>
+        <label class="wide"><span>What it does</span><input type="text" id="t-description" maxlength="200" /></label>
+        <div class="wide"><button class="btn" type="submit">Send suggestion</button></div>
+      </form>
+    </details>
+    <p class="small muted" id="admin-note" hidden>You're an admin: edit the tools and links on the <a href="admin.html#links-card">Admin page</a>.</p>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
