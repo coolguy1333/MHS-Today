@@ -234,7 +234,6 @@ const step = (m) => console.log('•', m);
   assert.match(await text(sp, '#tasks-msg'), /Google Tasks is connected/);
   assert.equal(new URL(sp.url()).search, '', 'the result is taken out of the address');
   assert.match(await text(sp, '#tasks'), /Old worksheet[\s\S]*Overdue[\s\S]*Lab report[\s\S]*Due tomorrow/);
-  await sp.click('#task-add summary');
   await sp.fill('#tk-title', 'Unit 3 quiz'); await sp.fill('#tk-due', '2026-10-05');
   await sp.click('#task-form button[type=submit]');
   await sp.waitForSelector('#tasks .list-row:has-text("Unit 3 quiz")');

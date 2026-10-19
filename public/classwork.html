@@ -29,17 +29,21 @@
     </div>
     <div class="card" id="tasks-card" hidden>
       <div class="row between"><h2>To do</h2><a class="small" href="https://tasks.google.com/" target="_blank" rel="noopener noreferrer">Open Google Tasks</a></div>
+      <form id="task-form" class="quick-add">
+        <div class="quick-row">
+          <input type="text" id="tk-title" maxlength="300" required placeholder="Add an assignment…" aria-label="New assignment" />
+          <input type="date" id="tk-due" aria-label="Due date (optional)" title="Due date (optional)" />
+          <button class="btn" type="submit">Add</button>
+        </div>
+        <details class="more-opts">
+          <summary class="small">List and notes</summary>
+          <div class="form-grid">
+            <label><span>List</span><select id="tk-list"></select></label>
+            <label><span>Notes (optional)</span><input type="text" id="tk-notes" maxlength="1000" placeholder="Class, pages, what to bring" /></label>
+          </div>
+        </details>
+      </form>
       <div id="tasks"><p class="muted">Loading…</p></div>
-      <details id="task-add">
-        <summary>Add an assignment</summary>
-        <form id="task-form" class="form-grid">
-          <label class="wide"><span>Title</span><input type="text" id="tk-title" maxlength="300" required placeholder="Unit 3 quiz, Lab report…" /></label>
-          <label><span>Due (optional)</span><input type="date" id="tk-due" /></label>
-          <label><span>List</span><select id="tk-list"></select></label>
-          <label class="wide"><span>Notes (optional)</span><input type="text" id="tk-notes" maxlength="1000" placeholder="Class, pages, what to bring" /></label>
-          <div class="wide"><button class="btn" type="submit">Add to Google Tasks</button></div>
-        </form>
-      </details>
       <p class="small"><button class="linklike" type="button" id="disconnect-btn">Disconnect Google Tasks</button></p>
     </div>
     <div class="card" id="study-card" hidden>

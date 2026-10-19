@@ -179,7 +179,8 @@
   if (invite) {
     $('friend-code').value = invite;
     history.replaceState(null, '', 'friends.html');
-    find(invite, null);
+    await find(invite, null);
+    box.scrollIntoView({ block: 'center' }); // the add-a-friend card is below your friends
   }
   setInterval(() => load(false).catch(() => {}), 30000);
 })();
