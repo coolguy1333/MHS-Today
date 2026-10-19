@@ -65,6 +65,8 @@
     D: ['yellow', 'red', 'blue', 'orange', 'purple', 'silver']
   };
   const BLOCK_KEYS = BLOCKS.map((b) => b.key);
+  // Advisory isn't a color block: it's saved as classes.advisory and shown on Advisory days.
+  const ADVISORY = 'advisory';
   const blockInfo = (key) => BLOCKS.find((b) => b.key === key) || null;
   function blockFor(letter, hour) {
     const row = Object.prototype.hasOwnProperty.call(ROTATION, letter) ? ROTATION[letter] : null;
@@ -155,8 +157,14 @@
     return { status: 'after-school' };
   }
 
+  // The class someone has in `hour` on day `letter` (hour may be 'advisory').
+  function classAt(classes, letter, hour) {
+    const key = hour === ADVISORY ? ADVISORY : blockFor(letter, hour);
+    return key && classes && Object.prototype.hasOwnProperty.call(classes, key) ? classes[key] : null;
+  }
+
   const api = {
-    SCHEDULES, timeToMinutes, formatTime, getCurrentPeriod,
+    SCHEDULES, ADVISORY, classAt, timeToMinutes, formatTime, getCurrentPeriod,
     BLOCKS, BLOCK_KEYS, ROTATION, blockInfo, blockFor, meetings,
     LUNCH_HOUR, LUNCH_BLOCKS, LUNCH_NAMES, LUNCHES, lunchFor, lunchTimes, atLunch, sameClass, teacherKey
   };

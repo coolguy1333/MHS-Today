@@ -63,7 +63,15 @@
   }
 
   function classCell(p, cls, m, hasAny) {
-    if (p.hour === 'advisory') return h('span', { class: 'muted' }, 'Advisory');
+    if (p.hour === 'advisory') {
+      if (!cls) return h('span', { class: 'muted' }, 'Advisory', S.me ? [' · ', h('a', { class: 'small', href: 'schedule.html#advisory' }, 'Add your advisory')] : null);
+      const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes.advisory, cls)).map((f) => f.name);
+      const meta = [cls.teacher || null, buddies.length ? h('span', { class: 'with' }, `With ${listNames(buddies)}`) : null].filter(Boolean);
+      return [
+        h('div', null, h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
+        meta.length ? h('div', { class: 'small muted' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))) : null
+      ];
+    }
     const block = blockInfo(blockFor(m.view.dayLetter, p.hour));
     if (cls) {
       const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[block.key], cls)).map((f) => f.name);
@@ -115,8 +123,8 @@
     const cur = getCurrentPeriod(v.scheduleType, m.now.minutes);
     const nameFor = (p) => {
       if (!p) return null;
-      if (p.hour === 'advisory') return 'Advisory';
       const c = classAt(S.classes, v.dayLetter, p.hour);
+      if (p.hour === 'advisory' && c) return c.name === 'Advisory' ? (c.room ? `Rm ${c.room}` : null) : c.name + (c.room ? ` (Rm ${c.room})` : '');
       return c ? c.name + (c.room ? ` (Rm ${c.room})` : '') : null;
     };
     const periodText = (p) => `${p.label}${nameFor(p) ? ` – ${nameFor(p)}` : ''}`;

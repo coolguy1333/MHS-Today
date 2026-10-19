@@ -223,15 +223,13 @@ const GROUP_KINDS = { club: 'Club', sport: 'Sport', group: 'Student group' };
 // Same class = same name, and the same teacher (by last name) when both have one. Shared with the server.
 const sameClass = (a, b) => MHSBell.sameClass(a, b);
 // Classes are saved per color block; the day letter picks the block for each hour.
-function classAt(classes, letter, hour) {
-  const key = MHSBell.blockFor(letter, hour);
-  return key && classes && Object.prototype.hasOwnProperty.call(classes, key) ? classes[key] : null;
-}
+// Advisory (hour 'advisory') is saved as classes.advisory.
+const classAt = (classes, letter, hour) => MHSBell.classAt(classes, letter, hour);
 // What is a friend doing in `hour` on day `letter`? -> { text, muted }
 function friendClassText(friend, letter, hour) {
   if (!friend.classes) return { text: 'Schedule hidden', muted: true };
-  if (hour === 'advisory') return { text: 'Advisory', muted: false };
   const c = classAt(friend.classes, letter, hour);
+  if (!c && hour === 'advisory') return { text: 'Advisory', muted: false };
   if (!c) return { text: 'No class set', muted: true };
   return { text: c.name + (c.room ? ` · Rm ${c.room}` : ''), muted: false };
 }

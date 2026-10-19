@@ -117,9 +117,9 @@ const step = (m) => console.log('•', m);
   assert.match(ann.page.url(), /schedule\.html$/);
   step('sign-in returned to the page the student wanted');
   const sp = ann.page;
-  // one row per color block; Day A runs Yellow, Red, Pink, Green, Purple, Silver
+  // one row per color block plus Advisory; Day A runs Yellow, Red, Pink, Green, Purple, Silver
   await sp.waitForSelector('#blocks [data-block="yellow"][data-field="name"]');
-  assert.equal(await sp.locator('#blocks [data-field="name"]').count(), 8);
+  assert.equal(await sp.locator('#blocks [data-field="name"]').count(), 9);
   const field = (block, f) => `#blocks [data-block="${block}"][data-field="${f}"]`;
   const fillBlock = async (block, name, teacher, room, lunch) => {
     await sp.fill(field(block, 'name'), name);
@@ -137,6 +137,7 @@ const step = (m) => console.log('•', m);
   await fillBlock('green', 'Spanish 2', 'Sra. Sol', '118', 'B');
   await fillBlock('orange', 'Health', 'Mr. Fit', '120', 'C');
   await sp.fill(field('purple', 'name'), '<img src=x onerror="window.__xss=1">');
+  await sp.fill(field('advisory', 'teacher'), 'Erin Cuellar'); await sp.fill(field('advisory', 'room'), '119'); // no name: "Advisory"
   assert.match(await text(sp, '#save-state'), /Unsaved/);
   // the rotation grid follows what's typed: Pink is Hour 3 on Days A-C, Blue (unset) on Day D
   const gridRow = (hour) => sp.locator(`#rotation tbody tr:nth-child(${hour}) td`);
@@ -150,6 +151,7 @@ const step = (m) => console.log('•', m);
   assert.equal(await sp.inputValue(field('red', 'teacher')), 'Mr. Sum');
   assert.equal(await sp.inputValue(field('green', 'lunch')), 'B');
   assert.equal(await sp.inputValue(field('orange', 'lunch')), 'C');
+  assert.deepEqual([await sp.inputValue(field('advisory', 'name')), await sp.inputValue(field('advisory', 'room'))], ['Advisory', '119']);
   assert.equal(await sp.inputValue(field('purple', 'name')), '<img src=x onerror="window.__xss=1">');
   assert.equal(await sp.evaluate(() => window.__xss), undefined, 'class names never execute as HTML');
   assert.equal(await sp.locator('#rotation img').count(), 0);
@@ -190,7 +192,10 @@ const step = (m) => console.log('•', m);
   assert.equal(await sp.locator('#status').isHidden(), true);
   await sp.click('button:has-text("Back to today")');
   assert.match(await text(sp, '#day-head'), /Thursday, October 1/);
-  step('day navigation skips the break; special schedule shown; back to today works');
+  await sp.click('button:has-text("Previous school day")'); // Wednesday = Advisory day
+  assert.match(await text(sp, '#schedule-body tr[data-hour="advisory"]'), /Advisory[\s\S]*10:36 AM – 11:06 AM[\s\S]*Advisory · Rm 119[\s\S]*Erin Cuellar/);
+  await sp.click('button:has-text("Back to today")');
+  step('day navigation skips the break; special schedule shown; advisory row shows your advisory; back to today works');
 
   // ---------------------------------------------------------------- assignments = Ann's Google Tasks
   assert.match(await text(sp, '#tasks-preview'), /Connect Google Tasks/);
