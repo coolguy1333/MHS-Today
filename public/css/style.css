@@ -551,3 +551,9 @@ fieldset.plain { border: 0; padding: 0; margin: 0; }
   .badge.kind-project { background: #173d27; color: #a6e7bf; }
 }
 .due-line { font-size: 0.82rem; margin-top: 2px; }
+
+/* ---- repeating events ---- */
+.repeat-box { display: grid; gap: 10px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.day-checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.day-check { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); cursor: pointer; }
+.day-check:has(input:checked) { border-color: var(--primary); background: var(--current); font-weight: 600; }

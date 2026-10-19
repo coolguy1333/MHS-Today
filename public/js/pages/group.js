@@ -176,16 +176,19 @@
 
   $('ev-signup').addEventListener('change', () => { $('ev-limit').disabled = !$('ev-signup').checked; });
   $('ev-limit').disabled = true;
+  const groupRepeat = repeatPicker($('ev-date'));
+  $('ev-repeat-slot').replaceWith(groupRepeat.el);
   $('event-form').addEventListener('submit', (e) => {
     e.preventDefault();
     busy(e.submitter, async () => {
       await api('POST', '/api/events', {
         title: $('ev-title').value, date: $('ev-date').value, time: $('ev-time').value, description: $('ev-description').value,
-        endDate: $('ev-end-date').value || null, endTime: $('ev-end-time').value, location: $('ev-location').value,
+        endDate: $('ev-end-date').value || null, endTime: $('ev-end-time').value, location: $('ev-location').value, repeat: groupRepeat.value(),
         visibility: $('ev-visibility').value, groupId: g.id,
         signup: $('ev-signup').checked ? { limit: $('ev-limit').value ? Number($('ev-limit').value) : 0 } : null
       });
       e.target.reset();
+      groupRepeat.reset();
       $('ev-limit').disabled = true;
       toast('Event added');
       await loadEvents();

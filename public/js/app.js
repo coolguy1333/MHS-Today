@@ -384,15 +384,49 @@ const hiddenBadge = (x) => (x.hidden ? h('span', { class: 'badge urgent', title:
 
 // ---- events ----
 const EVENT_CATEGORIES = { school: 'School', sports: 'Sports', clubs: 'Clubs', community: 'Community', holidays: 'Holidays' };
-const eventEnd = (e) => e.endDate || e.date; // multi-day events end on endDate
-// "Today · 3:00 – 5:00 PM", "Fri, Oct 23 – Sun, Oct 25", "Fri, Oct 23, 7:00 PM – Sat, Oct 24, 1:00 AM"
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// multi-day events end on endDate; repeating ones on their last week
+const eventEnd = (e) => (e.repeat ? e.repeat.until : e.endDate || e.date);
+// "Today · 3:00 – 5:00 PM", "Fri, Oct 23 – Sun, Oct 25", "Fri, Oct 23, 7:00 PM – Sat, Oct 24, 1:00 AM",
+// "Every Tue & Thu · 3:00 – 4:30 PM · next Thu, Oct 22"
 function fmtEventWhen(e, today) {
   const t = (x) => MHSBell.formatTime(x);
   const day = (d) => fmtRelativeDay(d, today);
+  if (e.repeat) {
+    const days = e.repeat.days.map((d) => WEEKDAY_SHORT[d]);
+    const list = days.length > 1 ? `${days.slice(0, -1).join(', ')} & ${days[days.length - 1]}` : days[0];
+    return `Every ${list}${e.time ? ` · ${t(e.time)}${e.endTime ? ` – ${t(e.endTime)}` : ''}` : ''}${e.next ? ` · next ${day(e.next)}` : ' · no more meetings'}`;
+  }
   if (!e.endDate) return day(e.date) + (e.time ? ` · ${t(e.time)}${e.endTime ? ` – ${t(e.endTime)}` : ''}` : '');
   if (!e.time) return `${day(e.date)} – ${day(e.endDate)}`;
   return `${day(e.date)}, ${t(e.time)} – ${day(e.endDate)}${e.endTime ? `, ${t(e.endTime)}` : ''}`;
 }
+// "Repeats every week" for the event forms: the weekdays, until when, and whether to skip days off.
+// `dateInput` is the form's start date (its weekday is ticked when repeating is turned on).
+function repeatPicker(dateInput) {
+  const on = h('input', { type: 'checkbox' });
+  const dayBoxes = [1, 2, 3, 4, 5, 6, 0].map((d) => h('input', { type: 'checkbox', value: String(d), 'aria-label': `Repeat on ${WEEKDAY_SHORT[d]}` }));
+  const until = h('input', { type: 'date', 'aria-label': 'Repeat until' });
+  const skip = h('input', { type: 'checkbox', checked: true });
+  const box = h('div', { class: 'repeat-box', hidden: true },
+    h('div', { class: 'day-checks' }, dayBoxes.map((b, i) => h('label', { class: 'day-check' }, b, h('span', null, WEEKDAY_SHORT[[1, 2, 3, 4, 5, 6, 0][i]])))),
+    h('label', null, h('span', null, 'Until'), until),
+    h('label', { class: 'check' }, skip, h('span', null, 'Skip days with no school')));
+  on.addEventListener('change', () => {
+    box.hidden = !on.checked;
+    if (on.checked && dateInput.value && !dayBoxes.some((b) => b.checked)) {
+      const wd = utcDate(dateInput.value).getUTCDay();
+      dayBoxes.find((b) => b.value === String(wd)).checked = true;
+    }
+    if (on.checked && dateInput.value && !until.value) until.value = MHSCalendar.addDays(dateInput.value, 56); // about two months
+  });
+  return {
+    el: h('div', { class: 'wide repeat' }, h('label', { class: 'check' }, on, h('span', null, 'Repeats every week (meetings, practices)')), box),
+    value: () => (on.checked ? { days: dayBoxes.filter((b) => b.checked).map((b) => Number(b.value)), until: until.value, skipNoSchool: skip.checked } : null),
+    reset() { on.checked = false; box.hidden = true; for (const b of dayBoxes) b.checked = false; until.value = ''; skip.checked = true; }
+  };
+}
+
 function eventRow(e, today, reload) {
   const VIS = { group: 'Group members', private: 'Private' };
   const s = e.signup;

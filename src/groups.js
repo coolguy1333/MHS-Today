@@ -373,8 +373,34 @@ module.exports = function groups(app) {
     if (endTime && !time) throw bad('Add a start time to give the event an end time');
     if (endTime && !endDate && endTime <= time) throw bad('The end time must be after the start time');
     const category = CATEGORIES.includes(b.category) ? b.category : fallbackCategory;
-    return { title, date, time, endDate, endTime, category, location: cleanText(b.location, 120), description: cleanText(b.description, 500) };
+    // repeating weekly (club meetings, practices): on these weekdays until a date, usually not on no-school days
+    let repeat = null;
+    if (b.repeat !== undefined && b.repeat !== null && b.repeat !== false) {
+      if (!isPlainObject(b.repeat)) throw bad('Invalid repeat');
+      const days = [...new Set((Array.isArray(b.repeat.days) ? b.repeat.days : []).map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort();
+      if (!days.length) throw bad('Pick the days it repeats on');
+      const until = typeof b.repeat.until === 'string' ? b.repeat.until : '';
+      if (cal.parseDate(until) === null || until < date) throw bad('Pick when it stops repeating (on or after the first day)');
+      if (until > cal.addDays(date, 366)) throw bad('A repeating event can go on for up to a year');
+      if (endDate) throw bad('A repeating event can\'t also last several days');
+      repeat = { days, until, skipNoSchool: b.repeat.skipNoSchool !== false };
+    }
+    return { title, date, time, endDate, endTime, repeat, category, location: cleanText(b.location, 120), description: cleanText(b.description, 500) };
   }
+  // The dates an event happens on between `from` and `to` (a repeating one: each matching weekday).
+  function occurrences(e, from, to) {
+    if (!e.repeat) return e.date >= from && e.date <= to ? [e.date] : [];
+    const out = [];
+    const last = e.repeat.until < to ? e.repeat.until : to;
+    for (let d = e.date > from ? e.date : from, n = 0; d <= last && n < 400; d = cal.addDays(d, 1), n++) {
+      if (!e.repeat.days.includes(new Date(cal.parseDate(d)).getUTCDay())) continue;
+      if (e.repeat.skipNoSchool && !cal.dayInfo(state.calendar, d).schoolDay) continue;
+      out.push(d);
+    }
+    return out;
+  }
+  const nextOf = (e) => (e.repeat ? occurrences(e, today(), e.repeat.until)[0] || null : null);
+  const lastDay = (e) => (e.repeat ? e.repeat.until : e.endDate || e.date);
   function cleanSignup(s) {
     if (s === undefined || s === null || s === false) return null;
     if (s === true) return { limit: 0, people: [] };
@@ -384,13 +410,16 @@ module.exports = function groups(app) {
     return { limit, people: [] };
   }
 
-  const byDateTime = (a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
+  // in date order; a repeating event sorts by its next meeting
+  const sortKey = (e) => `${e.repeat ? nextOf(e) || e.repeat.until : e.date} ${e.time}`;
+  const byDateTime = (a, b) => sortKey(a).localeCompare(sortKey(b));
   function eventView(e, user) {
     const g = e.groupId ? findGroup(e.groupId) : null;
     const org = !!user && (organizers(e).has(user.id) || isAdmin(user));
     const author = getUser(e.by);
     return {
       id: e.id, title: e.title, date: e.date, time: e.time, endDate: e.endDate, endTime: e.endTime, category: e.category, location: e.location,
+      repeat: e.repeat, next: nextOf(e),
       description: e.description, visibility: e.visibility,
       group: g ? { id: g.id, name: g.name } : null,
       by: user ? (author ? author.name : 'Former student') : undefined,
@@ -518,16 +547,18 @@ module.exports = function groups(app) {
     || (e.groupId && !!findGroup(e.groupId) && !!roleIn(findGroup(e.groupId), user));
   return {
     // timed events and who to remind: the author, people signed up, people invited
-    eventsForReminders: () => state.events.filter((e) => e.time && !reports.hidden('event', e.id)).map((e) => ({
-      id: e.id, date: e.date, time: e.time, title: e.title,
+    eventsForReminders: () => state.events.filter((e) => e.time && !reports.hidden('event', e.id)).flatMap((e) => (e.repeat ? occurrences(e, today(), today()) : [e.date]).map((d) => ({
+      id: e.repeat ? `${e.id}-${d}` : e.id, date: d, time: e.time, title: e.title,
       people: [...new Set([e.by, ...e.invitees, ...(e.signup ? e.signup.people : [])].filter(Boolean))]
-    })),
-    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && mineForCalendar(e, user)).map((e) => {
+    }))),
+    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && mineForCalendar(e, user)).flatMap((e) => {
       const g = e.groupId ? findGroup(e.groupId) : null;
-      return {
-        uid: `ev-${e.id}`, date: e.date, time: e.time || null, endDate: e.endDate, endTime: e.endTime, title: e.title, location: e.location,
+      const item = (date, uid) => ({
+        uid, date, time: e.time || null, endDate: e.endDate, endTime: e.endTime, title: e.title, location: e.location,
         description: [g ? g.name : '', e.description].filter(Boolean).join(': ')
-      };
+      });
+      // each meeting of a repeating event is its own calendar entry (two weeks back, six months ahead)
+      return e.repeat ? occurrences(e, cal.addDays(today(), -14), cal.addDays(today(), 180)).map((d) => item(d, `ev-${e.id}-${d}`)) : [item(e.date, `ev-${e.id}`)];
     }),
     status: () => ({ groups: state.groups.length, pendingGroups: state.groups.filter((g) => !g.approved).length }),
     exportData: () => ({ groups: state.groups }),
@@ -590,7 +621,7 @@ module.exports = function groups(app) {
     },
     maintain() {
       const cutoff = cal.addDays(today(), -EVENT_KEEP_DAYS);
-      state.events = state.events.filter((e) => (e.endDate || e.date) >= cutoff);
+      state.events = state.events.filter((e) => lastDay(e) >= cutoff);
     },
     forgetUser(id) {
       state.events = state.events.filter((e) => e.by !== id);
@@ -623,6 +654,7 @@ module.exports = function groups(app) {
         if (e.signup === undefined) e.signup = null;
         // added with end times and categories
         if (e.endDate === undefined) e.endDate = null;
+        if (e.repeat === undefined) e.repeat = null;
         if (typeof e.endTime !== 'string') e.endTime = '';
         if (typeof e.location !== 'string') e.location = '';
         if (!CATEGORIES.includes(e.category)) { const g = e.groupId ? findGroup(e.groupId) : null; e.category = g ? KIND_CATEGORY[g.kind] : 'school'; }

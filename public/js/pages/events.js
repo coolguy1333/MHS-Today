@@ -66,6 +66,8 @@
     syncForm();
   }
 
+  const repeat = repeatPicker($('date'));
+  $('repeat-slot').replaceWith(repeat.el);
   $('cat-filter').addEventListener('change', render);
   $('date').addEventListener('change', () => { $('end-date').min = $('date').value; });
   $('event-form').addEventListener('submit', (e) => {
@@ -74,7 +76,7 @@
       const visibility = $('ev-visibility').value;
       const body = {
         title: $('title').value, date: $('date').value, time: $('time').value, description: $('description').value, visibility,
-        endDate: $('end-date').value || null, endTime: $('end-time').value, location: $('location').value,
+        endDate: $('end-date').value || null, endTime: $('end-time').value, location: $('location').value, repeat: repeat.value(),
         category: $('ev-group').value && visibility !== 'private' ? undefined : $('ev-category').value, // a group's events take its kind
         groupId: visibility === 'private' ? null : $('ev-group').value || null,
         signup: $('ev-signup').checked ? { limit: $('ev-limit').value ? Number($('ev-limit').value) : 0 } : null
@@ -82,6 +84,7 @@
       if (visibility === 'private') body.invitees = [...$('invite-list').querySelectorAll('input:checked')].map((c) => c.value);
       await api('POST', '/api/events', body);
       e.target.reset();
+      repeat.reset();
       $('date').value = schoolClock(info).date;
       syncForm();
       $('add-card').open = false;
