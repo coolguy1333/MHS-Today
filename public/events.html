@@ -22,8 +22,8 @@
     <h1>Events</h1>
     <p class="muted small">Events for everyone, for your groups, and private ones you're invited to. For the official calendar, see
       <a href="https://www.masd.k12.wi.us/Calendar/" target="_blank" rel="noopener noreferrer">masd.k12.wi.us/Calendar</a>.</p>
-    <div class="card" id="add-card" hidden>
-      <h2>Add an event</h2>
+    <details class="card" id="add-card" hidden>
+      <summary>Add an event</summary>
       <p class="small muted" id="post-note" hidden></p>
       <form id="event-form" class="form-grid">
         <label class="wide"><span>Title</span><input type="text" id="title" required maxlength="120" /></label>
@@ -35,10 +35,10 @@
         <p class="small muted wide" id="group-note" role="status"></p>
         <fieldset class="wide" id="invite-field" hidden><legend class="field-label">Invite friends</legend><div class="checklist-box" id="invite-list"></div></fieldset>
         <label class="check"><input type="checkbox" id="ev-signup" /><span>Add a sign-up list</span></label>
-        <label><span>Spots (empty = no limit)</span><input type="number" id="ev-limit" min="1" max="500" inputmode="numeric" /></label>
+        <label id="limit-field" hidden><span>Spots (empty = no limit)</span><input type="number" id="ev-limit" min="1" max="500" inputmode="numeric" /></label>
         <div class="wide"><button class="btn" type="submit">Add event</button></div>
       </form>
-    </div>
+    </details>
     <div class="card" id="signin-card" hidden><p><a href="login.html?next=events.html">Sign in</a> to add events, see your groups' events and sign up.</p></div>
     <div class="card">
       <h2>Upcoming</h2>

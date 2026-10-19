@@ -32,7 +32,7 @@
   function dueText(t, today) {
     if (!t.due) return null;
     if (t.due < today) return h('span', { class: 'bad' }, `Overdue · ${fmtRelativeDay(t.due, today)}`);
-    return `Due ${fmtRelativeDay(t.due, today)}`;
+    return fmtDue(t.due, today);
   }
   function taskRow(t, today) {
     const box = h('input', { type: 'checkbox', 'aria-label': `Mark "${t.title}" done` });

@@ -22,6 +22,10 @@
     <h1>Admin</h1>
     <div id="admin-error" class="notice error" hidden></div>
     <div id="admin-body" hidden>
+      <nav class="jump" aria-label="Admin sections">
+        <a href="#queue-card">Needs attention</a><a href="#calendar-card">School calendar</a><a href="#people-card">People</a>
+        <a href="#notices-card">Announcements</a><a href="#links-card">Links</a><a href="#tools-card">Tools</a><a href="#backup-card">Backup</a>
+      </nav>
       <div class="card"><h2>Setup check</h2><ul class="checklist" id="setup"></ul></div>
 
       <div class="card" id="queue-card">
@@ -30,7 +34,7 @@
         <div id="queue"><p class="muted small">Loading…</p></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="calendar-card">
         <h2>School calendar</h2>
         <p class="muted small">The day letter moves forward by one on every school day (weekdays that are not marked no-school below), so you only need to correct it if it drifts.</p>
         <h3>Day letter</h3>
@@ -62,7 +66,7 @@
         <div class="table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Day</th><th scope="col">Schedule</th></tr></thead><tbody id="preview"></tbody></table></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="people-card">
         <h2>People</h2>
         <p class="small muted">Owners come from the <code>ADMIN_EMAILS</code> setting and can't be changed here. Any admin can make someone else an admin, verify people so they can post events, and edit, reset or lock a profile.</p>
         <div class="table-wrap"><table>
@@ -118,7 +122,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="backup-card">
         <h2>Backup and restore</h2>
         <p class="small muted">Everything lives in one file on the server (<code>/data/db.json</code>). WebManager backs up <code>/data</code> before each restart or update, and the site keeps a daily copy in <code>/data/backups</code>. For a copy you control, download one here.</p>
         <p><a class="btn" id="backup-link" href="/api/admin/backup" download>Download backup</a></p>

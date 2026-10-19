@@ -23,9 +23,9 @@
         ? [v.dayLetter ? h('span', { class: 'badge blue' }, `Day ${v.dayLetter}`) : null, ' ', SCHEDULE_NAMES[v.scheduleType] || '']
         : (v.reason === 'weekend' ? 'Weekend' : 'No school') + (v.label ? ` – ${v.label}` : '')),
       h('div', { class: 'day-nav' },
-        prev ? h('button', { class: 'btn secondary small', type: 'button', onclick: () => go(prev) }, '← Previous school day') : null,
+        prev ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Previous school day', onclick: () => go(prev) }, '← Previous') : null,
         S.viewDate ? h('button', { class: 'btn small', type: 'button', onclick: () => go(null) }, 'Back to today') : null,
-        next ? h('button', { class: 'btn secondary small', type: 'button', onclick: () => go(next) }, 'Next school day →') : null));
+        next ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Next school day', onclick: () => go(next) }, 'Next →') : null));
   }
 
   function renderMine(m) {

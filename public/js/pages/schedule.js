@@ -44,6 +44,7 @@
   function setDirty(on) {
     dirty = on;
     $('save-state').textContent = on ? 'Unsaved changes' : '';
+    $('save-bar').classList.toggle('dirty', on); // keeps Save in view while there's something to save
   }
 
   // ---- one row per block, then Advisory
@@ -144,4 +145,6 @@
   }));
 
   renderGrid();
+  // Nothing saved yet: the Infinite Campus import is the quickest start
+  if (!Object.keys(classes).length) $('import-card').open = true;
 })();
