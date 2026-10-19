@@ -192,10 +192,20 @@ const step = (m) => console.log('•', m);
   assert.equal(await sp.locator('#status').isHidden(), true);
   await sp.click('button:has-text("Back to today")');
   assert.match(await text(sp, '#day-head'), /Thursday, October 1/);
+  // two weeks at a glance: this week (Mon 9/28 - Fri 10/2) and next (fall break 10/5-7, early release 10/9)
+  const weeks = (await sp.locator('#weeks .wk-day').allInnerTexts()).map((t) => t.replace(/\s*\n\s*/g, ' ').trim());
+  assert.deepEqual(weeks, ['Mon 9/28 B', 'Tue 9/29 C', 'Wed 9/30 D Advisory', 'Thu 10/1 A', 'Fri 10/2 B',
+    'Mon 10/5 – Fall break', 'Tue 10/6 – Fall break', 'Wed 10/7 – Fall break', 'Thu 10/8 C', 'Fri 10/9 D Early rel.']);
+  assert.equal(await sp.locator('#weeks .wk-day.today').innerText().then((t) => t.split('\n')[0]), 'Thu 10/1');
+  await sp.click('#weeks button:has-text("10/8")');
+  assert.match(await text(sp, '#day-head'), /Thursday, October 8[\s\S]*Day C/);
+  assert.equal(await sp.locator('#weeks .wk-day.viewing').count(), 1);
+  await sp.click('button:has-text("Back to today")');
   await sp.click('button:has-text("Previous school day")'); // Wednesday = Advisory day
   assert.match(await text(sp, '#schedule-body tr[data-hour="advisory"]'), /Advisory[\s\S]*10:36 AM – 11:06 AM[\s\S]*Advisory · Rm 119[\s\S]*Erin Cuellar/);
   await sp.click('button:has-text("Back to today")');
-  step('day navigation skips the break; special schedule shown; advisory row shows your advisory; back to today works');
+  await sp.screenshot({ path: path.join(SHOTS, 'dashboard-weeks.png'), fullPage: true });
+  step('day navigation skips the break; special schedule shown; advisory row; two-week calendar opens a day; back to today works');
 
   // ---------------------------------------------------------------- assignments = Ann's Google Tasks
   assert.match(await text(sp, '#tasks-preview'), /Connect Google Tasks/);
