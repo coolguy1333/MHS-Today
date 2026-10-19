@@ -922,7 +922,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (url.pathname === '/auth/google/callback') return await authCallback(req, res, url);
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
       if (url.pathname.startsWith('/cal/')) return calendarFeed.feed(req, res, url);
-      if (url.pathname === '/tools' || url.pathname === '/tools.html') return redirect(res, '/links.html#tools'); // merged into Links & tools
+      if (url.pathname === '/tools' || url.pathname === '/tools.html') return redirect(res, '/links.html#tools'); // tools are a section of Links
       return await serveStatic(req, res, url);
     } catch (e) {
       if (e instanceof HttpError) {

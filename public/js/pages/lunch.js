@@ -1,6 +1,7 @@
 // Lunch: the day's menu from the district's menu service, your lunch time, and who shares it.
 (async function () {
   renderNav('lunch');
+  await requireLogin();
   const { dayInfo, nextSchoolDay } = MHSCalendar;
   const { formatTime, lunchFor, lunchTimes } = MHSBell;
   const S = { info: null, me: null, classes: {}, friends: [], viewDate: null };

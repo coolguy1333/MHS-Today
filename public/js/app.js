@@ -113,7 +113,8 @@ const ICONS = {
   schedule: 'M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4',
   classwork: 'M9 11l3 3 8-8 M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11',
   friends: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7 M22 21v-1a6 6 0 0 0-4-5.6',
-  more: 'M4 6h16 M4 12h16 M4 18h16'
+  more: 'M4 6h16 M4 12h16 M4 18h16',
+  login: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4 M10 17l5-5-5-5 M15 12H3'
 };
 function icon(name) {
   const NS = 'http://www.w3.org/2000/svg';
@@ -133,65 +134,68 @@ async function signOut() {
 }
 
 // The site header. Wide screens: every page in one bar. Phones: a slim top bar (logo + you) and
-// a tab bar at the bottom with the four main pages and "More" for the rest.
+// a tab bar at the bottom with the four main pages and "More" for the rest. Signed out, there is
+// only Today (every other page asks you to sign in).
 function renderNav(active) {
   const nav = $('site-nav');
   if (!nav) return;
-  const links = [
+  const ALL = [
     ['index.html', 'Today', 'dashboard'], ['schedule.html', 'Schedule', 'schedule'], ['classwork.html', 'Assignments', 'classwork'],
     ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
-    ['friends.html', 'Friends', 'friends'], ['links.html', 'Links & tools', 'links']
+    ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links']
   ];
   const TABS = ['dashboard', 'schedule', 'classwork', 'friends'];
   const current = (key) => ({ class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null });
+  const wide = h('nav', { 'aria-label': 'Main', class: 'nav-wide' });
   const auth = h('span', { class: 'nav-auth' });
-  fill(nav,
-    h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Hub'),
-    h('nav', { 'aria-label': 'Main', class: 'nav-wide' },
-      links.map(([href, label, key]) => h('a', { href, ...current(key) }, label))),
-    auth);
-
-  // phone tab bar + the "More" sheet
-  const sheetList = h('div', { class: 'sheet-links' },
-    links.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)));
-  const sheet = h('div', { class: 'more-sheet', id: 'more-sheet', hidden: true }, sheetList);
-  const moreBtn = h('button', {
-    type: 'button', class: 'tab' + (TABS.includes(active) ? '' : ' active'), 'aria-expanded': 'false', 'aria-controls': 'more-sheet',
-    onclick: () => setSheet(sheet.hidden)
-  }, icon('more'), h('span', null, 'More'));
-  function setSheet(open) {
-    sheet.hidden = !open;
-    moreBtn.setAttribute('aria-expanded', String(open));
-    if (open) (sheet.querySelector('a, button') || moreBtn).focus();
-  }
+  fill(nav, h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Hub'), wide, auth);
   // the page may draw the nav again (after a rename): replace the old bar and its listeners
   for (const el of document.querySelectorAll('body > .tabbar, body > .more-sheet')) el.remove();
   if (renderNav.off) renderNav.off.abort();
   renderNav.off = new AbortController();
   const { signal } = renderNav.off;
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) { setSheet(false); moreBtn.focus(); } }, { signal });
-  document.addEventListener('click', (e) => { if (!sheet.hidden && !sheet.contains(e.target) && !moreBtn.contains(e.target)) setSheet(false); }, { signal });
-  const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Main' },
-    links.filter(([, , key]) => TABS.includes(key)).map(([href, label, key]) => h('a', { href, class: 'tab' + (key === active ? ' active' : ''), 'aria-current': key === active ? 'page' : null }, icon(key), h('span', null, label))),
-    moreBtn);
-  document.body.append(sheet, tabbar);
-  document.body.classList.add('has-tabbar');
 
-  getMe().then((me) => {
-    if (me.user) {
+  getMe().catch(() => ({ user: null })).then((me) => {
+    const user = me.user;
+    const links = user ? ALL : ALL.filter(([, , key]) => key === 'dashboard');
+    add(wide, links.map(([href, label, key]) => h('a', { href, ...current(key) }, label)));
+    if (user) {
       add(auth,
-        me.user.admin ? h('a', { href: 'admin.html', class: 'nav-admin' + (active === 'admin' ? ' active' : '') }, 'Admin') : null,
-        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : ''), 'aria-label': `Your account (${me.user.name})` }, avatarEl(me.user, 22), h('span', { class: 'nav-name' }, me.user.name)),
+        user.admin ? h('a', { href: 'admin.html', class: 'nav-admin' + (active === 'admin' ? ' active' : '') }, 'Admin') : null,
+        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : ''), 'aria-label': `Your account (${user.name})` }, avatarEl(user, 22), h('span', { class: 'nav-name' }, user.name)),
         h('button', { class: 'linklike nav-signout', type: 'button', onclick: signOut }, 'Sign out'));
-      add(sheetList,
-        h('a', { href: 'account.html', ...current('account') }, 'Account'),
-        me.user.admin ? h('a', { href: 'admin.html', ...current('admin') }, 'Admin') : null,
-        h('button', { class: 'linklike', type: 'button', onclick: signOut }, 'Sign out'));
     } else {
-      add(auth, h('a', { href: 'login.html', class: 'nav-signin' }, 'Sign in'));
-      add(sheetList, h('a', { href: 'login.html' }, 'Sign in'));
+      add(auth, h('a', { href: 'login.html', class: 'nav-signin' + (active === 'login' ? ' active' : '') }, 'Sign in'));
     }
-  }).catch(() => {});
+
+    // phone tab bar (+ the "More" sheet when signed in)
+    const tabLink = ([href, label, key]) => h('a', { href, class: 'tab' + (key === active ? ' active' : ''), 'aria-current': key === active ? 'page' : null }, icon(key), h('span', null, label));
+    let tabs;
+    if (user) {
+      const sheet = h('div', { class: 'more-sheet', id: 'more-sheet', hidden: true }, h('div', { class: 'sheet-links' },
+        ALL.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)),
+        h('a', { href: 'account.html', ...current('account') }, 'Account'),
+        user.admin ? h('a', { href: 'admin.html', ...current('admin') }, 'Admin') : null,
+        h('button', { class: 'linklike', type: 'button', onclick: signOut }, 'Sign out')));
+      const moreBtn = h('button', {
+        type: 'button', class: 'tab' + (TABS.includes(active) ? '' : ' active'), 'aria-expanded': 'false', 'aria-controls': 'more-sheet',
+        onclick: () => setSheet(sheet.hidden)
+      }, icon('more'), h('span', null, 'More'));
+      const setSheet = (open) => {
+        sheet.hidden = !open;
+        moreBtn.setAttribute('aria-expanded', String(open));
+        if (open) sheet.querySelector('a, button').focus();
+      };
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) { setSheet(false); moreBtn.focus(); } }, { signal });
+      document.addEventListener('click', (e) => { if (!sheet.hidden && !sheet.contains(e.target) && !moreBtn.contains(e.target)) setSheet(false); }, { signal });
+      document.body.append(sheet);
+      tabs = [ALL.filter(([, , key]) => TABS.includes(key)).map(tabLink), moreBtn];
+    } else {
+      tabs = [tabLink(ALL[0]), tabLink(['login.html', 'Sign in', 'login'])];
+    }
+    document.body.append(h('nav', { class: 'tabbar', 'aria-label': 'Main' }, tabs));
+    document.body.classList.add('has-tabbar');
+  });
   renderBanner(nav);
 }
 

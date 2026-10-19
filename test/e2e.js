@@ -59,10 +59,13 @@ const step = (m) => console.log('•', m);
   assert.match(await text(anon.page, '#day-head'), /Thursday, October 1/);
   assert.match(await text(anon.page, '#day-head'), /Day \?|day letter/i);
   assert.match(await text(anon.page, '#friends-preview'), /Sign in/);
-  await anon.page.goto(base + '/events.html');
-  await anon.page.waitForSelector('#upcoming');
-  assert.equal(await anon.page.locator('#add-card').isHidden(), true);
-  assert.equal(await anon.page.locator('#signin-card').isVisible(), true);
+  // signed out, Today is the only page: the nav has just Today and Sign in, the rest ask you to sign in
+  await anon.page.waitForSelector('.nav-auth a[href="login.html"]');
+  assert.deepEqual(await anon.page.locator('.nav-wide a').allInnerTexts(), ['Today']);
+  for (const pg of ['events', 'lunch', 'links', 'groups']) {
+    await anon.page.goto(`${base}/${pg}.html`);
+    await anon.page.waitForURL(new RegExp(`login\\.html\\?next=${pg}\\.html`));
+  }
   await anon.page.goto(base + '/schedule.html');             // protected page sends you to sign in and remembers where you were going
   await anon.page.waitForURL(/login\.html\?next=schedule\.html/);
   step('protected page redirects to sign-in with next=');
@@ -108,6 +111,17 @@ const step = (m) => console.log('•', m);
   await ap.click('#type-form button');
   await ap.waitForFunction(() => /Early release/.test(document.querySelector('#type-list').innerText));
   step('calendar: weekday pattern, break and special day saved; preview updates');
+  // a tool added on the Admin page shows in the Tools section of Links
+  await ap.click('#tools-add');
+  await ap.fill('input[aria-label="Tool 2 Name"]', 'GPA calculator');
+  await ap.fill('input[aria-label="Tool 2 https://… (empty = coming soon)"]', 'https://gpa.example.test/');
+  await ap.fill('input[aria-label="Tool 2 What it does"]', 'Work out your GPA');
+  await ap.click('#tools-save'); await ap.waitForFunction(() => document.querySelector('#tools-state').innerText === '');
+  await ap.goto(base + '/links.html'); await ap.waitForSelector('#tools .link-card');
+  assert.match(await text(ap, 'h1'), /^Links$/);
+  assert.deepEqual((await ap.locator('#tools .link-card strong').allInnerTexts()), ['Class Cards', 'GPA calculator']);
+  assert.equal(await ap.locator('#tools a.link-card').getAttribute('href'), 'https://gpa.example.test/');
+  step('tools: added on the Admin page, shown in the Tools section of Links');
   await ap.screenshot({ path: path.join(SHOTS, 'admin.png'), fullPage: true });
 
   // ---------------------------------------------------------------- two students
@@ -370,7 +384,7 @@ const step = (m) => console.log('•', m);
   assert.equal(await pp.locator('.tabbar a.active').innerText(), 'Today');
   await pp.click('.tabbar button.tab');
   assert.equal(await pp.locator('.tabbar button.tab').getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Events', 'Groups', 'Lunch', 'Links & tools', 'Account', 'Admin', 'Sign out']);
+  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Events', 'Groups', 'Lunch', 'Links', 'Account', 'Admin', 'Sign out']);
   await pp.keyboard.press('Escape');
   assert.equal(await pp.locator('#more-sheet').isHidden(), true);
   await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Events")');
