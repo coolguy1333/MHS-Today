@@ -46,10 +46,13 @@ function parseMonth(body) {
   return out;
 }
 
-function createMenu({ district, menuId, fetchFn = fetch, log = () => {}, now = Date.now }) {
+function createMenu({ district, menuId, site, fetchFn = fetch, log = () => {}, now = Date.now }) {
   const months = new Map(); // 'YYYY-MM' -> { days, fetched, failedAt, pending }
   const enabled = !!(district && menuId);
-  const pageUrl = enabled ? `https://www.myschoolmenus.com/organizations/${district}/menus/${menuId}` : null;
+  // the menu's own page, for "see the full menu"
+  const pageUrl = !enabled ? null : site
+    ? `https://menus.healthepro.com/organizations/${district}/sites/${site}/menus/${menuId}`
+    : `https://www.myschoolmenus.com/organizations/${district}/menus/${menuId}`;
 
   async function fetchMonth(ym) {
     const [y, m] = ym.split('-');

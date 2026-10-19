@@ -55,7 +55,7 @@
     }
     const src = $('menu-source');
     src.hidden = !data.source;
-    if (data.source) fill(src, 'From the district\'s ', h('a', { href: data.source, target: '_blank', rel: 'noopener noreferrer' }, 'My School Menus'), ' page. Prices and items can change.');
+    if (data.source) fill(src, 'From the ', h('a', { href: data.source, target: '_blank', rel: 'noopener noreferrer' }, 'high school lunch menu'), ' (Health-e Pro). Prices and items can change.');
   }
 
   let seq = 0;

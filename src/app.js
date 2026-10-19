@@ -37,7 +37,7 @@ const DEFAULT_LINKS = [
   ['Activities', 'Fine Arts', 'https://mhs.masd.k12.wi.us/Athletics--Activities/Activities/Fine-Arts/index.html', ''],
   ['School', 'Infinite Campus', 'https://mukwonagowi.infinitecampus.org/campus/portal/mukwonago.jsp', 'Grades, attendance and your official schedule.'],
   ['School', 'MHS calendar', 'https://mhs.masd.k12.wi.us/__catapult_pages/78502d00-3dcd-46f6-ad44-e5e7a9b512ad/Calendar.html', ''],
-  ['School', 'Lunch menus', 'https://www.myschoolmenus.com/organizations/2534', ''],
+  ['School', 'Lunch menu', 'https://menus.healthepro.com/organizations/2534/sites/15466/menus/133305', "This week's high school lunches."],
   ['Counseling', 'Counseling', 'https://mhs.masd.k12.wi.us/Academics/Counseling/index.html', ''],
   ['Counseling', 'Course registration', 'https://mhs.masd.k12.wi.us/Academics/Counseling/Course-Registration/index.html', ''],
   ['Counseling', 'Scholarships & financial aid', 'https://mhs.masd.k12.wi.us/Academics/Counseling/Scholarships-and-Financial-Aid/index.html', '']
@@ -83,7 +83,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     'X-Robots-Tag': 'noindex, nofollow' // a school's events and pages are not for search engines
   };
   if (config.secure) SECURITY_HEADERS['Strict-Transport-Security'] = 'max-age=15552000';
-  const menu = createMenu({ district: config.menu.district, menuId: config.menu.id, fetchFn, log });
+  const menu = createMenu({ district: config.menu.district, menuId: config.menu.id, site: config.menu.site, fetchFn, log });
   const filter = createFilter(() => state.blockedWords || []);
   // Throws 400 if anything a student typed has a word that doesn't belong on a school site.
   function checkWords(...texts) {
@@ -342,6 +342,9 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     db.save();
   } else {
     state.links = state.links.map(cleanLink).filter(Boolean).slice(0, MAX_LINKS);
+    // the first default lunch link pointed at the whole district; point it at the high school menu
+    const old = state.links.find((l) => l.url === 'https://www.myschoolmenus.com/organizations/2534');
+    if (old) { Object.assign(old, { title: 'Lunch menu', url: 'https://menus.healthepro.com/organizations/2534/sites/15466/menus/133305', description: old.description || "This week's high school lunches." }); db.save(); }
   }
   // Lowercase, accents removed, only letters/digits: 'José O\'Neil' -> ['jose', 'oneil']
   const nameWords = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()

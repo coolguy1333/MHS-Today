@@ -38,7 +38,7 @@ This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`), so [app ho
    | `GOOGLE_CLIENT_SECRET` | yes | From step 2 (stored encrypted by WebManager). |
    | `ADMIN_EMAILS` | yes | Comma-separated Google emails of the owners: they are always admins. Owners and other admins can make more admins on the Admin page. |
    | `ALLOWED_DOMAINS` | no | Comma-separated Google Workspace domains allowed to sign in, e.g. `masd.k12.wi.us`. Empty = any Google account. Personal Gmail accounts can't pass a domain filter. |
-   | `MENU_DISTRICT`, `MENU_ID` | no | The lunch menu on My School Menus (both numbers are in the menu page's address). Defaults: `2534` (Mukwonago Area School District) and `133305` (Mukwonago High School Lunch Menu). `MENU_ID=off` hides the menu. |
+   | `MENU_DISTRICT`, `MENU_SITE`, `MENU_ID` | no | The lunch menu, from its page's address: `menus.healthepro.com/organizations/<DISTRICT>/sites/<SITE>/menus/<ID>`. Defaults: `2534`, `15466` and `133305` ([Mukwonago High School Lunch Menu](https://menus.healthepro.com/organizations/2534/sites/15466/menus/133305)). The site number is only used for the "full menu" link. `MENU_ID=off` hides the menu. |
 | `EVENT_POSTING` | no | `verified` (default: admins and people an admin verifies on the Admin page), `everyone`, or `admins`. |
 
 4. **First sign-in**: open the site, sign in with an admin email, open **Admin**, and set the day letter ("this date is Day B"), the weekday pattern if some weekdays are always Advisory/Early Release, and your no-school dates. The day letter then advances by itself on every school day. The **Setup check** at the top of the Admin page points out anything missing.
