@@ -249,21 +249,23 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const lunchesOf = (u) => Object.fromEntries(cal.LETTERS.map((l) => [l, bell.lunchFor(u.classes, l)]).filter(([, v]) => v));
 
   // ---------- validation ----------
-  // Classes are keyed by color block: { yellow: { name, teacher, room }, green: { ..., lunch: 'A' } }.
+  // Classes are keyed by color block: { yellow: { name, teacher, room }, green: { ..., lunch: 'A' } },
+  // plus `advisory` ({ name, teacher, room }; the name defaults to "Advisory").
   // The first release keyed them by day and hour ('A_1'); those are moved to the block that meets
   // then (a block that is already set wins, then the earliest day).
   const LEGACY_KEY = /^[A-D]_[1-6]$/;
   function cleanClasses(input) {
     if (!isPlainObject(input)) throw bad('Invalid classes');
     const out = {};
-    const keys = [...bell.BLOCK_KEYS.filter((k) => hasOwn(input, k)), ...Object.keys(input).filter((k) => LEGACY_KEY.test(k)).sort()];
+    const keys = [...[...bell.BLOCK_KEYS, bell.ADVISORY].filter((k) => hasOwn(input, k)), ...Object.keys(input).filter((k) => LEGACY_KEY.test(k)).sort()];
     for (const key of keys) {
       const block = LEGACY_KEY.test(key) ? bell.blockFor(key[0], Number(key[2])) : key;
       const c = input[key];
       if (hasOwn(out, block) || !isPlainObject(c)) continue;
-      const name = cleanText(c.name, 60);
+      const teacher = cleanText(c.teacher, 60), room = cleanText(c.room, 20);
+      const name = cleanText(c.name, 60) || (block === bell.ADVISORY && (teacher || room) ? 'Advisory' : '');
       if (!name) continue; // a blank name clears the block
-      out[block] = { name, teacher: cleanText(c.teacher, 60), room: cleanText(c.room, 20) };
+      out[block] = { name, teacher, room };
       if (bell.LUNCH_BLOCKS.includes(block) && bell.LUNCH_NAMES.includes(c.lunch)) out[block].lunch = c.lunch;
     }
     return out;

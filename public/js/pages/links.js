@@ -19,10 +19,13 @@
       groups.get(l.category).push(l);
     }
     const sections = [
-      tools.length ? section('Tools', tools.map((t) => card(t.name, t.url, t.description)), 'tools') : null,
+      tools.length ? section('Tools', tools.map((t) => card(t.name, t.url, t.description)), 'tools')
+        : h('section', { class: 'card', id: 'tools' }, h('h2', null, 'Tools'), h('p', { class: 'muted' }, me.user && me.user.admin
+          ? ['No tools yet. Add some on the ', h('a', { href: 'admin.html#tools-card' }, 'Admin page'), '.']
+          : 'No tools yet. Suggest one below!')),
       ...[...groups].map(([category, items]) => section(category, items.map((l) => card(l.title, l.url, l.description))))
     ].filter(Boolean);
-    fill($('links'), sections.length ? sections : h('p', { class: 'muted' }, 'Nothing here yet.'));
+    fill($('links'), sections);
     if (location.hash === '#tools' && $('tools')) $('tools').scrollIntoView();
   } catch (e) {
     fill($('links'), h('p', { class: 'notice error' }, e.message));

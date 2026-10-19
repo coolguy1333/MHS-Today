@@ -23,9 +23,19 @@ test('import: every color block, teacher as First Last, room, and lunch on the H
     orange: { name: 'Year Book Lab', teacher: 'Kim L Nguyen', room: '117', lunch: 'B' },
     green: { name: 'Academic Essentials 2', teacher: 'Joe E Brown', room: '289', lunch: 'A' },
     purple: { name: 'Technical Communications', teacher: 'Kyle Davis', room: '206' },
-    silver: { name: 'Early Release', teacher: 'Pat Wilson', room: '' }
+    silver: { name: 'Early Release', teacher: 'Pat Wilson', room: '' },
+    advisory: { name: 'Advisory (Seniors)', teacher: 'John Smith', room: '227' }
   });
-  assert.ok(Object.keys(r.classes).every((k) => bell.BLOCK_KEYS.includes(k)), 'Advisory is not a block');
+});
+
+test('import: Advisory as "Period ADV", "Period Advisory" or a bare "ADV" line', () => {
+  const pasted = 'ADV\n[Advisory (Juniors)](https://x.infinitecampus.org/campus/apps/portal/student/section/1)\n7:30 AM - 7:30 AM\n\n* Teacher: Cuellar, Erin H\n* Room: 119';
+  assert.deepEqual(parse(pasted).classes, { advisory: { name: 'Advisory (Juniors)', teacher: 'Erin H Cuellar', room: '119' } });
+  assert.deepEqual(parse('Period Advisory\nAdvisory (Seniors)\nRoom: 2').classes.advisory, { name: 'Advisory (Seniors)', teacher: '', room: '2' });
+  const c = { yellow: { name: 'Math' }, advisory: { name: 'Advisory (Juniors)' } };
+  assert.equal(bell.classAt(c, 'A', 'advisory').name, 'Advisory (Juniors)');
+  assert.equal(bell.classAt(c, 'A', 1).name, 'Math');
+  assert.equal(bell.classAt(c, 'B', 1), null);
 });
 
 test('import: plain text (no bullets or links) and Windows line endings work too', () => {

@@ -10,9 +10,10 @@
 //   Teacher: Smith, John
 //   Room: 227
 //   Lunch: A 10:56-11:21 Adv 11:11-11:36
+// Advisory comes as "Period ADV" or "Period Advisory" and is kept as `advisory`.
 (function (root) {
   'use strict';
-  const BLOCKS = ['yellow', 'red', 'pink', 'green', 'orange', 'purple', 'silver', 'blue'];
+  const BLOCKS = ['yellow', 'red', 'pink', 'green', 'orange', 'purple', 'silver', 'blue', 'advisory'];
   const LUNCHES = ['A', 'B', 'C'];
 
   // 'Smith, John A' -> 'John A Smith'
@@ -31,14 +32,15 @@
     const classes = {};
     const warnings = [];
     let days = 0;
-    let cur = null; // the block being read, or null for periods that aren't color blocks (Advisory)
+    let cur = null; // the block (or advisory) being read, or null for anything else
     for (const raw of String(text || '').split(/\r?\n/)) {
       const line = tidy(raw);
       if (!line) continue;
       if (/^Day\s*:/i.test(line)) { days++; cur = null; continue; }
-      const period = /^Period\s+(.+)$/i.exec(line);
+      const period = /^Period\s+(.+)$/i.exec(line) || (/^ADV$/i.test(line) ? [line, line] : null);
       if (period) {
-        const key = period[1].toLowerCase().replace(/[^a-z]/g, '');
+        let key = period[1].toLowerCase().replace(/[^a-z]/g, '');
+        if (key === 'adv') key = 'advisory';
         cur = BLOCKS.includes(key) ? { block: key, name: '', teacher: '', room: '', lunch: '' } : null;
         if (cur) {
           if (!classes[key]) classes[key] = cur;
@@ -65,7 +67,7 @@
         if (!cur.checked) {
           cur.checked = true;
           if (cur.existing.name && cur.existing.name.toLowerCase() !== line.toLowerCase()) {
-            warnings.push(`${cur.block[0].toUpperCase()}${cur.block.slice(1)} has two classes ("${cur.existing.name}" and "${line}"). Kept the first one.`);
+            if (cur.block !== 'advisory') warnings.push(`${cur.block[0].toUpperCase()}${cur.block.slice(1)} has two classes ("${cur.existing.name}" and "${line}"). Kept the first one.`);
           }
         }
       } else if (!cur.name) cur.name = line.slice(0, 60);

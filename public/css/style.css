@@ -184,6 +184,7 @@ tr.note-row td { padding: 4px 10px; font-size: 0.82rem; color: var(--muted); bor
 
 /* ---- schedule editor ---- */
 .block-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 0.85rem; line-height: 1.5; }
+.block-chip.advisory-chip { background: var(--border); color: var(--text); }
 .rotation-table { table-layout: fixed; min-width: 600px; }
 .rotation-table th.today { color: var(--primary); }
 .rotation-table td.rot-cell { border: 2px solid var(--card); border-radius: 8px; overflow-wrap: break-word; }

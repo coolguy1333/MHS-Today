@@ -1,10 +1,11 @@
-// My Schedule: one row per color block; the rotation grid shows where each block lands on Days A-D.
+// My Schedule: one row per color block plus Advisory; the rotation grid shows where each block lands on Days A-D.
 (async function () {
   renderNav('schedule');
   await requireLogin();
 
-  const { BLOCKS, ROTATION, LUNCH_BLOCKS, LUNCH_NAMES, LUNCH_HOUR, LUNCHES, SCHEDULES, blockInfo, meetings, formatTime } = MHSBell;
+  const { BLOCKS, ADVISORY, ROTATION, LUNCH_BLOCKS, LUNCH_NAMES, LUNCH_HOUR, LUNCHES, SCHEDULES, blockInfo, meetings, formatTime } = MHSBell;
   const DAYS = Object.keys(ROTATION);
+  const KEYS = [...BLOCKS.map((b) => b.key), ADVISORY]; // everything saved
   const HOURS = [1, 2, 3, 4, 5, 6];
   const panel = $('blocks');
   let dirty = false;
@@ -45,16 +46,20 @@
     $('save-state').textContent = on ? 'Unsaved changes' : '';
   }
 
-  // ---- one row per block
-  for (const b of BLOCKS) {
-    const field = (name, label, attrs) => h('input', { 'data-block': b.key, 'data-field': name, 'aria-label': `${b.label} block ${label}`, type: 'text', ...attrs });
+  // ---- one row per block, then Advisory
+  const ADV_ROW = { key: ADVISORY, label: 'Advisory' };
+  for (const b of [...BLOCKS, ADV_ROW]) {
+    const adv = b === ADV_ROW;
+    const field = (name, label, attrs) => h('input', { 'data-block': b.key, 'data-field': name, 'aria-label': `${b.label}${adv ? '' : ' block'} ${label}`, type: 'text', ...attrs });
     const lunch = LUNCH_BLOCKS.includes(b.key)
       ? h('select', { 'data-block': b.key, 'data-field': 'lunch', 'aria-label': `${b.label} block lunch` },
         h('option', { value: '' }, 'Lunch?'), LUNCH_NAMES.map((l) => h('option', { value: l }, `${l} Lunch`)))
       : h('span');
-    add(panel, h('div', { class: 'slot' },
-      h('div', { class: 'slot-hour' }, chip(b), h('div', { class: 'small muted', title: 'Day and hour this block meets' }, where(b.key))),
-      h('div', { class: 'name' }, field('name', 'class name', { placeholder: 'Class name', maxlength: '60' })),
+    add(panel, h('div', { class: 'slot', id: adv ? 'advisory' : null },
+      adv
+        ? h('div', { class: 'slot-hour' }, h('span', { class: 'block-chip advisory-chip' }, 'Advisory'), h('div', { class: 'small muted' }, `Advisory days, ${formatTime(SCHEDULES.advisory.periods.find((p) => p.hour === ADVISORY).start)}`))
+        : h('div', { class: 'slot-hour' }, chip(b), h('div', { class: 'small muted', title: 'Day and hour this block meets' }, where(b.key))),
+      h('div', { class: 'name' }, field('name', adv ? 'name' : 'class name', { placeholder: adv ? 'Advisory (optional name)' : 'Class name', maxlength: '60' })),
       field('teacher', 'teacher', { placeholder: 'Teacher', maxlength: '60' }),
       field('room', 'room', { placeholder: 'Room', maxlength: '20' }),
       lunch));
@@ -91,7 +96,7 @@
   $('ic-read').addEventListener('click', () => {
     const r = MHSImport.parse($('ic-text').value);
     imported = r.classes;
-    const found = BLOCKS.filter((b) => imported[b.key]);
+    const found = [...BLOCKS, { key: ADVISORY, label: 'Advisory', color: 'var(--border)', ink: 'var(--text)' }].filter((b) => imported[b.key]);
     $('ic-use').hidden = !found.length;
     fill($('ic-preview'), found.length
       ? [h('p', { class: 'small' }, `Found ${found.length} class${found.length === 1 ? '' : 'es'}:`),
@@ -105,7 +110,7 @@
   });
   $('ic-use').addEventListener('click', () => {
     if (!imported) return;
-    for (const b of BLOCKS) if (imported[b.key]) setBlock(b.key, imported[b.key]);
+    for (const k of KEYS) if (imported[k]) setBlock(k, imported[k]);
     setDirty(true);
     renderGrid();
     $('import-card').open = false;
@@ -120,19 +125,19 @@
 
   $('clear-btn').addEventListener('click', () => {
     if (!confirm('Clear every class? (Nothing is saved until you press Save.)')) return;
-    for (const b of BLOCKS) setBlock(b.key, null);
+    for (const k of KEYS) setBlock(k, null);
     setDirty(true);
     renderGrid();
   });
 
   $('save-btn').addEventListener('click', (e) => busy(e.currentTarget, async () => {
     const out = {};
-    for (const b of BLOCKS) {
-      const c = readBlock(b.key);
-      if (c.name.trim()) out[b.key] = c;
+    for (const k of KEYS) {
+      const c = readBlock(k);
+      if (c.name.trim() || (k === ADVISORY && (c.teacher.trim() || c.room.trim()))) out[k] = c;
     }
     classes = await api('PUT', '/api/classes', out);
-    for (const b of BLOCKS) setBlock(b.key, classes[b.key]); // show what the server kept
+    for (const k of KEYS) setBlock(k, classes[k]); // show what the server kept
     setDirty(false);
     renderGrid();
     toast('Schedule saved');

@@ -183,6 +183,11 @@ test('classes: one per color block, validated, trimmed, blank name clears, lunch
   assert.equal(Array.from(r.data.silver.name).length, 60);
   assert.equal(r.data.silver.room.length, 20);
   assert.deepEqual((await c.get('/api/classes')).data, r.data);
+  // Advisory: not a color block, no lunch; a teacher or room alone is enough
+  const adv = await c.put('/api/classes', { advisory: { name: '', teacher: 'Cuellar, Erin H', room: '119', lunch: 'A' } });
+  assert.deepEqual(adv.data, { advisory: { name: 'Advisory', teacher: 'Cuellar, Erin H', room: '119' } });
+  assert.deepEqual((await c.put('/api/classes', { advisory: { name: 'Advisory (Juniors)' } })).data.advisory, { name: 'Advisory (Juniors)', teacher: '', room: '' });
+  assert.deepEqual((await c.put('/api/classes', { advisory: { name: '' } })).data, {});
   assert.deepEqual((await c.put('/api/classes', {})).data, {});      // clearing everything works
   assert.deepEqual((await (await as(ctx, 2)).get('/api/classes')).data, {}); // and they're private per person
 });
