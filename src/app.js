@@ -10,6 +10,7 @@ const bell = require('../public/js/bellSchedule.js');
 const avatars = require('../public/js/avatars.js');
 const { openDb } = require('./db');
 const { openSecretBox } = require('./secretbox');
+const { openAudit } = require('./audit');
 const { createGoogle, AuthError, newPkce } = require('./google');
 const { createMenu } = require('./menu');
 const { createFilter } = require('./wordfilter');
@@ -58,6 +59,7 @@ const MIME = {
 
 function createApp(config, { log = (...a) => console.log(new Date().toISOString(), ...a), fetchFn } = {}) {
   const db = openDb(config.dataDir, log);
+  const auditLog = openAudit(config.dataDir, log); // kept forever, for the district (src/audit.js)
   const secrets = openSecretBox(config.dataDir); // encrypts Google Tasks tokens at rest
   const state = db.state;
   const limiter = new RateLimiter();
@@ -185,6 +187,13 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     return 'Student';
   }
   // Fields added after the first release get their defaults (old db.json files, backups).
+  // What a reset profile goes back to: Google first name and last initial, nothing else.
+  const resetFields = (u) => ({ name: nameFrom(u.givenName, u.familyName), grade: null, bio: '', pronouns: '', interests: [], avatar: avatars.clean(null) });
+  // Everyone agrees to the Privacy & Terms page before using the site; a new version asks again.
+  // Change TERMS_VERSION (and the date on public/terms.html) whenever that page changes.
+  const TERMS_VERSION = '2026-10-19';
+  let feedbackFeature = null, photosFeature = null; // set up with the other features below
+  const agreedNow = (u) => !!u && isPlainObject(u.agreed) && u.agreed.version === TERMS_VERSION;
   function fillUserDefaults(u) {
     if (typeof u.givenName !== 'string') u.givenName = '';
     if (typeof u.familyName !== 'string') u.familyName = '';
@@ -205,6 +214,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   function upsertUser(claims) {
     const email = claims.email.toLowerCase();
     let user = Object.values(state.users).find((u) => u.sub === claims.sub);
+    if (user && user.archived) throw new AuthError('account archived after graduation', 'archived');
     const isNew = !user;
     const names = googleNames(claims);
     if (!user) {
@@ -235,12 +245,17 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const profile = (u) => ({
     id: u.id, name: u.name, admin: isAdmin(u), owner: isOwner(u), verified: u.verified === true, canPostEvents: canPostEvents(u),
     friendCode: u.friendCode, shareSchedule: u.shareSchedule, searchable: u.searchable,
-    grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, pronouns: u.pronouns, interests: u.interests, avatar: u.avatar
+    grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, pronouns: u.pronouns, interests: u.interests, avatar: u.avatar,
+    mustAgree: !agreedNow(u), termsVersion: TERMS_VERSION,
+    photo: photoUrl(u), pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null,
+    unreadFeedback: feedbackFeature ? feedbackFeature.unreadFor(u) : 0
   });
   // What anyone signed in may see of someone (search results, suggestions, requests).
-  const publicCard = (u) => ({ id: u.id, name: u.name, grade: u.grade, avatar: u.avatar });
+  // an approved profile photo, if they have one (src/photos.js)
+  const photoUrl = (u) => (isPlainObject(u.photo) && u.photo.approved ? `/photos/${u.photo.approved}.jpg` : null);
+  const publicCard = (u) => ({ id: u.id, name: u.name, grade: u.grade, avatar: u.avatar, photo: photoUrl(u) });
   // Ids of people who are friends with `u` both ways.
-  const confirmedFriends = (u) => u.friends.filter((id) => { const o = getUser(id); return o && o.friends.includes(u.id); });
+  const confirmedFriends = (u) => u.friends.filter((id) => { const o = getUser(id); return o && !o.archived && o.friends.includes(u.id); });
   // What friends see: the card plus the rest of the profile.
   const friendCard = (u) => ({ ...publicCard(u), bio: u.bio, pronouns: u.pronouns, interests: u.interests });
   // What `owner` lets `viewer` (a friend) see. The Account page's master switch turns everything off.
@@ -354,6 +369,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // ---------- backup / restore ----------
   function exportData() {
     return {
+      // 'mhs-hub' is the file format's id from before the rename: kept so old backups still restore
       app: 'mhs-hub', version: 2, exportedAt: new Date().toISOString(),
       users: Object.values(state.users).map((u) => ({
         id: u.id, sub: u.sub, email: u.email, name: u.name, created: u.created, lastLogin: u.lastLogin,
@@ -361,7 +377,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels,
         grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
         pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions,
-        calendarToken: u.calendarToken
+        calendarToken: u.calendarToken, agreed: u.agreed, photo: u.photo, archived: u.archived
       })),
       events: state.events,
       calendar: state.calendar,
@@ -371,7 +387,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }
   // Validates everything from the file as if it were fresh user input.
   function importData(data) {
-    if (!isPlainObject(data) || data.app !== 'mhs-hub' || data.version !== 2) throw bad('That is not an MHS Hub backup file');
+    if (!isPlainObject(data) || data.app !== 'mhs-hub' || data.version !== 2) throw bad('That is not an MHS Today backup file');
     if (!Array.isArray(data.users) || data.users.length > config.maxUsers) throw bad('The backup has an invalid user list');
     const users = {};
     const subs = new Set();
@@ -392,7 +408,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
         verified: u.verified === true, givenName: cleanText(u.givenName, 30), familyName: cleanText(u.familyName, 40),
         searchable: u.searchable !== false, grade: GRADES.includes(u.grade) ? u.grade : null, bio: cleanText(u.bio, 160),
-        profileLocked: u.profileLocked === true, adminGranted: u.adminGranted === true, avatar: avatars.clean(u.avatar)
+        profileLocked: u.profileLocked === true, adminGranted: u.adminGranted === true, avatar: avatars.clean(u.avatar),
+        photo: isPlainObject(u.photo) ? u.photo : null // checked against the files by src/photos.js
       });
       try {
         Object.assign(users[u.id], cleanProfileFields({
@@ -401,6 +418,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         }));
       } catch { /* keep the defaults */ }
       if (typeof u.calendarToken === 'string' && /^[0-9a-f]{48}$/.test(u.calendarToken)) users[u.id].calendarToken = u.calendarToken;
+      if (isPlainObject(u.agreed) && typeof u.agreed.version === 'string' && u.agreed.version.length <= 20) users[u.id].agreed = { version: u.agreed.version, at: num(u.agreed.at) };
+      if (isPlainObject(u.archived)) users[u.id].archived = { at: num(u.archived.at), deleteAfter: num(u.archived.deleteAfter) };
       users[u.id].rawHidden = Array.isArray(u.hiddenSuggestions) ? u.hiddenSuggestions : [];
       users[u.id].rawLevels = isPlainObject(u.shareLevels) ? u.shareLevels : {};
     }
@@ -437,7 +456,19 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   function route(method, pattern, opts, handler) {
     const names = [];
     const re = new RegExp('^' + pattern.replace(/:([a-z]+)/g, (_, n) => { names.push(n); return '([^/]+)'; }) + '$');
-    routes.push({ method, re, names, auth: opts.auth, maxBody: opts.maxBody, handler });
+    // audit: false = not worth recording (look-ups, push settings); auditBody: false = record that it
+    // happened but not what was sent (a whole backup file, someone's private Google Tasks)
+    routes.push({ method, pattern, re, names, auth: opts.auth, maxBody: opts.maxBody, audit: opts.audit !== false, auditBody: opts.auditBody !== false, handler });
+  }
+  // The audit log: every change anyone makes, sign-ins, and refused admin attempts.
+  const actorOf = (u) => (u ? { id: u.id, name: u.name, email: u.email } : null);
+  function audit(action, req, user, { target = null, detail = null } = {}) {
+    auditLog.record(action, { actor: actorOf(user), target, detail, ip: req ? clientIp(req) : null });
+  }
+  function auditDetail(body) {
+    if (!isPlainObject(body) || !Object.keys(body).length) return null;
+    const text = JSON.stringify(body);
+    return text.length <= 2000 ? body : `${text.slice(0, 2000)}… (${text.length} characters)`;
   }
 
   // Feature modules add their own routes and say how to back up, restore and tidy their data, and
@@ -449,9 +480,23 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     notify: (...a) => (push ? push.notify(...a) : undefined)
   };
   let push = null;
+  // reports first: the other features register what can be reported
+  const reports = require('./reports')(shared);
+  shared.reports = reports;
+  reports.register('profile', {
+    hide: false, // a reported profile stays up; an admin can reset it
+    locate(ref, user) {
+      const t = typeof ref.id === 'string' ? getUser(ref.id) : null;
+      return t ? { id: t.id, ref: { id: t.id }, author: t.id, summary: [t.name, t.pronouns, t.bio, t.interests.join(', ')].filter(Boolean).join(' · '), link: '' } : null;
+    },
+    remove(ref) { const t = getUser(ref.id); if (t) { Object.assign(t, resetFields(t)); photosFeature.clear(t); db.save(); } },
+    exists: (ref) => !!getUser(ref.id)
+  });
   const calendarFeed = require('./icalendar')(shared);
   const tasks = require('./tasks')(shared);
-  features.push(require('./study')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), calendarFeed);
+  feedbackFeature = require('./feedback')(shared);
+  photosFeature = require('./photos')(shared);
+  features.push(reports, require('./study')(shared), require('./classevents')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, photosFeature, calendarFeed);
   push = require('./push')(shared);
   features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();
@@ -460,7 +505,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
 
   route('GET', '/api/me', { auth: 'none' }, ({ user }) => ({
     user: user ? profile(user) : null,
-    config: { signIn: !!google, allowedDomains: config.allowedDomains, eventPosting: config.eventPosting, tz: config.tz }
+    config: { signIn: !!google, allowedDomains: config.allowedDomains, eventPosting: config.eventPosting, tz: config.tz, assignments: tasks.enabled }
   }));
   route('PUT', '/api/me', { auth: 'user' }, ({ user, body }) => {
     const fields = cleanProfileFields(body);
@@ -479,6 +524,27 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     user.friendCode = uniqueFriendCode();
     db.save();
     return profile(user);
+  });
+  route('POST', '/api/me/agree', { auth: 'user' }, ({ user, body }) => {
+    if (body.version !== TERMS_VERSION) throw bad('Reload the page to see the latest Privacy & Terms');
+    user.agreed = { version: TERMS_VERSION, at: Date.now() };
+    db.save();
+    return profile(user);
+  });
+  // Everything the site keeps about you, as one file (Privacy page → Download my data).
+  route('GET', '/api/me/export', { auth: 'user' }, ({ user, res }) => {
+    const friends = confirmedFriends(user).map(getUser).filter(Boolean).map((f) => f.name);
+    const data = Object.assign({
+      exported: new Date().toISOString(),
+      account: { ...profile(user), email: user.email, created: user.created, lastLogin: user.lastLogin, agreed: user.agreed || null },
+      classes: user.classes, friends, calendarLink: !!user.calendarToken
+    }, ...features.map((f) => (f.userData ? f.userData(user) : {})));
+    const body = JSON.stringify(data, null, 2);
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store',
+      'Content-Disposition': 'attachment; filename="my-mhs-today-data.json"'
+    });
+    res.end(body);
   });
   route('DELETE', '/api/me', { auth: 'user' }, ({ user, res }) => {
     log(`Account deleted by its owner: ${user.id}`);
@@ -523,7 +589,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const incoming = [];
     for (const id of user.friends) {
       const o = getUser(id);
-      if (!o) continue;
+      if (!o || o.archived) continue; // archived at graduation: hidden (they come back if restored)
       if (o.friends.includes(user.id)) {
         const level = shareLevel(o, user.id);
         friends.push({
@@ -536,12 +602,12 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       } else outgoing.push(publicCard(o));
     }
     for (const o of Object.values(state.users)) {
-      if (o.friends.includes(user.id) && !user.friends.includes(o.id)) incoming.push(publicCard(o));
+      if (!o.archived && o.friends.includes(user.id) && !user.friends.includes(o.id)) incoming.push(publicCard(o));
     }
     const byName = (a, b) => a.name.localeCompare(b.name);
     return { friends: friends.sort(byName), incoming: incoming.sort(byName), outgoing: outgoing.sort(byName) };
   });
-  route('POST', '/api/friends/lookup', { auth: 'user' }, ({ user, body }) => {
+  route('POST', '/api/friends/lookup', { auth: 'user', audit: false }, ({ user, body }) => {
     if (!limiter.hit(`flook:${user.id}`, 60, 3600e3)) throw new HttpError(429, 'Too many tries. Wait a bit and try again.');
     const other = findByCode(body.code);
     if (!other) throw new HttpError(404, 'No one has that code');
@@ -550,13 +616,13 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   });
   // Name search: every word typed must start one of the person's names. Only people who allow it
   // are found, and results show the display name, never the full name or email.
-  route('POST', '/api/friends/search', { auth: 'user' }, ({ user, body }) => {
+  route('POST', '/api/friends/search', { auth: 'user', audit: false }, ({ user, body }) => {
     const words = nameWords(cleanText(body.q, 60)).slice(0, 4);
     if (words.join('').length < 2) throw bad('Type at least two letters of a name');
     if (!limiter.hit(`fsearch:${user.id}`, 120, 3600e3)) throw new HttpError(429, 'Too many searches. Wait a bit and try again.');
     const results = [];
     for (const o of Object.values(state.users)) {
-      if (o.id === user.id || !o.searchable) continue;
+      if (o.id === user.id || !o.searchable || o.archived) continue;
       const names = nameWords(`${o.givenName} ${o.familyName} ${o.name}`);
       if (!words.every((w) => names.some((n) => n.startsWith(w)))) continue;
       const mine = user.friends.includes(o.id), theirs = o.friends.includes(user.id);
@@ -571,7 +637,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     let other;
     if (body.id !== undefined) {
       other = getUser(body.id);
-      if (!other || !(other.searchable || other.friends.includes(user.id))) throw new HttpError(404, 'That person can\'t be found');
+      if (!other || other.archived || !(other.searchable || other.friends.includes(user.id))) throw new HttpError(404, 'That person can\'t be found');
       if (other.id === user.id) throw bad("That's you");
     } else {
       other = findByCode(body.code);
@@ -602,7 +668,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const myFriends = new Set(confirmedFriends(user));
     const out = [];
     for (const o of Object.values(state.users)) {
-      if (o.id === user.id || !o.searchable || user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
+      if (o.id === user.id || !o.searchable || o.archived || user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
       const mutual = confirmedFriends(o).filter((id) => myFriends.has(id)).length;
       const shared = o.shareSchedule ? bell.BLOCK_KEYS.filter((k) => sameClass(user.classes[k], o.classes[k])).length : 0;
       if (!mutual && !shared) continue;
@@ -652,6 +718,9 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     events: state.events.length,
     ...Object.assign({}, ...features.map((f) => f.status())),
     lastSnapshot: db.lastSnapshot(),
+    graduation: isPlainObject(state.school) ? state.school.graduation : null,
+    seniors: Object.values(state.users).filter((u) => u.grade === 12 && !u.archived && !isAdmin(u)).length,
+    archived: Object.values(state.users).filter((u) => u.archived).length,
     tz: config.tz,
     today: today(),
     secureCookies: config.secure
@@ -661,7 +730,9 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u),
       verified: u.verified === true, friends: u.friends.length, fullName: `${u.givenName} ${u.familyName}`.trim(),
       grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable,
-      owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar
+      owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, photo: photoUrl(u),
+      pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null,
+      archived: u.archived ? { at: u.archived.at, deleteAfter: u.archived.deleteAfter } : null
     }))
     .sort((a, b) => b.lastLogin - a.lastLogin));
   // Admins can verify people, edit or reset anyone's profile, and lock a profile against changes.
@@ -669,17 +740,23 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const target = getUser(params.id);
     if (!target) throw new HttpError(404, 'No such user');
     for (const k of ['verified', 'profileLocked', 'admin']) if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
+    if (body.archived !== undefined) { // only un-archiving: someone archived at graduation by mistake
+      if (body.archived !== false) throw bad('Invalid setting');
+      delete target.archived;
+      log(`User ${target.id} un-archived by admin ${user.id}`);
+      db.save();
+      return { ok: true };
+    }
     if (body.reset !== undefined && body.reset !== true) throw bad('Invalid setting');
     if (body.admin !== undefined) {
       if (isOwner(target)) throw bad('This person is an owner (in ADMIN_EMAILS); change that setting to remove them');
       if (target.id === user.id) throw bad("You can't change your own admin role");
     }
-    const fields = body.reset
-      ? { name: nameFrom(target.givenName, target.familyName), grade: null, bio: '', pronouns: '', interests: [], avatar: avatars.clean(null) }
-      : cleanProfileFields(body);
+    const fields = body.reset ? resetFields(target) : cleanProfileFields(body);
     const changed = [...Object.keys(fields), ...['verified', 'profileLocked', 'admin'].filter((k) => body[k] !== undefined)];
     if (!changed.length) throw bad('Nothing to change');
     Object.assign(target, fields);
+    if (body.reset) photosFeature.clear(target); // a reset removes their photo too
     if (body.verified !== undefined) target.verified = body.verified;
     if (body.profileLocked !== undefined) target.profileLocked = body.profileLocked;
     if (body.admin !== undefined) target.adminGranted = body.admin;
@@ -715,15 +792,27 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     db.save();
     return state.calendar;
   });
-  route('GET', '/api/admin/backup', { auth: 'admin' }, ({ res }) => {
+  route('GET', '/api/admin/backup', { auth: 'admin' }, ({ req, res, user }) => {
+    audit('backup downloaded', req, user);
     const body = JSON.stringify(exportData());
     res.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store',
-      'Content-Disposition': `attachment; filename="mhs-hub-backup-${new Date().toISOString().slice(0, 10)}.json"`
+      'Content-Disposition': `attachment; filename="mhs-today-backup-${new Date().toISOString().slice(0, 10)}.json"`
     });
     res.end(body);
   });
-  route('POST', '/api/admin/restore', { auth: 'admin', maxBody: 12 * MB }, ({ user, body }) => {
+  // The audit log (owners only): newest first, 100 at a time, with a search; or the whole file.
+  route('GET', '/api/admin/audit', { auth: 'admin' }, ({ user, url }) => {
+    if (!isOwner(user)) throw new HttpError(403, 'Only owners can see the audit log');
+    const before = url.searchParams.has('before') ? Number(url.searchParams.get('before')) : null;
+    return auditLog.page({ before, limit: 100, q: (url.searchParams.get('q') || '').slice(0, 100) });
+  });
+  route('GET', '/api/admin/audit/download', { auth: 'admin' }, ({ req, res, user, url }) => {
+    if (!isOwner(user)) throw new HttpError(403, 'Only owners can download the audit log');
+    audit('audit log downloaded', req, user);
+    return auditLog.download(res, url.searchParams.get('format') === 'csv' ? 'csv' : 'jsonl');
+  });
+  route('POST', '/api/admin/restore', { auth: 'admin', maxBody: 12 * MB, auditBody: false }, ({ user, body }) => {
     const result = importData(body);
     log(`Data restored from a backup file by admin ${user.id}: ${result.users} users, ${result.events} events`);
     return result;
@@ -786,12 +875,21 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const { r, m } = match;
     const user = currentUser(req);
     if (r.auth !== 'none' && !user) throw new HttpError(401, 'Sign in first');
-    if (r.auth === 'admin' && !isAdmin(user)) throw new HttpError(403, 'Admins only');
+    if (r.auth === 'admin' && !isAdmin(user)) {
+      if (method !== 'GET') audit('refused (not an admin)', req, user, { target: `${method} ${url.pathname}` });
+      throw new HttpError(403, 'Admins only');
+    }
     if (method !== 'GET' && user && !limiter.hit(`write:${user.id}`, 120, 60e3)) throw new HttpError(429, 'Slow down a little');
+    if (method !== 'GET' && user && !agreedNow(user) && !['POST /api/me/agree', 'POST /api/logout', 'DELETE /api/me'].includes(`${method} ${r.pattern}`)) {
+      throw Object.assign(new HttpError(403, 'Please read and agree to the Privacy & Terms first'), { mustAgree: true });
+    }
     const params = {};
     try { r.names.forEach((n, i) => { params[n] = decodeURIComponent(m[i + 1]); }); } catch { throw bad('Bad request'); }
     const body = method === 'POST' || method === 'PUT' ? await readJson(req, r.maxBody || 100 * 1024) : {};
     const result = await r.handler({ req, res, url, params, user, body });
+    if (method !== 'GET' && r.audit) {
+      audit(`${method} ${r.pattern}`, req, user, { target: Object.keys(params).length ? params : null, detail: r.auditBody ? auditDetail(body) : null });
+    }
     if (!res.writableEnded) sendJson(res, 200, result);
   }
 
@@ -803,6 +901,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     // ?connect=tasks: a signed-in person allowing access to their Google Tasks (same round trip).
     const forTasks = url.searchParams.get('connect') === 'tasks';
     const me = forTasks ? currentUser(req) : null;
+    if (forTasks && !tasks.enabled) return redirect(res, '/classwork.html');
     if (forTasks && !me) return redirect(res, '/login.html?next=classwork.html');
     const pkce = newPkce();
     const pending = {
@@ -839,12 +938,14 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       const claims = await google.verifyIdToken(await google.exchangeCode(code, pending.v), pending.n);
       if (!google.domainAllowed(claims)) {
         log(`Sign-in blocked: Google Workspace domain "${claims.hd || '(none: personal account)'}" is not in ALLOWED_DOMAINS (${config.allowedDomains.join(', ')})`);
+        audit('sign-in refused (domain)', req, null, { detail: { email: claims.email, domain: claims.hd || null } });
         return fail('domain');
       }
       const { user, isNew } = upsertUser(claims);
       createSession(req, res, user);
       clearCookie(res, PENDING);
       log(`Signed in: user ${user.id}${isNew ? ' (new account)' : ''}`);
+      audit(isNew ? 'sign-in (new account)' : 'sign-in', req, user);
       return redirect(res, pending.next);
     } catch (e) {
       if (!(e instanceof AuthError)) log('Sign-in error:', e && e.stack || e);
@@ -925,12 +1026,13 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (url.pathname === '/auth/google/callback') return await authCallback(req, res, url);
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
       if (url.pathname.startsWith('/cal/')) return calendarFeed.feed(req, res, url);
+      if (url.pathname.startsWith('/photos/')) return photosFeature.serve(req, res, url, currentUser(req));
       if (url.pathname === '/tools' || url.pathname === '/tools.html') return redirect(res, '/links.html#tools'); // tools are a section of Links
       return await serveStatic(req, res, url);
     } catch (e) {
       if (e instanceof HttpError) {
         if (e.status === 413) res.setHeader('Connection', 'close'); // don't wait for the rest of the upload
-        return sendJson(res, e.status, { error: e.message });
+        return sendJson(res, e.status, { error: e.message, ...(e.mustAgree ? { mustAgree: true } : {}) });
       }
       log('Unhandled error:', (e && e.stack) || e);
       if (!res.headersSent) return sendJson(res, 500, { error: 'Something went wrong on the server' });
@@ -939,9 +1041,47 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }
 
   // ---------- lifecycle ----------
+  // Graduation: on the day an admin set, seniors' accounts (grade 12, not admins) are archived (they
+  // can't sign in and disappear from search and friends lists) and everyone else moves up a grade.
+  // Archived accounts are deleted ARCHIVE_DAYS later, unless an admin restores one.
+  const ARCHIVE_DAYS = 90;
+  function graduate(now) {
+    if (!isPlainObject(state.school)) state.school = { graduation: null, graduated: null };
+    const day = state.school.graduation;
+    if (day && today() >= day && state.school.graduated !== day) {
+      let archived = 0, movedUp = 0;
+      for (const u of Object.values(state.users)) {
+        if (u.archived) continue;
+        if (u.grade === 12 && !isAdmin(u)) {
+          u.archived = { at: now, deleteAfter: now + ARCHIVE_DAYS * 86400e3 };
+          for (const [h, s] of Object.entries(state.sessions)) if (s.userId === u.id) delete state.sessions[h];
+          archived++;
+        } else if (GRADES.includes(u.grade) && u.grade < 12) { u.grade += 1; movedUp++; }
+      }
+      state.school.graduated = day;
+      log(`Graduation (${day}): ${archived} senior accounts archived, ${movedUp} students moved up a grade`);
+      auditLog.record('graduation', { detail: { date: day, archived, movedUp } });
+    }
+    for (const u of Object.values(state.users)) {
+      if (u.archived && u.archived.deleteAfter < now) {
+        auditLog.record('archived account deleted', { target: { id: u.id, name: u.name, email: u.email } });
+        deleteUser(u.id);
+      }
+    }
+  }
+  route('PUT', '/api/admin/school', { auth: 'admin' }, ({ body }) => {
+    const day = body.graduation;
+    if (day !== null && (typeof day !== 'string' || cal.parseDate(day) === null)) throw bad('Pick a valid date');
+    if (day && (day < cal.addDays(today(), -7) || day > cal.addDays(today(), 400))) throw bad('Pick a date in the next year');
+    state.school = { ...(isPlainObject(state.school) ? state.school : {}), graduation: day };
+    db.save();
+    return state.school;
+  });
+
   function maintain() {
     const now = Date.now();
     for (const [h, s] of Object.entries(state.sessions)) if (s.expires < now) delete state.sessions[h];
+    graduate(now);
     for (const f of features) f.maintain();
     db.save();
     try { db.dailySnapshot(); } catch (e) { log(`Could not write the daily snapshot: ${e.message}`); }
@@ -978,12 +1118,12 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (reminderTimer) clearInterval(reminderTimer);
       const force = setTimeout(() => server.closeAllConnections(), 3000);
       force.unref();
-      server.close(() => { clearTimeout(force); db.close(); resolve(); }); // also fires if it was never listening
+      server.close(() => { clearTimeout(force); db.close(); auditLog.close(); resolve(); }); // also fires if it was never listening
       server.closeIdleConnections();
     });
   }
 
-  return { server, listen, close, config, state, db, google: !!google, runReminders: () => push.runReminders() };
+  return { server, listen, close, config, state, db, google: !!google, runReminders: () => push.runReminders(), runMaintenance: maintain };
 }
 
 module.exports = { createApp };

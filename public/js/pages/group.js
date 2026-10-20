@@ -8,8 +8,8 @@
   let info = null;
 
   function renderHead() {
-    document.title = `${g.name} · MHS Hub`;
-    const member = g.myRole === 'leader' || g.myRole === 'member';
+    document.title = `${g.name} · MHS Today`;
+    const member = ['leader', 'member', 'advisor'].includes(g.myRole);
     const action = member
       ? h('button', {
         class: 'btn small secondary', type: 'button',
@@ -32,8 +32,10 @@
       h('h1', { class: 'day-title' }, g.name),
       h('p', { class: 'muted' }, `${GROUP_KINDS[g.kind]} · ${g.memberCount} member${g.memberCount === 1 ? '' : 's'}`,
         g.myRole === 'leader' ? [' · ', h('span', { class: 'badge' }, 'You lead this group')] : null,
+        g.myRole === 'advisor' ? [' · ', h('span', { class: 'badge' }, "You're the advisor")] : null,
         g.approved ? null : [' · ', h('span', { class: 'badge vis' }, 'Waiting for an admin to approve it')]),
       g.description ? h('p', null, g.description) : null,
+      g.advisor ? h('p', { class: 'small' }, h('strong', null, 'Advisor: '), g.advisor) : null,
       g.links.length ? h('ul', { class: 'menu-items' }, g.links.map((l) => h('li', null, h('a', { href: l.url, target: '_blank', rel: 'noopener noreferrer' }, l.title)))) : null,
       h('div', { class: 'row' }, action,
         me.admin && !g.approved ? h('button', {
@@ -55,10 +57,12 @@
         h('button', { class: 'btn small secondary', type: 'button', onclick: (e) => setRole(e, p, null, 'Request declined') }, 'Decline')))));
     $('members-card').hidden = !g.members;
     fill($('members'), (g.members || []).map((p) => h('div', { class: 'list-row' },
-      h('div', { class: 'person' }, avatarEl(p, 32), h('div', null, h('strong', null, p.name), p.role === 'leader' ? h('span', { class: 'small muted' }, ' · leader') : null)),
+      h('div', { class: 'person' }, avatarEl(p, 32), h('div', null, h('strong', null, p.name), p.role !== 'member' ? h('span', { class: 'small muted' }, ` · ${p.role}`) : null)),
       g.canManage && p.id !== me.id ? h('div', { class: 'row nowrap' },
-        h('button', { class: 'linklike', type: 'button', onclick: (e) => setRole(e, p, p.role === 'leader' ? 'member' : 'leader', p.role === 'leader' ? `${p.name} is no longer a leader` : `${p.name} is now a leader`) },
+        p.role === 'advisor' ? null : h('button', { class: 'linklike', type: 'button', onclick: (e) => setRole(e, p, p.role === 'leader' ? 'member' : 'leader', p.role === 'leader' ? `${p.name} is no longer a leader` : `${p.name} is now a leader`) },
           p.role === 'leader' ? 'Remove leader' : 'Make leader'),
+        me.admin ? h('button', { class: 'linklike', type: 'button', onclick: (e) => setRole(e, p, p.role === 'advisor' ? 'member' : 'advisor', p.role === 'advisor' ? `${p.name} is no longer the advisor` : `${p.name} is now an advisor`) },
+          p.role === 'advisor' ? 'Remove advisor' : 'Make advisor') : null,
         h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm(`Remove ${p.name} from the group?`)) setRole(e, p, null, `${p.name} removed`); } }, 'Remove'))
         : null)));
   }
@@ -77,21 +81,25 @@
   function renderBoard(b) {
     fill($('posts'), b.posts.length ? b.posts.map((p) => h('div', { class: 'post' + (p.announcement ? ' announcement' : '') },
       h('div', { class: 'person' }, avatarEl(p.by, 30), h('div', null,
-        h('strong', null, p.by.name), p.announcement ? [' ', h('span', { class: 'badge' }, 'Announcement')] : null,
+        h('strong', null, p.by.name), p.announcement ? [' ', h('span', { class: 'badge' }, 'Announcement')] : null, p.hidden ? [' ', hiddenBadge(p)] : null,
         h('div', { class: 'small muted' }, ago(p.created)))),
       h('p', null, multiline(p.text)),
       p.replies.map((r) => h('div', { class: 'reply' },
         h('div', { class: 'small' }, h('strong', null, r.by.name), h('span', { class: 'muted' }, ` · ${ago(r.created)}`),
-          r.canDelete ? [' · ', h('button', { class: 'linklike danger', type: 'button', onclick: (e) => boardAct(e, 'DELETE', `posts/${p.id}/replies/${r.id}`) }, 'Delete')] : null),
+          r.hidden ? [' ', hiddenBadge(r)] : null,
+          r.canDelete ? [' · ', h('button', { class: 'linklike danger', type: 'button', onclick: (e) => boardAct(e, 'DELETE', `posts/${p.id}/replies/${r.id}`) }, 'Delete')] : null,
+          r.mine ? null : [' · ', reportButton('reply', { group: g.id, post: p.id, id: r.id }, `${r.by.name}'s reply`)]),
         h('div', { class: 'small' }, multiline(r.text)))),
       replyForm(p),
-      p.canDelete ? h('button', { class: 'linklike danger small', type: 'button', onclick: (e) => { if (confirm('Delete this post and its replies?')) boardAct(e, 'DELETE', `posts/${p.id}`); } }, 'Delete post') : null))
+      h('div', { class: 'row small' },
+        p.canDelete ? h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm('Delete this post and its replies?')) boardAct(e, 'DELETE', `posts/${p.id}`); } }, 'Delete post') : null,
+        p.mine ? null : reportButton('post', { group: g.id, id: p.id }, `${p.by.name}'s post`))))
       : h('p', { class: 'muted small' }, 'No posts yet. Say hi!'));
     $('polls-card').hidden = !b.polls.length && !g.canManage;
     fill($('polls'), b.polls.length ? b.polls.map((p) => {
       const total = p.counts.reduce((a, c) => a + c, 0);
       return h('div', { class: 'poll' },
-        h('strong', null, p.question), p.closed ? h('span', { class: 'small muted' }, ' · closed') : null,
+        h('strong', null, p.question), p.closed ? h('span', { class: 'small muted' }, ' · closed') : null, p.hidden ? [' ', hiddenBadge(p)] : null,
         p.options.map((o, i) => h('button', {
           class: 'poll-option' + (p.myVote === i ? ' mine' : ''), type: 'button', disabled: p.closed, 'aria-pressed': String(p.myVote === i),
           onclick: (e) => boardAct(e, 'POST', `polls/${p.id}/vote`, { choice: i })
@@ -99,7 +107,8 @@
         h('span', { class: 'poll-label' }, o), h('span', { class: 'poll-count' }, String(p.counts[i])))),
         h('div', { class: 'small muted' }, `${total} vote${total === 1 ? '' : 's'}`, p.myVote === null || p.closed ? '' : ' · tap another choice to change your vote',
           p.canManage ? [' · ', h('button', { class: 'linklike', type: 'button', onclick: (e) => boardAct(e, 'PUT', `polls/${p.id}`, { closed: !p.closed }) }, p.closed ? 'Reopen' : 'Close'),
-            ' · ', h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm('Delete this poll?')) boardAct(e, 'DELETE', `polls/${p.id}`); } }, 'Delete')] : null));
+            ' · ', h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm('Delete this poll?')) boardAct(e, 'DELETE', `polls/${p.id}`); } }, 'Delete')] : null,
+          p.mine ? null : [' · ', reportButton('poll', { group: g.id, id: p.id }, `the poll "${p.question}"`)]));
     }) : h('p', { class: 'muted small' }, 'No polls yet.'));
   }
   function replyForm(p) {
@@ -110,7 +119,7 @@
   }
   const boardAct = (e, method, path, body) => busy(e.currentTarget, async () => renderBoard(await api(method, `/api/groups/${g.id}/${path}`, body)));
   async function loadBoard() {
-    const member = g.myRole === 'leader' || g.myRole === 'member';
+    const member = ['leader', 'member', 'advisor'].includes(g.myRole);
     $('board-card').hidden = !member && !me.admin;
     if ($('board-card').hidden) { $('polls-card').hidden = true; return; }
     $('announce-field').hidden = !g.canManage;
@@ -139,7 +148,7 @@
   async function loadEvents() {
     const events = await api('GET', `/api/events?group=${encodeURIComponent(g.id)}`);
     const today = schoolClock(info).date;
-    const upcoming = events.filter((e) => e.date >= today);
+    const upcoming = events.filter((e) => eventEnd(e) >= today);
     fill($('events'), upcoming.length ? upcoming.map((e) => eventRow(e, today, loadEvents)) : h('p', { class: 'muted' }, 'No upcoming events.'));
   }
 
@@ -147,6 +156,7 @@
     $('g-name').value = g.name;
     $('g-kind').value = g.kind;
     $('g-description').value = g.description;
+    $('g-advisor').value = g.advisor || '';
     $('g-join').value = g.joinPolicy;
     $('g-links').value = g.links.map((l) => `${l.title} | ${l.url}`).join('\n');
   }
@@ -171,15 +181,19 @@
 
   $('ev-signup').addEventListener('change', () => { $('ev-limit').disabled = !$('ev-signup').checked; });
   $('ev-limit').disabled = true;
+  const groupRepeat = repeatPicker($('ev-date'));
+  $('ev-repeat-slot').replaceWith(groupRepeat.el);
   $('event-form').addEventListener('submit', (e) => {
     e.preventDefault();
     busy(e.submitter, async () => {
       await api('POST', '/api/events', {
         title: $('ev-title').value, date: $('ev-date').value, time: $('ev-time').value, description: $('ev-description').value,
+        endDate: $('ev-end-date').value || null, endTime: $('ev-end-time').value, location: $('ev-location').value, repeat: groupRepeat.value(),
         visibility: $('ev-visibility').value, groupId: g.id,
         signup: $('ev-signup').checked ? { limit: $('ev-limit').value ? Number($('ev-limit').value) : 0 } : null
       });
       e.target.reset();
+      groupRepeat.reset();
       $('ev-limit').disabled = true;
       toast('Event added');
       await loadEvents();
@@ -193,7 +207,7 @@
         return i < 0 ? { title: line, url: '' } : { title: line.slice(0, i).trim(), url: line.slice(i + 1).trim() };
       });
       await api('PUT', `/api/groups/${g.id}`, {
-        name: $('g-name').value, kind: $('g-kind').value, description: $('g-description').value, joinPolicy: $('g-join').value, links
+        name: $('g-name').value, kind: $('g-kind').value, description: $('g-description').value, advisor: $('g-advisor').value, joinPolicy: $('g-join').value, links
       });
       toast('Group saved');
       await load();

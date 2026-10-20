@@ -6,7 +6,7 @@ const MAX_SESSIONS = 2000;
 const MAX_GOING = 200;
 
 module.exports = function study(app) {
-  const { route, state, db, HttpError, bad, isAdmin, getUser, cleanText, randomId, limiter, today, cal, bell, sameClass, isPlainObject, hasOwn, num, checkWords } = app;
+  const { route, state, db, HttpError, bad, isAdmin, getUser, cleanText, randomId, limiter, today, cal, bell, sameClass, isPlainObject, hasOwn, num, checkWords, reports } = app;
   if (!Array.isArray(state.studySessions)) state.studySessions = [];
   const blockOf = (user, item) => bell.BLOCK_KEYS.find((k) => sameClass(user.classes[k], item)) || null;
 
@@ -29,11 +29,19 @@ module.exports = function study(app) {
       className: s.name, teacher: s.teacher, block: blockOf(user, s),
       by: author ? author.name : 'Former student', going: s.going.length, me: s.going.includes(user.id),
       people: s.going.map((id) => getUser(id)).filter(Boolean).map((u) => u.name),
-      canDelete: s.by === user.id || isAdmin(user)
+      canDelete: s.by === user.id || isAdmin(user), mine: s.by === user.id, hidden: reports.hidden('study', s.id)
     };
   }
+  reports.register('study', {
+    locate(ref, user) {
+      const s = state.studySessions.find((x) => x.id === ref.id);
+      return s && blockOf(user, s) ? { id: s.id, ref: { id: s.id }, author: s.by, summary: `${s.name}: ${[s.title, s.place, s.notes].filter(Boolean).join(' · ')}`, link: '/classwork.html' } : null;
+    },
+    remove(ref) { state.studySessions = state.studySessions.filter((s) => s.id !== ref.id); },
+    exists: (ref) => state.studySessions.some((s) => s.id === ref.id)
+  });
   route('GET', '/api/study', { auth: 'user' }, ({ user }) => state.studySessions
-    .filter((s) => blockOf(user, s))
+    .filter((s) => blockOf(user, s) && reports.visible('study', s.id, s.by, user))
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
     .map((s) => sessionView(user, s)));
   route('POST', '/api/study', { auth: 'user' }, ({ user, body }) => {

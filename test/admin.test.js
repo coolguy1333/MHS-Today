@@ -105,7 +105,7 @@ test('backup: downloadable file with everything needed and nothing sensitive', a
   const { boss } = await populate(ctx);
   const r = await boss.get('/api/admin/backup');
   assert.equal(r.status, 200);
-  assert.match(r.headers.get('content-disposition'), /^attachment; filename="mhs-hub-backup-\d{4}-\d{2}-\d{2}\.json"$/);
+  assert.match(r.headers.get('content-disposition'), /^attachment; filename="mhs-today-backup-\d{4}-\d{2}-\d{2}\.json"$/);
   assert.equal(r.headers.get('cache-control'), 'no-store');
   assert.equal(r.data.app, 'mhs-hub'); assert.equal(r.data.version, 2);
   assert.equal(r.data.users.length, 3); assert.equal(r.data.events.length, 1);

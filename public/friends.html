@@ -4,21 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#1e3a8a" />
-  <title>Friends · MHS Hub</title>
+  <meta name="theme-color" content="#183890" />
+  <title>Friends · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
-    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <h1>Friends</h1>
     <div class="card" id="requests-card" hidden>
       <h2>Requests</h2>
@@ -26,7 +26,7 @@
     </div>
     <div class="card">
       <h2>Your friends</h2>
-      <div id="friends"><p class="muted">Loading…</p></div>
+      <div id="friends" class="friend-grid"><p class="muted">Loading…</p></div>
     </div>
     <div class="grid grid-even">
       <div class="card">
@@ -48,7 +48,7 @@
       </div>
       <div class="card">
         <h2>Your friend code</h2>
-        <p class="muted small">Share this with people you want as friends. People can also find you by name unless you turn that off on your <a href="account.html">Account</a> page.</p>
+        <p class="muted small">Share this with people you want as friends. People can also find you by name unless you turn that off in <a href="account.html#privacy">Profile → Privacy</a>.</p>
         <p><span class="code-box mono" id="my-code">…</span></p>
         <div class="row">
           <button class="btn small" type="button" id="copy-code">Copy code</button>

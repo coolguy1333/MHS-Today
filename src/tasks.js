@@ -1,6 +1,6 @@
 'use strict';
 // Assignments are each person's own Google Tasks. Someone connects once from the Assignments page
-// (Google asks them to allow MHS Hub to see and edit their tasks); the refresh token is kept
+// (Google asks them to allow MHS Today to see and edit their tasks); the refresh token is kept
 // encrypted (src/secretbox.js) and never leaves the server. Pages talk only to this server, which
 // calls the Google Tasks API for them, so the site's security policy stays "same origin only".
 const SCOPE = 'https://www.googleapis.com/auth/tasks';
@@ -16,6 +16,7 @@ class ConnectError extends Error {
 module.exports = function tasks(app) {
   const { route, state, db, log, config, HttpError, bad, cleanText, limiter, cal, google, secrets, fetchFn } = app;
   const base = config.google.tasksApi;
+  const enabled = !!google && config.googleTasks; // off = "coming soon" (see GOOGLE_TASKS in src/config.js)
   const cache = new Map(); // user id -> { token, exp } (access tokens, memory only)
   const connected = (u) => !!(u && u.googleTasks && typeof u.googleTasks.token === 'string');
   const reconnect = () => Object.assign(new HttpError(409, 'Google Tasks was disconnected. Connect it again.'), { reconnect: true });
@@ -98,18 +99,18 @@ module.exports = function tasks(app) {
   }
 
   const ready = (user) => {
-    if (!google) throw new HttpError(503, "Google sign-in isn't set up on this site");
+    if (!enabled) throw new HttpError(503, 'Assignments are coming soon');
     if (!connected(user)) throw reconnect();
     if (!limiter.hit(`tasks:${user.id}`, 60, 60e3)) throw new HttpError(429, 'Slow down a little');
   };
 
   route('GET', '/api/tasks', { auth: 'user' }, async ({ user }) => {
-    if (!google) return { available: false, connected: false };
+    if (!enabled) return { available: false, connected: false, comingSoon: true };
     if (!connected(user)) return { available: true, connected: false };
     ready(user);
     return { available: true, connected: true, ...(await openTasks(user)) };
   });
-  route('POST', '/api/tasks', { auth: 'user' }, async ({ user, body }) => {
+  route('POST', '/api/tasks', { auth: 'user', auditBody: false }, async ({ user, body }) => {
     ready(user);
     const title = cleanText(body.title, 300);
     if (!title) throw bad('Give it a title');
@@ -122,7 +123,7 @@ module.exports = function tasks(app) {
     });
     return taskView(t || {}, { id: listId, title: '' });
   });
-  route('PUT', '/api/tasks/:list/:task', { auth: 'user' }, async ({ user, params, body }) => {
+  route('PUT', '/api/tasks/:list/:task', { auth: 'user', auditBody: false }, async ({ user, params, body }) => {
     ready(user);
     if (!ID.test(params.list) || !ID.test(params.task)) throw bad('Bad request');
     if (typeof body.done !== 'boolean') throw bad('Invalid request');
@@ -141,10 +142,10 @@ module.exports = function tasks(app) {
   });
 
   return {
-    SCOPE, REQUEST_SCOPE, ConnectError, connect, connected,
+    SCOPE, REQUEST_SCOPE, ConnectError, connect, connected, enabled,
     // for reminders: open tasks due on `date`, or [] if anything goes wrong
     async tasksDueOn(user, date) {
-      if (!google || !connected(user)) return [];
+      if (!enabled || !connected(user)) return [];
       try { return (await openTasks(user)).tasks.filter((t) => t.due === date); } catch { return []; }
     },
     status: () => ({ tasksConnected: Object.values(state.users).filter(connected).length }),

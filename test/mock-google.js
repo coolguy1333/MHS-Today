@@ -52,7 +52,7 @@ async function startMockGoogle() {
       mock.tasksOf(sub).find((l) => l.id === listId).items.push(t);
       return t;
     },
-    // As if the person removed MHS Hub's access in their Google account settings.
+    // As if the person removed MHS Today's access in their Google account settings.
     revokeAll(sub) {
       for (const m of [refreshTokens, accessTokens]) for (const [k, v] of m) if (v === sub) m.delete(k);
     },

@@ -5,7 +5,8 @@
   const { SCHEDULES, getCurrentPeriod, formatTime, blockFor, blockInfo, LUNCH_HOUR, lunchFor, lunchTimes, atLunch } = MHSBell;
 
   // viewDate: null = automatic (today, or the next school day when there's no school today)
-  const S = { info: null, me: null, classes: {}, friends: [], events: [], tasks: null, notices: {}, viewDate: null, lastDate: null, key: '' };
+  const S = { info: null, me: null, classes: {}, friends: [], events: [], tasks: null, classItems: [], notices: {}, viewDate: null, lastDate: null, key: '' };
+  const KIND_LABEL = { test: 'Test', quiz: 'Quiz', assignment: 'Assignment', project: 'Project' };
 
   function model() {
     const cal = S.info.calendar;
@@ -35,6 +36,9 @@
     if (!m.todayInfo.schoolDay && m.viewDate !== m.now.date) {
       notes.push(h('p', { class: 'notice' }, `${noSchoolText(m.todayInfo)} today. Showing the next school day.`));
     }
+    if (S.me && S.me.unreadFeedback) {
+      notes.push(h('p', { class: 'notice' }, 'We answered your feedback. ', h('a', { href: 'feedback.html' }, 'See the reply')));
+    }
     if (v.schoolDay && !v.dayLetter) {
       notes.push(h('p', { class: 'notice' }, "The day letter hasn't been set yet, so classes can't be matched to today. ",
         S.me && S.me.admin ? h('a', { href: 'admin.html' }, 'Set it on the Admin page.') : 'An admin needs to set it.'));
@@ -62,6 +66,12 @@
       buddies.length ? h('span', { class: 'with' }, `Lunch with ${listNames(buddies)}`) : null);
   }
 
+  // "Quiz today: Unit 3" under a class, for things due in it in the next few days (from the day shown)
+  function dueLines(blockKey, m) {
+    const last = MHSCalendar.addDays(m.viewDate, 3);
+    return S.classItems.filter((i) => i.block === blockKey && i.due >= m.viewDate && i.due <= last)
+      .map((i) => h('div', { class: 'due-line' }, h('span', { class: `badge kind-${i.kind}` }, KIND_LABEL[i.kind]), ` ${i.title} · ${fmtRelativeDay(i.due, m.now.date).replace(/^(Today|Tomorrow)$/, (w) => w.toLowerCase())}`));
+  }
   function classCell(p, cls, m, hasAny) {
     if (p.hour === 'advisory') {
       if (!cls) return h('span', { class: 'muted' }, 'Advisory', S.me ? [' · ', h('a', { class: 'small', href: 'schedule.html#advisory' }, 'Add your advisory')] : null);
@@ -80,6 +90,7 @@
         h('div', null, colorDot(block.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
         h('div', { class: 'small muted' }, [block.label, cls.teacher].filter(Boolean).join(' · ')),
         buddies.length ? h('div', { class: 'with' }, `With ${listNames(buddies)}`) : null,
+        dueLines(block.key, m),
         p.hour === LUNCH_HOUR ? lunchLine(m) : null
       ];
     }
@@ -100,7 +111,7 @@
     note.hidden = !(m.view.dayLetter && (!S.me || !hasAny));
     if (!note.hidden) {
       fill(note, S.me
-        ? h('span', null, 'Add your classes on ', h('a', { href: 'schedule.html' }, 'My Schedule'), ' to see them here.')
+        ? h('span', null, 'Add your classes on ', h('a', { href: 'schedule.html' }, 'My classes'), ' to see them here.')
         : h('span', null, h('a', { href: 'login.html' }, 'Sign in with Google'), ' to see your own classes here.'));
     }
     const schedule = SCHEDULES[m.view.scheduleType] || SCHEDULES.daily;
@@ -218,12 +229,12 @@
 
   function renderEvents(m) {
     const box = clear($('events-preview'));
-    const upcoming = S.events.filter((e) => e.date >= m.now.date).slice(0, 5); // the server sends them in date order
+    const upcoming = S.events.filter((e) => eventEnd(e) >= m.now.date).slice(0, 5); // the server sends them in date order; multi-day ones stay until they end
     if (!upcoming.length) { add(box, h('p', { class: 'muted' }, 'Nothing coming up.')); return; }
     for (const e of upcoming) {
       add(box, h('div', { class: 'list-row' }, h('div', null,
         h('strong', null, e.title),
-        h('div', { class: 'small muted' }, fmtRelativeDay(e.date, m.now.date) + (e.time ? ` · ${formatTime(e.time)}` : '')))));
+        h('div', { class: 'small muted' }, fmtEventWhen(e, m.now.date) + (e.location ? ` · ${e.location}` : '')))));
     }
   }
 
@@ -274,19 +285,24 @@
   }
 
   // Due soon: overdue and the next week from the person's Google Tasks.
+  // Due soon: classmates' tests and assignments for your classes, and your Google Tasks when they're on.
   function renderTasks(m) {
     const card = $('tasks-card');
-    card.hidden = !S.me || !S.tasks || S.tasks.available === false;
+    card.hidden = !S.me || !Object.keys(S.classes).length;
     if (card.hidden) return;
-    const box = $('tasks-preview');
-    if (!S.tasks.connected) return fill(box, h('p', { class: 'muted small' }, h('a', { href: 'classwork.html' }, 'Connect Google Tasks'), ' to see your assignments here.'));
-    if (S.tasks.error) return fill(box, h('p', { class: 'muted small' }, S.tasks.error));
-    const week = MHSCalendar.addDays(m.now.date, 7);
-    const soon = S.tasks.tasks.filter((t) => t.due && t.due <= week).slice(0, 6);
-    fill(box, soon.length ? soon.map((t) => h('div', { class: 'list-row' }, h('div', null,
-      h('strong', null, t.title),
-      h('div', { class: 'small' + (t.due < m.now.date ? ' bad' : ' muted') }, t.due < m.now.date ? `Overdue · ${fmtRelativeDay(t.due, m.now.date)}` : fmtDue(t.due, m.now.date)))))
-      : h('p', { class: 'muted small' }, 'Nothing due in the next week.'));
+    const t = m.now.date;
+    const week = MHSCalendar.addDays(t, 7);
+    const fromClass = S.classItems.filter((i) => i.due >= t && i.due <= week)
+      .map((i) => ({ title: [h('span', { class: `badge kind-${i.kind}` }, KIND_LABEL[i.kind]), ' ', i.title], due: i.due, sub: i.className }));
+    const tasksOn = S.tasks && S.tasks.available !== false && S.tasks.connected && !S.tasks.error;
+    const mine = tasksOn ? S.tasks.tasks.filter((x) => x.due && x.due <= week).map((x) => ({ title: x.title, due: x.due, sub: 'My Google Tasks' })) : [];
+    const soon = [...fromClass, ...mine].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 6);
+    const connect = S.tasks && S.tasks.available !== false && !S.tasks.connected
+      ? h('p', { class: 'muted small' }, h('a', { href: 'classwork.html' }, 'Connect Google Tasks'), ' to see your own to-do list here too.') : null;
+    fill($('tasks-preview'), soon.length ? soon.map((x) => h('div', { class: 'list-row' }, h('div', null,
+      h('strong', null, x.title),
+      h('div', { class: 'small' + (x.due < t ? ' bad' : ' muted') }, x.due < t ? `Overdue · ${fmtRelativeDay(x.due, t)}` : fmtDue(x.due, t), ` · ${x.sub}`))))
+      : h('p', { class: 'muted small' }, 'Nothing due in the next week. ', h('a', { href: 'classwork.html' }, 'Add a test or assignment'), ' when you hear about one.'), connect);
   }
 
   function renderAll() {
@@ -314,19 +330,20 @@
   async function load() {
     try {
       const [info, me, events, notices] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events'), api('GET', '/api/notices')]);
-      let classes = {}, friends = [], tasks = null;
+      let classes = {}, friends = [], tasks = null, classItems = [];
       if (me.user) {
         // Google Tasks can be slow or unreachable; the rest of the page doesn't wait on it failing
-        const [c, f, t] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
-          api('GET', '/api/tasks').catch((e) => (e.status === 409 ? { available: true, connected: false } : { connected: true, error: e.message, tasks: [] }))]);
-        classes = c; friends = f.friends; tasks = t;
+        const [c, f, t, ci] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
+          api('GET', '/api/tasks').catch((e) => (e.status === 409 ? { available: true, connected: false } : { connected: true, error: e.message, tasks: [] })),
+          api('GET', '/api/classwork').catch(() => [])]);
+        classes = c; friends = f.friends; tasks = t; classItems = ci;
       }
       S.info = info; // always keep the newest clock offset
-      const key = JSON.stringify([info.calendar, events, classes, friends, tasks, notices, me.user && me.user.admin]);
+      const key = JSON.stringify([info.calendar, events, classes, friends, tasks, classItems, notices, me.user && me.user.admin]);
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events, tasks, notices });
+      Object.assign(S, { me: me.user, classes, friends, events, tasks, classItems, notices });
       S.lastDate = schoolClock(info).date;
       renderAll();
     } catch (e) {
@@ -337,7 +354,8 @@
   }
 
   load();
-  setInterval(tick, 15000);
-  setInterval(load, 5 * 60000); // pick up new events, calendar changes and friends' changes
+  // Nothing runs while the tab is hidden (Chromebooks keep many tabs open); coming back catches up.
+  setInterval(() => { if (!document.hidden) tick(); }, 15000);
+  setInterval(() => { if (!document.hidden) load(); }, 5 * 60000); // new events, calendar changes, friends' changes
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); load(); } });
 })();

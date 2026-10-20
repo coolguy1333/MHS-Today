@@ -1,4 +1,5 @@
-// Account: profile (name, avatar, pronouns, grade, bio, interests), privacy switches, delete account.
+// Your profile, in sections: profile (name, avatar or photo, pronouns, grade, bio, interests), privacy,
+// notifications and calendar sync, and your account (download your data, delete it). My classes is schedule.html.
 (async function () {
   renderNav('account');
   const user = await requireLogin();
@@ -17,6 +18,46 @@
   for (const id of ['color-picker', 'emoji-picker', 'name']) $(id).addEventListener('input', preview);
   const interestsOf = (text) => text.split(',').map((s) => s.trim()).filter(Boolean);
 
+  // ---- your own photo: shrunk to a 256×256 JPEG here, then waits for an admin
+  function showPhoto(u) {
+    const img = (src, alt) => h('img', { class: 'avatar photo', src, alt, width: '56', height: '56' });
+    fill($('photo-status'), u.pendingPhoto
+      ? [img(u.pendingPhoto, 'Your new photo'), h('span', { class: 'small' }, 'Waiting for an admin to approve it. Until then, people see ', u.photo ? 'your current photo.' : 'your avatar.')]
+      : u.photo ? [img(u.photo, 'Your photo'), h('span', { class: 'small' }, 'Approved: people see this photo instead of your avatar.')]
+        : h('span', { class: 'small muted' }, 'No photo: people see your avatar.'));
+    $('photo-remove').hidden = !u.photo && !u.pendingPhoto;
+  }
+  async function toJpeg(file) {
+    if (!/^image\//.test(file.type)) throw new Error('Pick a photo (JPG or PNG).');
+    let bmp;
+    try { bmp = await createImageBitmap(file); } catch { throw new Error("That photo couldn't be opened. Try a JPG or PNG."); }
+    const side = Math.min(bmp.width, bmp.height); // the middle square
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    c.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 256, 256);
+    return c.toDataURL('image/jpeg', 0.85);
+  }
+  $('photo-file').addEventListener('change', (e) => {
+    const file = e.currentTarget.files[0];
+    if (!file) return;
+    busy(null, async () => {
+      const r = await api('POST', '/api/me/photo', { image: await toJpeg(file) });
+      Object.assign(user, r);
+      showPhoto(user);
+      toast('Uploaded. An admin will take a look.');
+    }).finally(() => { e.target.value = ''; });
+  });
+  $('photo-remove').addEventListener('click', (e) => {
+    if (!confirm('Remove your photo?')) return;
+    busy(e.currentTarget, async () => {
+      await api('DELETE', '/api/me/photo');
+      Object.assign(user, { photo: null, pendingPhoto: null });
+      showPhoto(user);
+      renderNav('account');
+      toast('Photo removed');
+    });
+  });
+
   function showProfile(u) {
     $('name').value = u.name;
     $('grade').value = u.grade ? String(u.grade) : '';
@@ -30,10 +71,21 @@
     for (const el of $('profile-form').querySelectorAll('input, select, textarea, button')) el.disabled = !!u.profileLocked;
     countBio();
     preview();
+    showPhoto(u);
+    $('photo-file').disabled = !!u.profileLocked;
   }
   const countBio = () => { $('bio-count').textContent = `${Array.from($('bio').value).length}/160`; };
   $('bio').addEventListener('input', countBio);
   showProfile(user);
+  // one section at a time: #profile (the default), #privacy, #alerts, #account
+  const SECTIONS = ['profile', 'privacy', 'alerts', 'account'];
+  function showSection() {
+    const key = SECTIONS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'profile';
+    for (const k of SECTIONS) $(`sec-${k}`).hidden = k !== key;
+    renderProfileHeader(user, key);
+  }
+  window.addEventListener('hashchange', () => { showSection(); window.scrollTo(0, 0); });
+  showSection();
   $('share').checked = user.shareSchedule;
   $('searchable').checked = user.searchable;
   $('admin-card').hidden = !user.admin;
@@ -49,6 +101,7 @@
       });
       Object.assign(user, updated);
       showProfile(updated);
+      showSection();
       renderNav('account');
       toast('Profile saved');
     });
@@ -83,10 +136,10 @@
     if (!supported) {
       $('notify-prefs').hidden = true;
       fill(body, isIos() && !isInstalled()
-        ? [h('p', null, 'On iPhone, notifications work once MHS Hub is on your home screen:'),
+        ? [h('p', null, 'On iPhone, notifications work once MHS Today is on your home screen:'),
           h('ol', { class: 'small' }, h('li', null, 'In Safari, tap the Share button (the square with an arrow).'),
             h('li', null, 'Tap ', h('strong', null, 'Add to Home Screen'), ', then ', h('strong', null, 'Add'), '.'),
-            h('li', null, 'Open MHS Hub from your home screen and come back to this page.'))]
+            h('li', null, 'Open MHS Today from your home screen and come back to this page.'))]
         : h('p', { class: 'muted' }, "This browser can't show notifications from websites."));
       return;
     }
@@ -155,7 +208,7 @@
           h('li', null, 'Add it on a computer: the Google Calendar phone app can\'t add calendars from a link. Use the button above, or on ',
             h('a', { href: 'https://calendar.google.com/calendar/r/settings/addbyurl', target: '_blank', rel: 'noopener noreferrer' }, 'calendar.google.com'),
             ' choose ', h('em', null, 'Other calendars → + → From URL'), ' and paste the link below.'),
-          h('li', null, 'It then shows up in the Google Calendar app on your phone (if not, open the app\'s settings and turn on sync for "MHS Hub").'),
+          h('li', null, 'It then shows up in the Google Calendar app on your phone (if not, open the app\'s settings and turn on sync for "MHS Today").'),
           h('li', null, 'Google checks for changes every few hours, so new classwork or events can take a while to appear. Apple Calendar updates more often.'))),
       h('label', { class: 'stack small' }, h('span', null, 'Or copy the link into any calendar app ("subscribe" or "add from URL"):'),
         h('span', { class: 'inline-field' }, field, h('button', { class: 'btn small secondary', type: 'button', onclick: () => copyText(url) }, 'Copy'))),

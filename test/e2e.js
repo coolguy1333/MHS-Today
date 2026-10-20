@@ -45,6 +45,13 @@ const step = (m) => console.log('•', m);
     await u.page.goto(base + '/login.html' + (next ? `?next=${encodeURIComponent(next)}` : ''));
     await u.page.click('#google-btn');
     await u.page.waitForURL((url) => !/login\.html|\/auth\//.test(url.pathname), { timeout: 10000 });
+    // first sign-in: read and agree to the Privacy & Terms, then on to where they were going
+    await u.page.waitForLoadState('networkidle');
+    if (/terms\.html/.test(u.page.url())) {
+      await u.page.check('#agree-box');
+      await u.page.click('#agree-btn');
+      await u.page.waitForURL((url) => !/terms\.html/.test(url.pathname), { timeout: 10000 });
+    }
   }
   const text = (p, sel) => p.locator(sel).innerText();
 
@@ -91,38 +98,48 @@ const step = (m) => console.log('•', m);
   step('admin signed in, nav shows Admin link');
   await ap.goto(base + '/admin.html');
   await ap.waitForSelector('#admin-body:not([hidden])');
-  assert.match(await text(ap, '#setup'), /Google sign-in is configured/);
-  assert.match(await text(ap, '#setup'), /Only these Google Workspace domains/);
-  assert.match(await text(ap, '#setup'), /day letter has not been set/i);
+  // the Overview shows only what needs fixing; everything else is under "Site settings"
+  assert.match(await text(ap, '#problems'), /day letter has not been set/i);
+  assert.doesNotMatch(await text(ap, '#problems'), /Google sign-in is configured|Workspace domains/);
+  assert.match(await ap.locator('#setup').textContent(), /Google sign-in is configured[\s\S]*Only these Google Workspace domains/);
+  const dayCell = (label) => ap.locator(`#month .mday[aria-label^="${label}:"]`);
+  await ap.click('#tabs [data-tab="calendar"]');
+  assert.match(ap.url(), /#calendar$/);
   await ap.fill('#anchor-date', '2026-09-28');
   await ap.selectOption('#anchor-letter', 'B');
   await ap.click('#anchor-form button');
-  await ap.waitForFunction(() => /Day letter rotation is set/.test(document.querySelector('#setup').innerText));
-  assert.match(await text(ap, '#preview'), /Thu, Oct 1\s+Day A/);   // Mon 9/28=B, Tue=C, Wed=D, Thu=A
-  step('day letter rotation: Oct 1 is Day A');
+  await ap.waitForFunction(() => !/day letter has not been set/i.test(document.querySelector('#problems').textContent));
+  assert.match(await dayCell('Thursday, October 1').getAttribute('aria-label'), /Day A, Regular/); // Mon 9/28=B, Tue=C, Wed=D, Thu=A
+  step('day letter rotation: Oct 1 is Day A (month calendar)');
   await ap.selectOption('select[aria-label="Wednesday schedule"]', 'advisory');
-  await ap.waitForFunction(() => /Advisory/.test(document.querySelector('#preview').innerText));
+  await ap.waitForFunction(() => /Advisory/.test(document.querySelector('#month .mday[aria-label^="Wednesday, September 30:"]').getAttribute('aria-label')));
   await ap.fill('#ns-from', '2026-10-05'); await ap.fill('#ns-to', '2026-10-07'); await ap.fill('#ns-label', 'Fall break');
   await ap.click('#noschool-form button');
   await ap.waitForFunction(() => /Fall break/.test(document.querySelector('#noschool-list').innerText));
-  assert.doesNotMatch(await text(ap, '#preview'), /Oct 5|Oct 6|Oct 7/);
-  assert.match(await text(ap, '#preview'), /Oct 8\s+Day C/); // Fri 10/2=B, then 10/5-7 skipped, Thu 10/8 = C
-  await ap.fill('#ty-date', '2026-10-09'); await ap.selectOption('#ty-type', 'early_release');
-  await ap.click('#type-form button');
+  assert.match(await dayCell('Monday, October 5').getAttribute('aria-label'), /Fall break/);
+  assert.match(await dayCell('Thursday, October 8').getAttribute('aria-label'), /Day C/); // Fri 10/2=B, then 10/5-7 skipped, Thu 10/8 = C
+  // one special day: click it in the month, pick Early release
+  await dayCell('Friday, October 9').click();
+  await ap.click('#day-panel button:has-text("Early release")');
   await ap.waitForFunction(() => /Early release/.test(document.querySelector('#type-list').innerText));
-  step('calendar: weekday pattern, break and special day saved; preview updates');
+  assert.match(await dayCell('Friday, October 9').getAttribute('aria-label'), /Early release/);
+  step('calendar: weekday pattern, a break and a special day (clicked in the month); the month updates');
   // a tool added on the Admin page shows in the Tools section of Links
+  await ap.click('#tabs [data-tab="links"]');
+  await ap.waitForSelector('#tools-list .list-row');
   await ap.click('#tools-add');
-  await ap.fill('input[aria-label="Tool 2 Name"]', 'GPA calculator');
-  await ap.fill('input[aria-label="Tool 2 https://… (empty = coming soon)"]', 'https://gpa.example.test/');
-  await ap.fill('input[aria-label="Tool 2 What it does"]', 'Work out your GPA');
-  await ap.click('#tools-save'); await ap.waitForFunction(() => document.querySelector('#tools-state').innerText === '');
+  await ap.locator('#dlg').getByLabel('Name', { exact: true }).fill('GPA calculator');
+  await ap.locator('#dlg').getByLabel('Web address (empty = coming soon)').fill('https://gpa.example.test/');
+  await ap.locator('#dlg').getByLabel('What it does').fill('Work out your GPA');
+  await ap.click('#dlg button[type=submit]');
+  await ap.waitForFunction(() => /GPA calculator/.test(document.querySelector('#tools-list').innerText));
+  assert.equal(await ap.locator('#dlg').isVisible(), false, 'the dialog closes after saving');
+  await ap.screenshot({ path: path.join(SHOTS, 'admin.png'), fullPage: true });
   await ap.goto(base + '/links.html'); await ap.waitForSelector('#tools .link-card');
   assert.match(await text(ap, 'h1'), /^Links$/);
   assert.deepEqual((await ap.locator('#tools .link-card strong').allInnerTexts()), ['Class Cards', 'GPA calculator']);
   assert.equal(await ap.locator('#tools a.link-card').getAttribute('href'), 'https://gpa.example.test/');
-  step('tools: added on the Admin page, shown in the Tools section of Links');
-  await ap.screenshot({ path: path.join(SHOTS, 'admin.png'), fullPage: true });
+  step('tools: added in Admin → Links & tools, shown in the Tools section of Links');
 
   // ---------------------------------------------------------------- two students
   const ann = await newUser('ann', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' });
@@ -182,7 +199,7 @@ const step = (m) => console.log('•', m);
   // dashboard with live status (Thu 10:00 AM = Hour 3)
   await sp.goto(base + '/index.html');
   await sp.waitForSelector('#setup-card:not([hidden])');
-  assert.match(await text(sp, '#setup-card'), /Get set up[\s\S]*1 of 3 done[\s\S]*Add your classes[\s\S]*Connect Google Tasks[\s\S]*Add a friend/);
+  assert.match(await text(sp, '#setup-card'), /Get set up[\s\S]*1 of 2 done[\s\S]*Add your classes[\s\S]*Add a friend/);
   assert.equal(await sp.locator('#setup-card li.done').count(), 1, 'classes are done');
   await sp.waitForSelector('#schedule-body tr.period-row.current');
   const status = await text(sp, '#status');
@@ -224,26 +241,22 @@ const step = (m) => console.log('•', m);
   await sp.screenshot({ path: path.join(SHOTS, 'dashboard-weeks.png'), fullPage: true });
   step('day navigation skips the break; special schedule shown; advisory row; two-week calendar opens a day; back to today works');
 
-  // ---------------------------------------------------------------- assignments = Ann's Google Tasks
-  assert.match(await text(sp, '#tasks-preview'), /Connect Google Tasks/);
-  mock.addTask('s1', { title: 'Lab report', due: '2026-10-02T00:00:00.000Z' });
-  mock.addTask('s1', { title: 'Old worksheet', due: '2026-09-29T00:00:00.000Z' });
-  await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#connect-card:not([hidden])');
-  await sp.click('#connect-btn');
-  await sp.waitForSelector('#tasks-card:not([hidden]) .list-row');
-  assert.match(await text(sp, '#tasks-msg'), /Google Tasks is connected/);
-  assert.equal(new URL(sp.url()).search, '', 'the result is taken out of the address');
-  assert.match(await text(sp, '#tasks'), /Old worksheet[\s\S]*Overdue[\s\S]*Lab report[\s\S]*Due tomorrow/);
-  await sp.fill('#tk-title', 'Unit 3 quiz'); await sp.fill('#tk-due', '2026-10-05');
-  await sp.click('#task-form button[type=submit]');
-  await sp.waitForSelector('#tasks .list-row:has-text("Unit 3 quiz")');
-  await sp.check('#tasks .list-row:has-text("Old worksheet") input[type=checkbox]');
-  await sp.waitForFunction(() => !document.querySelector('#tasks').textContent.includes('Old worksheet'));
-  assert.equal(mock.tasksOf('s1')[0].items.find((t) => t.title === 'Old worksheet').status, 'completed');
+  // ---------------------------------------------------------------- assignments: classmates' tests; Google Tasks "coming soon"
+  await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#class-card:not([hidden])');
+  assert.match(await text(sp, '#soon-card'), /Coming soon/);
+  assert.equal(await sp.locator('#connect-card').isHidden(), true);
+  await sp.click('#class-add summary');
+  await sp.selectOption('#ce-block', 'pink'); await sp.selectOption('#ce-kind', 'quiz');
+  await sp.fill('#ce-title', 'Moles quiz'); await sp.fill('#ce-due', '2026-10-02');
+  await sp.click('#class-form button[type=submit]');
+  await sp.waitForSelector('#class-items .list-row:has-text("Moles quiz")');
+  assert.match(await text(sp, '#class-items'), /Quiz[\s\S]*Moles quiz[\s\S]*Chemistry · Due tomorrow/);
+  assert.equal(await sp.locator('#study-card').isVisible(), true, 'study sessions still work');
   await sp.screenshot({ path: path.join(SHOTS, 'assignments.png'), fullPage: true });
   await sp.goto(base + '/index.html'); await sp.waitForSelector('#tasks-preview .list-row');
-  assert.match(await text(sp, '#tasks-preview'), /Lab report[\s\S]*Due tomorrow[\s\S]*Unit 3 quiz/);
-  step('assignments: connect Google Tasks, list, add, check off; due soon on Today');
+  assert.match(await text(sp, '#tasks-preview'), /Quiz[\s\S]*Moles quiz[\s\S]*Due tomorrow · Chemistry/);
+  assert.match(await text(sp, '#schedule-body tr[data-hour="3"]'), /Chemistry[\s\S]*Quiz Moles quiz · tomorrow/);
+  step('assignments: a classmate quiz added for Chemistry shows on Assignments, Due soon and next to the class; Google Tasks "coming soon"');
 
   // ---------------------------------------------------------------- friends (Ben on a phone-sized screen)
   await sp.goto(base + '/friends.html'); await sp.waitForSelector('#my-code:not(:text("…"))');
@@ -293,10 +306,12 @@ const step = (m) => console.log('•', m);
   // unverified: only private events for friends; no "Everyone" choice
   assert.equal(await ep.locator('#ev-visibility option[value="public"]').count(), 0);
   assert.match(await text(ep, '#post-note'), /admins, verified people/);
-  await ap.goto(base + '/admin.html'); await ap.waitForSelector('#users tr');
-  await ap.click('#users button[aria-label="Verify Ann L."]');
+  await ap.goto(base + '/admin.html#people'); await ap.waitForSelector('#users .person-card');
+  await ap.click('#users .person-card[aria-label^="Ann L."]');
+  await ap.click('#dlg button[aria-label="Verify Ann L."]');
   await ap.waitForSelector('.toast:has-text("Ann L. can now post events")');
-  assert.match(await text(ap, '#users'), /Ann L\.\s*verified/);
+  await ap.keyboard.press('Escape');
+  assert.match(await text(ap, '#users .person-card[aria-label^="Ann L."]'), /verified/);
   step('events: unverified student cannot post; admin verifies Ann');
   await ep.reload(); await ep.waitForSelector('#ev-visibility option[value="public"]', { state: 'attached' });
   await ep.click('#add-card summary');
@@ -326,17 +341,60 @@ const step = (m) => console.log('•', m);
   await sp.fill('#name', 'Annie'); await sp.click('#profile-save');
   await sp.waitForFunction(() => document.querySelector('.nav-auth').innerText.includes('Annie'));
   assert.equal(await sp.locator('body > .tabbar').count(), 1, 'drawing the nav again replaces the tab bar');
+  assert.match(await text(sp, '#hero'), /Annie/, 'the profile header follows the new name');
+  assert.deepEqual(await sp.locator('#profile-tabs a').allInnerTexts(), ['Profile', 'My classes', 'Privacy', 'Notifications & calendar', 'Account']);
+  await sp.click('#profile-tabs a:has-text("Privacy")');
+  await sp.waitForSelector('#sec-privacy:not([hidden])');
+  assert.equal(await sp.locator('#sec-profile').isHidden(), true, 'one section at a time');
   await sp.uncheck('#share');
   await sp.waitForSelector('.toast:has-text("hidden from all friends")');
   await bp.goto(base + '/friends.html');
   await bp.waitForFunction(() => /Schedule hidden/.test(document.querySelector('#friends').innerText));
   assert.match(await text(bp, '#friends'), /Annie/);
-  step('account: rename shows in the nav; privacy switch hides the schedule from friends');
+  await sp.click('#profile-tabs a:has-text("My classes")'); await sp.waitForURL(/schedule\.html/);
+  assert.equal(await sp.locator('#profile-tabs a.active').innerText(), 'My classes');
+  step('profile: sections (My classes is part of it); rename shows in the nav; privacy switch hides the schedule from friends');
+
+  // ---------------------------------------------------------------- a profile photo: shrunk in the page, approved by an admin
+  await sp.goto(base + '/account.html'); await sp.waitForSelector('#photo-status');
+  await sp.setInputFiles('#photo-file', path.join(R, 'public', 'app-icon-512.png'));
+  await sp.waitForSelector('#photo-status:has-text("Waiting for an admin")');
+  const pendingSrc = await sp.locator('#photo-status img').getAttribute('src');
+  assert.match(pendingSrc, /^\/photos\/[0-9a-f]{32}\.jpg$/);
+  const shrunk = await sp.evaluate(async (src) => { const b = await (await fetch(src)).blob(); const i = await createImageBitmap(b); return [b.type, i.width, i.height]; }, pendingSrc);
+  assert.deepEqual(shrunk, ['image/jpeg', 256, 256], 'resized to a 256×256 JPEG before upload');
+  await ap.goto(base + '/admin.html#review'); await ap.waitForSelector('#photo-queue .photo-item');
+  await ap.click('#photo-queue button[aria-label="Approve Annie\'s photo"]');
+  await ap.waitForSelector('.toast:has-text("Approved")');
+  await bp.goto(base + '/friends.html'); await bp.waitForSelector('#friends img.avatar.photo');
+  step('profile photo: uploaded (shrunk to 256×256), approved in Admin → Review, friends see it');
+
+  // ---------------------------------------------------------------- feedback, answered in the app; the audit log
+  await sp.goto(base + '/feedback.html'); await sp.waitForSelector('#feedback-form');
+  await sp.check('input[name="type"][value="idea"]');
+  await sp.fill('#fb-message', 'Could Today show bus changes?');
+  await sp.click('#feedback-form button[type=submit]');
+  await sp.waitForSelector('#mine .feedback-item');
+  assert.match(await text(sp, '#mine'), /An idea[\s\S]*Sent[\s\S]*Could Today show bus changes\?/);
+  await ap.goto(base + '/admin.html#feedback'); await ap.waitForSelector('#fb-list .feedback-item');
+  assert.match(await text(ap, '#count-feedback'), /^1$/);
+  await ap.fill('#fb-list textarea', 'Good idea! We\'re on it.');
+  await ap.click('#fb-list button:has-text("Send reply")');
+  await ap.waitForSelector('.toast:has-text("Reply sent")');
+  await sp.goto(base + '/index.html'); await sp.waitForSelector('#day-head .notice:has-text("We answered your feedback")');
+  await sp.click('#day-head a[href="feedback.html"]');
+  await sp.waitForSelector('#mine .reply');
+  assert.match(await text(sp, '#mine .reply'), /Ada M\.[\s\S]*Good idea! We're on it\./);
+  await ap.click('#tabs [data-tab="audit"]'); await ap.waitForSelector('#audit-rows tr');
+  assert.match(await text(ap, '#audit-rows'), /Replied to feedback[\s\S]*Sent feedback/);
+  await ap.fill('#audit-q', 'bus changes'); await ap.click('#audit-form button');
+  await ap.waitForFunction(() => document.querySelectorAll('#audit-rows tr').length === 1);
+  step('feedback: sent, answered in Admin, reply shown on Today and Feedback; audit log lists and searches it');
   await sp.screenshot({ path: path.join(SHOTS, 'account.png'), fullPage: true });
 
   // ---------------------------------------------------------------- backup + restore through the UI
-  await ap.goto(base + '/admin.html'); await ap.waitForSelector('#users tr');
-  assert.equal(await ap.locator('#users tr').count(), 3);
+  await ap.goto(base + '/admin.html#backup'); await ap.waitForSelector('#users .person-card', { state: 'attached' });
+  assert.equal(await ap.locator('#users .person-card').count(), 3);
   const [download] = await Promise.all([ap.waitForEvent('download'), ap.click('#backup-link')]);
   const backupPath = path.join(SHOTS, 'backup.json');
   await download.saveAs(backupPath);
@@ -345,25 +403,25 @@ const step = (m) => console.log('•', m);
   // a student leaves; the admin then restores the backup and gets them back
   const carl = await newUser('carl', { sub: 's3', email: 'carl@school.test', given_name: 'Carl', family_name: 'Fox' });
   await signIn(carl);
-  await carl.page.goto(base + '/account.html'); await carl.page.waitForSelector('#name');
+  await carl.page.goto(base + '/account.html#account'); await carl.page.waitForSelector('#sec-account:not([hidden])');
   await carl.page.fill('#confirm-delete', 'delete'); await carl.page.click('#delete-btn');
   await carl.page.waitForURL(/index\.html$/);
   assert.equal(Object.keys(ctx.app.state.users).length, 3);
-  await ap.reload(); await ap.waitForSelector('#users tr');
+  await ap.reload(); await ap.waitForSelector('#users .person-card', { state: 'attached' });
   await ap.setInputFiles('#restore-file', backupPath);
   assert.equal(await ap.locator('#restore-btn').isDisabled(), true);
   await ap.fill('#restore-confirm', 'RESTORE');
   await ap.click('#restore-btn');
   await ap.waitForSelector('.toast:has-text("Restored 3 people and 0 events")');
-  await ap.waitForLoadState('load'); await ap.waitForSelector('#users tr');   // the page reloads itself after a restore
-  assert.equal(await ap.locator('#users tr').count(), 3);
+  await ap.waitForLoadState('load'); await ap.waitForSelector('#users .person-card', { state: 'attached' });   // the page reloads itself after a restore
+  assert.equal(await ap.locator('#users .person-card').count(), 3);
   assert.equal(Object.keys(ctx.app.state.users).length, 3);
   step('backup downloaded; account deleted; restore through the UI brought everyone back');
 
   // ---------------------------------------------------------------- phones: no sideways scrolling anywhere
   const phone = await newUser('phone', { sub: 'a1', email: 'admin@school.test', given_name: 'Ada', family_name: 'Min' }, { viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
   await signIn(phone);
-  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'account', 'admin', 'login']) {
+  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'account', 'admin', 'login', 'feedback', 'terms', 'about']) {
     await phone.page.goto(`${base}/${pg}.html`);
     await phone.page.waitForLoadState('networkidle');
     await phone.page.waitForTimeout(250);
@@ -379,20 +437,21 @@ const step = (m) => console.log('•', m);
   const pp = phone.page;
   await pp.goto(base + '/index.html'); await pp.waitForSelector('.tabbar');
   assert.equal(await pp.locator('.nav-wide').isHidden(), true);
-  assert.deepEqual(await pp.locator('.tabbar .tab').allInnerTexts(), ['Today', 'Schedule', 'Assignments', 'Friends', 'More']);
+  assert.deepEqual(await pp.locator('.tabbar .tab').allInnerTexts(), ['Today', 'Assignments', 'Events', 'Friends', 'More']);
   assert.equal(await pp.locator('.tabbar a.active').innerText(), 'Today');
   await pp.click('.tabbar button.tab');
   assert.equal(await pp.locator('.tabbar button.tab').getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Events', 'Groups', 'Lunch', 'Links', 'Account', 'Admin', 'Sign out']);
+  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Groups', 'Lunch', 'Links', 'Profile & my classes', 'Feedback', 'Admin', 'Sign out']);
   await pp.keyboard.press('Escape');
   assert.equal(await pp.locator('#more-sheet').isHidden(), true);
-  await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Events")');
-  await pp.waitForURL(/events\.html/);
+  await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Groups")');
+  await pp.waitForURL(/groups\.html/);
   assert.match(await pp.locator('.tabbar button.tab').getAttribute('class'), /active/, 'More is lit on its pages');
-  await pp.click('.tabbar a:has-text("Schedule")'); await pp.waitForURL(/schedule\.html/);
+  await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Profile & my classes")'); await pp.waitForURL(/account\.html/);
+  await pp.click('#profile-tabs a:has-text("My classes")'); await pp.waitForURL(/schedule\.html/);
   await pp.fill('#blocks [data-block="yellow"][data-field="room"]', '999');
   assert.equal(await pp.locator('#save-bar').evaluate((e) => getComputedStyle(e).position), 'sticky', 'Save stays in view with unsaved changes');
-  step('phone: tab bar, More sheet (Escape closes, active page lit), sticky Save on My Schedule');
+  step('phone: tab bar, More sheet (Escape closes, active page lit), profile → My classes, sticky Save');
 
   // ---------------------------------------------------------------- look & feel: dark mode + keyboard
   const dark = await newUser('dark', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' }, { colorScheme: 'dark' });

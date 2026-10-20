@@ -2,7 +2,7 @@
 // Everything goes to the network first; the copy is only used when there is no connection.
 // Signing out clears the copy (see clearOfflineCopy in js/app.js).
 'use strict';
-const CACHE = 'mhs-hub-v2';
+const CACHE = 'mhs-today-v1';
 const SHELL = [
   '/index.html', '/schedule.html', '/classwork.html', '/lunch.html', '/events.html', '/offline.html',
   '/css/style.css', '/js/app.js', '/js/calendar.js', '/js/bellSchedule.js', '/js/avatars.js',
@@ -24,7 +24,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;
-  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/cal/')) return;
+  if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/cal/') || url.pathname.startsWith('/photos/')) return; // photos: private, not kept offline
   const isApi = url.pathname.startsWith('/api/');
   if (isApi && !KEEP_API.includes(url.pathname)) return;
   e.respondWith((async () => {
@@ -47,7 +47,7 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let msg = {};
   try { msg = e.data ? e.data.json() : {}; } catch { msg = { body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(msg.title || 'MHS Hub', {
+  e.waitUntil(self.registration.showNotification(msg.title || 'MHS Today', {
     body: msg.body || '', icon: '/app-icon-192.png', badge: '/icon-32.png', data: { url: msg.url || '/' }
   }));
 });

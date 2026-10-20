@@ -4,21 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#1e3a8a" />
-  <title>Events · MHS Hub</title>
+  <meta name="theme-color" content="#183890" />
+  <title>Events · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
-    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <h1>Events</h1>
     <p class="muted small">Events for everyone, for your groups, and private ones you're invited to. For the official calendar, see
       <a href="https://www.masd.k12.wi.us/Calendar/" target="_blank" rel="noopener noreferrer">masd.k12.wi.us/Calendar</a>.</p>
@@ -28,7 +28,12 @@
       <form id="event-form" class="form-grid">
         <label class="wide"><span>Title</span><input type="text" id="title" required maxlength="120" /></label>
         <label><span>Date</span><input type="date" id="date" required /></label>
-        <label><span>Time (optional)</span><input type="time" id="time" /></label>
+        <label><span>Ends (if it's more than one day)</span><input type="date" id="end-date" /></label>
+        <label><span>Starts (optional)</span><input type="time" id="time" /></label>
+        <label><span>Ends (optional)</span><input type="time" id="end-time" /></label>
+        <div class="wide" id="repeat-slot"></div>
+        <label><span>Where (room or address)</span><input type="text" id="location" maxlength="120" placeholder="Rm 173, Main Gym, 1234 Main St…" /></label>
+        <label id="category-field"><span>Kind of event</span><select id="ev-category"><option value="school">School</option><option value="sports">Sports</option><option value="clubs">Clubs</option><option value="community">Community</option><option value="holidays">Holidays</option></select></label>
         <label class="wide"><span>Details (optional)</span><input type="text" id="description" maxlength="500" /></label>
         <label><span>Who can see it</span><select id="ev-visibility"></select></label>
         <label id="group-field"><span>Group</span><select id="ev-group"></select></label>
@@ -40,7 +45,8 @@
       </form>
     </details>
     <div class="card">
-      <h2>Upcoming</h2>
+      <div class="row between"><h2>Upcoming</h2>
+        <label class="inline-select"><span class="sr-only">Show</span><select id="cat-filter"><option value="">All kinds</option><option value="school">School</option><option value="sports">Sports</option><option value="clubs">Clubs</option><option value="community">Community</option><option value="holidays">Holidays</option></select></label></div>
       <div id="upcoming"><p class="muted">Loading…</p></div>
     </div>
     <details class="card" id="past-card" hidden>

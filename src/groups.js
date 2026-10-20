@@ -14,7 +14,12 @@
 // Each group also has a board for its members: posts with replies (leaders can mark a post as an
 // announcement, which notifies members) and polls (leaders ask, members vote once, may change it).
 const KINDS = ['club', 'sport', 'group'];
+const ROLE_ORDER = ['advisor', 'leader', 'member'];
 const VISIBILITY = ['public', 'group', 'private'];
+// What kind of event it is (a filter on the Events page). Group events default to their group's kind.
+const CATEGORIES = ['school', 'sports', 'clubs', 'community', 'holidays'];
+const KIND_CATEGORY = { club: 'clubs', sport: 'sports', group: 'clubs' };
+const MAX_EVENT_DAYS = 31; // a multi-day event spans at most this many days
 const EVENT_KEEP_DAYS = 60;   // events are removed this long after their date
 const MAX_GROUPS = 500;
 const MAX_MEMBERS = 1000;
@@ -28,7 +33,7 @@ const MAX_POLLS = 50;
 module.exports = function groups(app) {
   const {
     route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
-    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, notify
+    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, notify, reports
   } = app;
   if (!Array.isArray(state.groups)) state.groups = [];
   const isId = (v) => typeof v === 'string' && /^[0-9a-f]{16}$/.test(v);
@@ -36,9 +41,12 @@ module.exports = function groups(app) {
   // ---------- groups ----------
   const findGroup = (id) => state.groups.find((g) => g.id === id) || null;
   const roleIn = (g, user) => (user && hasOwn(g.members, user.id) ? g.members[user.id] : null);
-  const isLeader = (g, user) => roleIn(g, user) === 'leader';
+  // Roles: 'member', 'leader' (students who run it) and 'advisor' (a staff advisor: same powers as a
+  // leader, but only admins can make or unmake one).
+  const MANAGERS = ['leader', 'advisor'];
+  const isLeader = (g, user) => MANAGERS.includes(roleIn(g, user));
   const canManage = (g, user) => isLeader(g, user) || isAdmin(user);
-  const leaders = (g) => Object.keys(g.members).filter((id) => g.members[id] === 'leader');
+  const leaders = (g) => Object.keys(g.members).filter((id) => MANAGERS.includes(g.members[id]));
   // Anyone may see an approved group; a pending one only its members and admins.
   const canSeeGroup = (g, user) => g.approved || !!roleIn(g, user) || isAdmin(user);
 
@@ -53,6 +61,8 @@ module.exports = function groups(app) {
       out.kind = b.kind;
     }
     if (!partial || b.description !== undefined) out.description = cleanText(b.description, 600);
+    // the staff advisor's name, shown on the group page (whether or not they use MHS Today)
+    if (!partial || b.advisor !== undefined) out.advisor = cleanText(b.advisor, 60);
     if (!partial || b.joinPolicy !== undefined) {
       if (!['open', 'approval'].includes(b.joinPolicy)) throw bad('Pick who can join');
       out.joinPolicy = b.joinPolicy;
@@ -77,7 +87,7 @@ module.exports = function groups(app) {
   function groupCard(g, user) {
     const role = roleIn(g, user);
     return {
-      id: g.id, name: g.name, kind: g.kind, description: g.description, joinPolicy: g.joinPolicy, approved: g.approved,
+      id: g.id, name: g.name, kind: g.kind, description: g.description, joinPolicy: g.joinPolicy, approved: g.approved, advisor: g.advisor || '',
       memberCount: Object.keys(g.members).length,
       myRole: role || (user && g.requests.includes(user.id) ? 'requested' : null)
     };
@@ -89,7 +99,7 @@ module.exports = function groups(app) {
       ...groupCard(g, user), links: g.links, canManage: manage,
       members: seeMembers
         ? Object.entries(g.members).map(([id, role]) => (getUser(id) ? { ...publicCard(getUser(id)), role } : null)).filter(Boolean)
-          .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === 'leader' ? -1 : 1))
+          .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || a.name.localeCompare(b.name))
         : null,
       requests: manage ? g.requests.map(getUser).filter(Boolean).map(publicCard) : null
     };
@@ -180,8 +190,11 @@ module.exports = function groups(app) {
     const target = getUser(params.uid);
     const known = target && (hasOwn(g.members, target.id) || g.requests.includes(target.id));
     if (!known) throw new HttpError(404, 'Not a member and no request');
-    if (body.role !== null && !['leader', 'member'].includes(body.role)) throw bad('Invalid role');
-    if (g.members[target.id] === 'leader' && body.role !== 'leader' && leaders(g).length === 1) throw bad('A group needs at least one leader');
+    if (body.role !== null && !['leader', 'member', 'advisor'].includes(body.role)) throw bad('Invalid role');
+    if ((body.role === 'advisor' || g.members[target.id] === 'advisor') && body.role !== g.members[target.id] && !isAdmin(user)) {
+      throw new HttpError(403, 'Only admins can make someone an advisor or change an advisor');
+    }
+    if (MANAGERS.includes(g.members[target.id]) && !MANAGERS.includes(body.role) && leaders(g).length === 1) throw bad('A group needs at least one leader');
     g.requests = g.requests.filter((id) => id !== target.id);
     if (body.role === null) delete g.members[target.id];
     else {
@@ -210,18 +223,23 @@ module.exports = function groups(app) {
     return g;
   };
   const canRemove = (g, user, authorId) => authorId === user.id || canManage(g, user);
+  // Reported things (three reports) are hidden from everyone but their author and admins.
+  const shows = (kind, x, user) => reports.visible(kind, x.id, x.by, user);
   function boardView(g, user) {
     return {
-      posts: g.posts.slice().sort((a, b) => (b.announcement - a.announcement) || b.created - a.created).map((p) => ({
+      posts: g.posts.filter((p) => shows('post', p, user)).sort((a, b) => (b.announcement - a.announcement) || b.created - a.created).map((p) => ({
         id: p.id, text: p.text, announcement: p.announcement, created: p.created, by: card(p.by), canDelete: canRemove(g, user, p.by),
-        replies: p.replies.map((r) => ({ id: r.id, text: r.text, created: r.created, by: card(r.by), canDelete: canRemove(g, user, r.by) }))
+        mine: p.by === user.id, hidden: reports.hidden('post', p.id),
+        replies: p.replies.filter((r) => shows('reply', r, user)).map((r) => ({
+          id: r.id, text: r.text, created: r.created, by: card(r.by), canDelete: canRemove(g, user, r.by), mine: r.by === user.id, hidden: reports.hidden('reply', r.id)
+        }))
       })),
-      polls: g.polls.slice().sort((a, b) => b.created - a.created).map((p) => {
+      polls: g.polls.filter((p) => shows('poll', p, user)).sort((a, b) => b.created - a.created).map((p) => {
         const counts = p.options.map(() => 0);
         for (const v of Object.values(p.votes)) if (counts[v] !== undefined) counts[v]++;
         return {
           id: p.id, question: p.question, options: p.options, counts, closed: p.closed, created: p.created, by: card(p.by),
-          myVote: hasOwn(p.votes, user.id) ? p.votes[user.id] : null, canManage: canManage(g, user)
+          myVote: hasOwn(p.votes, user.id) ? p.votes[user.id] : null, canManage: canManage(g, user), mine: p.by === user.id, hidden: reports.hidden('poll', p.id)
         };
       })
     };
@@ -341,7 +359,9 @@ module.exports = function groups(app) {
   }
 
   // Returns the cleaned event fields or throws 400. `daysBack` = how far in the past a date may be.
-  function cleanEventFields(b, daysBack = 7) {
+  // An event can have an end time, and end on a later day (endDate, null = same day).
+  const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+  function cleanEventFields(b, daysBack = 7, fallbackCategory = 'school') {
     const title = cleanText(b.title, 120);
     if (!title) throw bad('Give the event a title');
     const date = typeof b.date === 'string' ? b.date : '';
@@ -349,9 +369,47 @@ module.exports = function groups(app) {
     const t = today();
     if (date < cal.addDays(t, -daysBack) || date > cal.addDays(t, 365 * 3)) throw bad('That date is too far away');
     const time = typeof b.time === 'string' ? b.time : '';
-    if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw bad('Invalid time');
-    return { title, date, time, description: cleanText(b.description, 500) };
+    if (time && !TIME.test(time)) throw bad('Invalid time');
+    let endDate = typeof b.endDate === 'string' && b.endDate ? b.endDate : null;
+    if (endDate !== null) {
+      if (cal.parseDate(endDate) === null) throw bad('Pick a valid end date');
+      if (endDate < date) throw bad('The event can\'t end before it starts');
+      if (endDate > cal.addDays(date, MAX_EVENT_DAYS - 1)) throw bad(`An event can last up to ${MAX_EVENT_DAYS} days`);
+      if (endDate === date) endDate = null;
+    }
+    const endTime = typeof b.endTime === 'string' ? b.endTime : '';
+    if (endTime && !TIME.test(endTime)) throw bad('Invalid end time');
+    if (endTime && !time) throw bad('Add a start time to give the event an end time');
+    if (endTime && !endDate && endTime <= time) throw bad('The end time must be after the start time');
+    const category = CATEGORIES.includes(b.category) ? b.category : fallbackCategory;
+    // repeating weekly (club meetings, practices): on these weekdays until a date, usually not on no-school days
+    let repeat = null;
+    if (b.repeat !== undefined && b.repeat !== null && b.repeat !== false) {
+      if (!isPlainObject(b.repeat)) throw bad('Invalid repeat');
+      const days = [...new Set((Array.isArray(b.repeat.days) ? b.repeat.days : []).map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort();
+      if (!days.length) throw bad('Pick the days it repeats on');
+      const until = typeof b.repeat.until === 'string' ? b.repeat.until : '';
+      if (cal.parseDate(until) === null || until < date) throw bad('Pick when it stops repeating (on or after the first day)');
+      if (until > cal.addDays(date, 366)) throw bad('A repeating event can go on for up to a year');
+      if (endDate) throw bad('A repeating event can\'t also last several days');
+      repeat = { days, until, skipNoSchool: b.repeat.skipNoSchool !== false };
+    }
+    return { title, date, time, endDate, endTime, repeat, category, location: cleanText(b.location, 120), description: cleanText(b.description, 500) };
   }
+  // The dates an event happens on between `from` and `to` (a repeating one: each matching weekday).
+  function occurrences(e, from, to) {
+    if (!e.repeat) return e.date >= from && e.date <= to ? [e.date] : [];
+    const out = [];
+    const last = e.repeat.until < to ? e.repeat.until : to;
+    for (let d = e.date > from ? e.date : from, n = 0; d <= last && n < 400; d = cal.addDays(d, 1), n++) {
+      if (!e.repeat.days.includes(new Date(cal.parseDate(d)).getUTCDay())) continue;
+      if (e.repeat.skipNoSchool && !cal.dayInfo(state.calendar, d).schoolDay) continue;
+      out.push(d);
+    }
+    return out;
+  }
+  const nextOf = (e) => (e.repeat ? occurrences(e, today(), e.repeat.until)[0] || null : null);
+  const lastDay = (e) => (e.repeat ? e.repeat.until : e.endDate || e.date);
   function cleanSignup(s) {
     if (s === undefined || s === null || s === false) return null;
     if (s === true) return { limit: 0, people: [] };
@@ -361,16 +419,20 @@ module.exports = function groups(app) {
     return { limit, people: [] };
   }
 
-  const byDateTime = (a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
+  // in date order; a repeating event sorts by its next meeting
+  const sortKey = (e) => `${e.repeat ? nextOf(e) || e.repeat.until : e.date} ${e.time}`;
+  const byDateTime = (a, b) => sortKey(a).localeCompare(sortKey(b));
   function eventView(e, user) {
     const g = e.groupId ? findGroup(e.groupId) : null;
     const org = !!user && (organizers(e).has(user.id) || isAdmin(user));
     const author = getUser(e.by);
     return {
-      id: e.id, title: e.title, date: e.date, time: e.time, description: e.description, visibility: e.visibility,
+      id: e.id, title: e.title, date: e.date, time: e.time, endDate: e.endDate, endTime: e.endTime, category: e.category, location: e.location,
+      repeat: e.repeat, next: nextOf(e),
+      description: e.description, visibility: e.visibility,
       group: g ? { id: g.id, name: g.name } : null,
       by: user ? (author ? author.name : 'Former student') : undefined,
-      mine: canEdit(e, user),
+      mine: canEdit(e, user), own: !!user && e.by === user.id, hidden: reports.hidden('event', e.id),
       invitees: org && e.visibility === 'private' ? e.invitees.map(getUser).filter(Boolean).map(publicCard) : undefined,
       signup: e.signup ? {
         limit: e.signup.limit, count: e.signup.people.length, me: !!user && e.signup.people.includes(user.id),
@@ -383,7 +445,7 @@ module.exports = function groups(app) {
   route('GET', '/api/events', { auth: 'none' }, ({ user, url }) => {
     const only = url.searchParams.get('group');
     return state.events
-      .filter((e) => canSee(e, user) && (!only || e.groupId === only))
+      .filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && (!only || e.groupId === only))
       .sort(byDateTime).map((e) => eventView(e, user));
   });
 
@@ -410,8 +472,9 @@ module.exports = function groups(app) {
       invitees = [...new Set(list)];
       if (!invitees.every((id) => friends.has(id))) throw bad('You can only invite your friends');
     }
-    const fields = cleanEventFields(body);
-    checkWords(fields.title, fields.description);
+    const g = groupId ? findGroup(groupId) : null;
+    const fields = cleanEventFields(body, 7, g ? KIND_CATEGORY[g.kind] : 'school');
+    checkWords(fields.title, fields.description, fields.location);
     const signup = cleanSignup(body.signup);
     if (state.events.length >= config.maxEvents) throw bad('The events board is full');
     if (!isAdmin(user) && !limiter.hit(`event:${user.id}`, 10, 86400e3)) throw new HttpError(429, 'You can add up to 10 events a day');
@@ -444,19 +507,67 @@ module.exports = function groups(app) {
     return eventView(e, user);
   });
 
+  // ---------- what can be reported ----------
+  const groupLink = (g) => `/group.html?id=${g.id}`;
+  const onBoard = (ref, user) => { // the group, if `user` can see its board
+    const g = isId(ref.group) ? findGroup(ref.group) : null;
+    return g && (roleIn(g, user) || isAdmin(user)) ? g : null;
+  };
+  reports.register('event', {
+    locate(ref, user) {
+      const e = state.events.find((x) => x.id === ref.id);
+      return e && canSee(e, user) ? { id: e.id, ref: { id: e.id }, author: e.by, summary: [e.title, e.location, e.description].filter(Boolean).join(' · '), link: '/events.html' } : null;
+    },
+    remove(ref) { state.events = state.events.filter((e) => e.id !== ref.id); },
+    exists: (ref) => state.events.some((e) => e.id === ref.id)
+  });
+  reports.register('post', {
+    locate(ref, user) {
+      const g = onBoard(ref, user);
+      const p = g && g.posts.find((x) => x.id === ref.id);
+      return p ? { id: p.id, ref: { group: g.id, id: p.id }, author: p.by, summary: `${g.name}: ${p.text}`, link: groupLink(g) } : null;
+    },
+    remove(ref) { const g = findGroup(ref.group); if (g) g.posts = g.posts.filter((p) => p.id !== ref.id); },
+    exists: (ref) => { const g = findGroup(ref.group); return !!g && g.posts.some((p) => p.id === ref.id); }
+  });
+  const replyAt = (g, ref) => { const p = g && g.posts.find((x) => x.id === ref.post); return p ? [p, p.replies.find((r) => r.id === ref.id)] : [null, null]; };
+  reports.register('reply', {
+    locate(ref, user) {
+      const g = onBoard(ref, user);
+      const [, r] = replyAt(g, ref);
+      return r ? { id: r.id, ref: { group: g.id, post: ref.post, id: r.id }, author: r.by, summary: `${g.name} (reply): ${r.text}`, link: groupLink(g) } : null;
+    },
+    remove(ref) { const [p] = replyAt(findGroup(ref.group), ref); if (p) p.replies = p.replies.filter((r) => r.id !== ref.id); },
+    exists: (ref) => !!replyAt(findGroup(ref.group), ref)[1]
+  });
+  reports.register('poll', {
+    locate(ref, user) {
+      const g = onBoard(ref, user);
+      const p = g && g.polls.find((x) => x.id === ref.id);
+      return p ? { id: p.id, ref: { group: g.id, id: p.id }, author: p.by, summary: `${g.name} (poll): ${p.question} – ${p.options.join(' / ')}`, link: groupLink(g) } : null;
+    },
+    remove(ref) { const g = findGroup(ref.group); if (g) g.polls = g.polls.filter((p) => p.id !== ref.id); },
+    exists: (ref) => { const g = findGroup(ref.group); return !!g && g.polls.some((p) => p.id === ref.id); }
+  });
+
   // ---------- backup, cleanup ----------
   // Events for someone's calendar feed: theirs, ones they signed up for or were invited to, and their groups'.
   const mineForCalendar = (e, user) => e.by === user.id || e.invitees.includes(user.id) || (e.signup && e.signup.people.includes(user.id))
     || (e.groupId && !!findGroup(e.groupId) && !!roleIn(findGroup(e.groupId), user));
   return {
     // timed events and who to remind: the author, people signed up, people invited
-    eventsForReminders: () => state.events.filter((e) => e.time).map((e) => ({
-      id: e.id, date: e.date, time: e.time, title: e.title,
+    eventsForReminders: () => state.events.filter((e) => e.time && !reports.hidden('event', e.id)).flatMap((e) => (e.repeat ? occurrences(e, today(), today()) : [e.date]).map((d) => ({
+      id: e.repeat ? `${e.id}-${d}` : e.id, date: d, time: e.time, title: e.title,
       people: [...new Set([e.by, ...e.invitees, ...(e.signup ? e.signup.people : [])].filter(Boolean))]
-    })),
-    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && mineForCalendar(e, user)).map((e) => {
+    }))),
+    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && mineForCalendar(e, user)).flatMap((e) => {
       const g = e.groupId ? findGroup(e.groupId) : null;
-      return { uid: `ev-${e.id}`, date: e.date, time: e.time || null, title: e.title, description: [g ? g.name : '', e.description].filter(Boolean).join(': ') };
+      const item = (date, uid) => ({
+        uid, date, time: e.time || null, endDate: e.endDate, endTime: e.endTime, title: e.title, location: e.location,
+        description: [g ? g.name : '', e.description].filter(Boolean).join(': ')
+      });
+      // each meeting of a repeating event is its own calendar entry (two weeks back, six months ahead)
+      return e.repeat ? occurrences(e, cal.addDays(today(), -14), cal.addDays(today(), 180)).map((d) => item(d, `ev-${e.id}-${d}`)) : [item(e.date, `ev-${e.id}`)];
     }),
     status: () => ({ groups: state.groups.length, pendingGroups: state.groups.filter((g) => !g.approved).length }),
     exportData: () => ({ groups: state.groups }),
@@ -469,11 +580,11 @@ module.exports = function groups(app) {
           if (out.some((x) => x.name.toLowerCase() === f.name.toLowerCase())) continue;
           const members = {};
           for (const [id, role] of Object.entries(isPlainObject(g.members) ? g.members : {})) {
-            if (hasOwn(users, id) && ['leader', 'member'].includes(role)) members[id] = role;
+            if (hasOwn(users, id) && ['leader', 'member', 'advisor'].includes(role)) members[id] = role;
           }
           const ids = Object.keys(members);
           if (!ids.length) continue;
-          if (!ids.some((id) => members[id] === 'leader')) members[ids[0]] = 'leader';
+          if (!ids.some((id) => MANAGERS.includes(members[id]))) members[ids[0]] = 'leader';
           const text = (t) => cleanText(t, 1000);
           const posts = (Array.isArray(g.posts) ? g.posts : []).filter((p) => isPlainObject(p) && isId(p.id) && text(p.text)).slice(-MAX_POSTS).map((p) => ({
             id: p.id, by: hasOwn(users, p.by) ? p.by : null, text: text(p.text), announcement: p.announcement === true, created: num(p.created),
@@ -508,7 +619,7 @@ module.exports = function groups(app) {
           const signup = isPlainObject(e.signup) ? cleanSignup({ limit: e.signup.limit }) : null;
           if (signup && Array.isArray(e.signup.people)) signup.people = [...new Set(e.signup.people.filter((id) => hasOwn(users, id)))];
           events.push({
-            id: e.id, ...cleanEventFields(e, EVENT_KEEP_DAYS), by, created: num(e.created), visibility, groupId: g ? g.id : null,
+            id: e.id, ...cleanEventFields(e, EVENT_KEEP_DAYS, g ? KIND_CATEGORY[g.kind] : 'school'), by, created: num(e.created), visibility, groupId: g ? g.id : null,
             invitees: visibility === 'private' && Array.isArray(e.invitees) ? [...new Set(e.invitees.filter((id) => hasOwn(users, id)))].slice(0, MAX_INVITEES) : [],
             signup
           });
@@ -519,7 +630,7 @@ module.exports = function groups(app) {
     },
     maintain() {
       const cutoff = cal.addDays(today(), -EVENT_KEEP_DAYS);
-      state.events = state.events.filter((e) => e.date >= cutoff);
+      state.events = state.events.filter((e) => lastDay(e) >= cutoff);
     },
     forgetUser(id) {
       state.events = state.events.filter((e) => e.by !== id);
@@ -536,7 +647,7 @@ module.exports = function groups(app) {
         delete g.members[id];
         const ids = Object.keys(g.members);
         if (!ids.length) deleteGroup(g);
-        else if (!ids.some((x) => g.members[x] === 'leader')) g.members[ids[0]] = 'leader';
+        else if (!ids.some((x) => MANAGERS.includes(g.members[x]))) g.members[ids[0]] = 'leader';
       }
     },
     // Events saved before groups existed are public, with no group, invitees or sign-up list.
@@ -550,6 +661,12 @@ module.exports = function groups(app) {
         if (e.groupId === undefined) e.groupId = null;
         if (!Array.isArray(e.invitees)) e.invitees = [];
         if (e.signup === undefined) e.signup = null;
+        // added with end times and categories
+        if (e.endDate === undefined) e.endDate = null;
+        if (e.repeat === undefined) e.repeat = null;
+        if (typeof e.endTime !== 'string') e.endTime = '';
+        if (typeof e.location !== 'string') e.location = '';
+        if (!CATEGORIES.includes(e.category)) { const g = e.groupId ? findGroup(e.groupId) : null; e.category = g ? KIND_CATEGORY[g.kind] : 'school'; }
       }
     }
   };

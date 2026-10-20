@@ -91,13 +91,19 @@ class Client {
   del(p, opts) { return this.call('DELETE', p, undefined, opts); }
 
   // Runs the full sign-in dance against the mock. Returns the final callback response.
-  async signIn(mock, identity, next) {
+  async signIn(mock, identity, next, { agree = true } = {}) {
     if (identity) mock.identity = { sub: 'sub-1', email: 'student@school.test', email_verified: true, given_name: 'Sam', family_name: 'Student', hd: 'school.test', ...identity };
     const start = await this.raw('GET', '/auth/google' + (next ? `?next=${encodeURIComponent(next)}` : ''));
     assert.equal(start.status, 302);
     const toGoogle = await fetch(start.headers.get('location'), { redirect: 'manual' });
     const cb = new URL(toGoogle.headers.get('location'));
-    return this.raw('GET', cb.pathname + cb.search);
+    const res = await this.raw('GET', cb.pathname + cb.search);
+    // agree to the Privacy & Terms like everyone does on first sign-in (tests about that use agree: false)
+    if (agree) {
+      const me = (await this.get('/api/me')).data.user;
+      if (me && me.mustAgree) await this.post('/api/me/agree', { version: me.termsVersion });
+    }
+    return res;
   }
   // "Connect Google Tasks" against the mock, as the signed-in person (or as `identity` at Google).
   async connectTasks(mock, identity) {

@@ -155,6 +155,73 @@ test('events: sign-up lists with limits; organizers see names, others the count'
   assert.equal((await ann.get('/api/events')).data.find((x) => x.id === id).signup.count, 1);
 });
 
+test('events: end times, multi-day events, a place and a kind (group events take the group\'s kind)', async () => {
+  const ctx = await startApp({ mock });
+  const boss = await owner(ctx);
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  for (const bad of [{ endTime: '18:00' }, { time: '18:00', endTime: '17:00' }, { time: '18:00', endTime: '18:00' }, { endDate: soon(1) },
+    { endDate: soon(40) }, { endTime: '25:00', time: '10:00' }, { endDate: 'later' }]) {
+    const r = await boss.post('/api/events', { title: 'x', date: soon(2), ...bad });
+    assert.equal(r.status, 400, JSON.stringify(bad));
+  }
+  const game = (await boss.post('/api/events', { title: 'Homecoming game', date: soon(2), time: '19:00', endTime: '21:30', location: 'Stadium', category: 'sports' })).data.id;
+  const trip = (await boss.post('/api/events', { title: 'Band trip', date: soon(3), endDate: soon(5), location: '  Orlando, FL ' })).data.id;
+  const same = (await boss.post('/api/events', { title: 'One day', date: soon(4), endDate: soon(4), category: 'nope' })).data.id;
+  const gid = (await ann.post('/api/groups', { name: 'Robotics', kind: 'club', joinPolicy: 'open' })).data.id;
+  await boss.put(`/api/admin/groups/${gid}`, { approved: true });
+  const build = (await ann.post('/api/events', { title: 'Build night', date: soon(1), time: '15:00', visibility: 'group', groupId: gid })).data.id;
+  const list = (await ann.get('/api/events')).data;
+  const ev = (id) => list.find((e) => e.id === id);
+  assert.deepEqual([ev(game).endTime, ev(game).location, ev(game).category, ev(game).endDate], ['21:30', 'Stadium', 'sports', null]);
+  assert.deepEqual([ev(trip).endDate, ev(trip).location, ev(trip).category], [soon(5), 'Orlando, FL', 'school']);
+  assert.deepEqual([ev(same).endDate, ev(same).category], [null, 'school'], 'same-day end date is dropped; unknown kind -> school');
+  assert.equal(ev(build).category, 'clubs', 'a club\'s events are Clubs events unless they say otherwise');
+  // the calendar feed: end time, and an all-day span through the last day
+  const { url } = (await ann.post('/api/me/calendar')).data;
+  const ics = await (await ctx.client().raw('GET', new URL(url).pathname, { xhr: false })).text();
+  const vev = ics.split('BEGIN:VEVENT').find((v) => v.includes('Build night'));
+  assert.ok(vev, 'group events are in members\' feeds');
+  // an all-day span through the last day (Ann's own multi-day event)
+  await ann.post('/api/events', { title: 'Camp', date: soon(6), endDate: soon(8), visibility: 'private', invitees: [] });
+  const ics2 = await (await ctx.client().raw('GET', new URL(url).pathname, { xhr: false })).text();
+  const camp = ics2.split('BEGIN:VEVENT').find((v) => v.includes('SUMMARY:Camp'));
+  assert.match(camp, new RegExp(`DTSTART;VALUE=DATE:${soon(6).replace(/-/g, '')}`));
+  assert.match(camp, new RegExp(`DTEND;VALUE=DATE:${cal.addDays(soon(8), 1).replace(/-/g, '')}`));
+});
+
+test('events: weekly repeats (club meetings) skip days off; next meeting; one calendar entry per meeting', async () => {
+  const ctx = await startApp({ mock });
+  const boss = await owner(ctx);
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  const t = cal.schoolNow('America/Chicago').date;
+  const wd = (d) => new Date(cal.parseDate(d)).getUTCDay();
+  // the next Monday on or after tomorrow, and a no-school Wednesday after it
+  let mon = cal.addDays(t, 1);
+  while (wd(mon) !== 1) mon = cal.addDays(mon, 1);
+  const wed = cal.addDays(mon, 2);
+  await boss.put('/api/admin/calendar', { noSchool: { [wed]: 'Teacher day' } });
+  for (const bad of [{ repeat: { days: [], until: cal.addDays(mon, 14) } }, { repeat: { days: [1], until: cal.addDays(mon, -1) } },
+    { repeat: { days: [1], until: cal.addDays(mon, 400) } }, { repeat: { days: [1], until: cal.addDays(mon, 14) }, endDate: cal.addDays(mon, 1) }, { repeat: 'weekly' }]) {
+    assert.equal((await boss.post('/api/events', { title: 'x', date: mon, ...bad })).status, 400, JSON.stringify(bad));
+  }
+  const id = (await boss.post('/api/events', {
+    title: 'Robotics', date: mon, time: '15:00', endTime: '16:30', location: 'Rm 173', repeat: { days: [3, 1, 3], until: cal.addDays(mon, 14) }
+  })).data.id;
+  const e = (await ann.get('/api/events')).data.find((x) => x.id === id);
+  assert.deepEqual(e.repeat, { days: [1, 3], until: cal.addDays(mon, 14), skipNoSchool: true });
+  assert.equal(e.next, mon);
+  const sign = await ann.post(`/api/events/${id}/signup`, { on: true });
+  assert.equal(sign.status, 400, 'no sign-up list on this one');
+  // in Ann's calendar, each meeting of her own repeating event: Mon, (not the day-off Wed), Mon, Wed, Mon
+  const own = (await ann.post('/api/events', { title: 'Study club', date: mon, time: '07:00', visibility: 'private', invitees: [], repeat: { days: [1, 3], until: cal.addDays(mon, 14) } })).data.id;
+  const { url } = (await ann.post('/api/me/calendar')).data;
+  const ics = await (await ctx.client().raw('GET', new URL(url).pathname, { xhr: false })).text();
+  const dates = [...ics.matchAll(new RegExp(`UID:ev-${own}-(\\d{4}-\\d{2}-\\d{2})@`, 'g'))].map((m) => m[1]);
+  assert.deepEqual(dates, [mon, cal.addDays(mon, 7), cal.addDays(mon, 9), cal.addDays(mon, 14)], 'the day off is skipped');
+  // kept until two months after the last meeting
+  assert.ok(ctx.app.state.events.some((x) => x.id === own));
+});
+
 test('backup keeps study sessions, groups, event details and tools', async () => {
   const one = await startApp({ mock });
   const boss = await owner(one);

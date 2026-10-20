@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#183890" />
+  <title>Feedback · MHS Today</title>
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
+    <h1>Feedback</h1>
+    <p class="muted">Found a bug, have an idea, or a question? Tell us here. The people who run MHS Today read every message and answer right here.</p>
+    <form class="card stack" id="feedback-form">
+      <fieldset class="choice-row">
+        <legend class="field-label">What is it?</legend>
+        <label class="choice"><input type="radio" name="type" value="bug" required /><span>🐞 Something's broken</span></label>
+        <label class="choice"><input type="radio" name="type" value="idea" /><span>💡 An idea</span></label>
+        <label class="choice"><input type="radio" name="type" value="question" /><span>❓ A question</span></label>
+        <label class="choice"><input type="radio" name="type" value="other" /><span>💬 Something else</span></label>
+      </fieldset>
+      <label><span>Your message</span><textarea id="fb-message" rows="5" maxlength="2000" required placeholder="What happened, or what would make MHS Today better?"></textarea></label>
+      <p class="small muted">Your name goes with it so we can answer. Please don't include passwords or anything private.</p>
+      <div><button class="btn" type="submit">Send</button></div>
+    </form>
+    <div class="card">
+      <h2>What you've sent</h2>
+      <div id="mine"><p class="muted">Loading…</p></div>
+    </div>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/feedback.js"></script>
+</body>
+</html>

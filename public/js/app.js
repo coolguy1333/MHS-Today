@@ -22,15 +22,21 @@ async function api(method, url, body) {
     const err = new Error((data && data.error) || `Something went wrong (${res.status})`);
     err.status = res.status;
     if (res.status === 401) goToLogin(); // session ended: sign in again and come back here
+    if (data && data.mustAgree) goToTerms(); // the Privacy & Terms changed: read and agree first
     throw err;
   }
   return data;
 }
 
-function goToLogin() {
+// This page (and its query), to come back to after signing in or agreeing to the terms.
+function hereForNext() {
   const page = location.pathname.split('/').pop() || 'index.html';
-  const next = /^[a-z]+\.html$/.test(page) ? page + (/^\?[A-Za-z0-9_=&.-]{0,100}$/.test(location.search) ? location.search : '') : 'index.html';
-  location.href = 'login.html?next=' + encodeURIComponent(next);
+  return /^[a-z]+\.html$/.test(page) ? page + (/^\?[A-Za-z0-9_=&.-]{0,100}$/.test(location.search) ? location.search : '') : 'index.html';
+}
+function goToLogin() { location.href = 'login.html?next=' + encodeURIComponent(hereForNext()); }
+function goToTerms() {
+  if (/terms\.html$/.test(location.pathname)) return;
+  location.href = 'terms.html?agree=1&next=' + encodeURIComponent(hereForNext());
 }
 
 // ---- building DOM safely -------------------------------------------------------
@@ -104,13 +110,14 @@ function getMe() { // { user | null, config }
 async function requireLogin() {
   const me = await getMe();
   if (!me.user) { goToLogin(); await new Promise(() => {}); }
+  if (me.user.mustAgree && !/terms\.html$/.test(location.pathname)) { goToTerms(); await new Promise(() => {}); }
   return me.user;
 }
 
 // Line icons for the phone tab bar (24x24, drawn with the text color).
 const ICONS = {
   dashboard: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
-  schedule: 'M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4',
+  events: 'M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4',
   classwork: 'M9 11l3 3 8-8 M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11',
   friends: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7 M22 21v-1a6 6 0 0 0-4-5.6',
   more: 'M4 6h16 M4 12h16 M4 18h16',
@@ -139,16 +146,17 @@ async function signOut() {
 function renderNav(active) {
   const nav = $('site-nav');
   if (!nav) return;
+  // (your classes are part of your profile: the avatar link, then "My classes")
   const ALL = [
-    ['index.html', 'Today', 'dashboard'], ['schedule.html', 'Schedule', 'schedule'], ['classwork.html', 'Assignments', 'classwork'],
+    ['index.html', 'Today', 'dashboard'], ['classwork.html', 'Assignments', 'classwork'],
     ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
     ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links']
   ];
-  const TABS = ['dashboard', 'schedule', 'classwork', 'friends'];
+  const TABS = ['dashboard', 'classwork', 'events', 'friends'];
   const current = (key) => ({ class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null });
   const wide = h('nav', { 'aria-label': 'Main', class: 'nav-wide' });
   const auth = h('span', { class: 'nav-auth' });
-  fill(nav, h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Hub'), wide, auth);
+  fill(nav, h('a', { href: 'index.html', class: 'brand' }, h('img', { src: 'icon-167.png', alt: '', width: '28', height: '28' }), 'MHS Today'), wide, auth);
   // the page may draw the nav again (after a rename): replace the old bar and its listeners
   for (const el of document.querySelectorAll('body > .tabbar, body > .more-sheet')) el.remove();
   if (renderNav.off) renderNav.off.abort();
@@ -157,12 +165,14 @@ function renderNav(active) {
 
   getMe().catch(() => ({ user: null })).then((me) => {
     const user = me.user;
+    if (user && user.mustAgree) goToTerms(); // signed in but hasn't agreed to the (latest) Privacy & Terms
+    renderFooter(user);
     const links = user ? ALL : ALL.filter(([, , key]) => key === 'dashboard');
     add(wide, links.map(([href, label, key]) => h('a', { href, ...current(key) }, label)));
     if (user) {
       add(auth,
         user.admin ? h('a', { href: 'admin.html', class: 'nav-admin' + (active === 'admin' ? ' active' : '') }, 'Admin') : null,
-        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : ''), 'aria-label': `Your account (${user.name})` }, avatarEl(user, 22), h('span', { class: 'nav-name' }, user.name)),
+        h('a', { href: 'account.html', class: 'nav-me' + (active === 'account' ? ' active' : ''), 'aria-label': `Your profile (${user.name})` }, avatarEl(user, 22), h('span', { class: 'nav-name' }, user.name)),
         h('button', { class: 'linklike nav-signout', type: 'button', onclick: signOut }, 'Sign out'));
     } else {
       add(auth, h('a', { href: 'login.html', class: 'nav-signin' + (active === 'login' ? ' active' : '') }, 'Sign in'));
@@ -174,7 +184,8 @@ function renderNav(active) {
     if (user) {
       const sheet = h('div', { class: 'more-sheet', id: 'more-sheet', hidden: true }, h('div', { class: 'sheet-links' },
         ALL.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)),
-        h('a', { href: 'account.html', ...current('account') }, 'Account'),
+        h('a', { href: 'account.html', ...current('account') }, 'Profile & my classes'),
+        h('a', { href: 'feedback.html', ...current('feedback') }, 'Feedback', user.unreadFeedback ? h('span', { class: 'dot', 'aria-label': ' (new reply)' }) : null),
         user.admin ? h('a', { href: 'admin.html', ...current('admin') }, 'Admin') : null,
         h('button', { class: 'linklike', type: 'button', onclick: signOut }, 'Sign out')));
       const moreBtn = h('button', {
@@ -197,6 +208,26 @@ function renderNav(active) {
     document.body.classList.add('has-tabbar');
   });
   renderBanner(nav);
+}
+
+// The top of your profile pages: who you are, and its sections (My classes is its own page).
+const PROFILE_TABS = [['profile', 'Profile', 'account.html#profile'], ['classes', 'My classes', 'schedule.html'], ['privacy', 'Privacy', 'account.html#privacy'],
+  ['alerts', 'Notifications & calendar', 'account.html#alerts'], ['account', 'Account', 'account.html#account']];
+function renderProfileHeader(user, active) {
+  fill($('hero'), avatarEl(user, 64), h('div', null, h('h1', null, user.name),
+    h('div', { class: 'muted small' }, [user.pronouns, gradeText(user.grade)].filter(Boolean).join(' · ') || 'Your profile')));
+  fill($('profile-tabs'), PROFILE_TABS.map(([key, label, href]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)));
+}
+
+// The footer on every page: About, Privacy & Terms, Feedback.
+function renderFooter(user) {
+  for (const old of document.querySelectorAll('body > .site-footer')) old.remove();
+  const main = document.querySelector('main');
+  if (!main) return;
+  main.after(h('footer', { class: 'site-footer' },
+    h('a', { href: 'about.html' }, 'About'), h('a', { href: 'terms.html' }, 'Privacy & Terms'),
+    user ? h('a', { href: 'feedback.html' }, 'Feedback', user.unreadFeedback ? ' (new reply)' : '') : null,
+    h('span', { class: 'muted' }, 'Made by MHS students')));
 }
 
 // Admins' announcements, under the nav on every page. A closed one stays closed on this device.
@@ -329,6 +360,83 @@ function friendNowText(friend, live) {
 }
 // One event in a list: when, who can see it, its group, the sign-up list, and delete for organizers.
 // `reload` runs after a change.
+// ---- reporting something someone else posted ----
+const REPORT_REASONS = [['mean', 'Mean or bullying'], ['inappropriate', 'Inappropriate'], ['spam', 'Spam or nonsense'], ['private', "Shares someone's private info"], ['other', 'Something else']];
+// A small "Report" button; `what` names it for screen readers ("Pep rally", "Sam's post").
+function reportButton(kind, ref, what) {
+  return h('button', { class: 'linklike report-btn', type: 'button', 'aria-label': `Report ${what}`, onclick: () => openReport(kind, ref, what) }, 'Report');
+}
+function openReport(kind, ref, what) {
+  const note = h('input', { type: 'text', maxlength: '300', placeholder: 'What happened? (optional)' });
+  const dlg = h('dialog', { class: 'dialog', 'aria-labelledby': 'report-title' });
+  const form = h('form', { class: 'stack' },
+    h('div', { class: 'dialog-head' }, h('h2', { id: 'report-title' }, 'Report this?'),
+      h('button', { class: 'linklike', type: 'button', 'aria-label': 'Close', onclick: () => dlg.close() }, '×')),
+    h('p', { class: 'small muted' }, `Admins will look at ${what}. They won't tell anyone who reported it.`),
+    h('fieldset', { class: 'stack plain' }, h('legend', { class: 'field-label' }, "What's wrong?"),
+      REPORT_REASONS.map(([v, label], i) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'reason', value: v, checked: i === 0 }), h('span', null, label)))),
+    h('label', null, h('span', null, 'Anything else'), note),
+    h('div', { class: 'row' }, h('button', { class: 'btn danger', type: 'submit' }, 'Report'), h('button', { class: 'btn secondary', type: 'button', onclick: () => dlg.close() }, 'Cancel')));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      const r = await api('POST', '/api/reports', { kind, ref, reason: form.querySelector('input[name=reason]:checked').value, note: note.value });
+      dlg.close();
+      toast(r.already ? 'You already reported this. Admins will take a look.' : 'Thanks for telling us. Admins will take a look.');
+    });
+  });
+  add(dlg, form);
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+}
+const hiddenBadge = (x) => (x.hidden ? h('span', { class: 'badge urgent', title: 'Hidden because people reported it; an admin will check it' }, 'Hidden (reported)') : null);
+
+// ---- events ----
+const EVENT_CATEGORIES = { school: 'School', sports: 'Sports', clubs: 'Clubs', community: 'Community', holidays: 'Holidays' };
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// multi-day events end on endDate; repeating ones on their last week
+const eventEnd = (e) => (e.repeat ? e.repeat.until : e.endDate || e.date);
+// "Today · 3:00 – 5:00 PM", "Fri, Oct 23 – Sun, Oct 25", "Fri, Oct 23, 7:00 PM – Sat, Oct 24, 1:00 AM",
+// "Every Tue & Thu · 3:00 – 4:30 PM · next Thu, Oct 22"
+function fmtEventWhen(e, today) {
+  const t = (x) => MHSBell.formatTime(x);
+  const day = (d) => fmtRelativeDay(d, today);
+  if (e.repeat) {
+    const days = e.repeat.days.map((d) => WEEKDAY_SHORT[d]);
+    const list = days.length > 1 ? `${days.slice(0, -1).join(', ')} & ${days[days.length - 1]}` : days[0];
+    return `Every ${list}${e.time ? ` · ${t(e.time)}${e.endTime ? ` – ${t(e.endTime)}` : ''}` : ''}${e.next ? ` · next ${day(e.next)}` : ' · no more meetings'}`;
+  }
+  if (!e.endDate) return day(e.date) + (e.time ? ` · ${t(e.time)}${e.endTime ? ` – ${t(e.endTime)}` : ''}` : '');
+  if (!e.time) return `${day(e.date)} – ${day(e.endDate)}`;
+  return `${day(e.date)}, ${t(e.time)} – ${day(e.endDate)}${e.endTime ? `, ${t(e.endTime)}` : ''}`;
+}
+// "Repeats every week" for the event forms: the weekdays, until when, and whether to skip days off.
+// `dateInput` is the form's start date (its weekday is ticked when repeating is turned on).
+function repeatPicker(dateInput) {
+  const on = h('input', { type: 'checkbox' });
+  const dayBoxes = [1, 2, 3, 4, 5, 6, 0].map((d) => h('input', { type: 'checkbox', value: String(d), 'aria-label': `Repeat on ${WEEKDAY_SHORT[d]}` }));
+  const until = h('input', { type: 'date', 'aria-label': 'Repeat until' });
+  const skip = h('input', { type: 'checkbox', checked: true });
+  const box = h('div', { class: 'repeat-box', hidden: true },
+    h('div', { class: 'day-checks' }, dayBoxes.map((b, i) => h('label', { class: 'day-check' }, b, h('span', null, WEEKDAY_SHORT[[1, 2, 3, 4, 5, 6, 0][i]])))),
+    h('label', null, h('span', null, 'Until'), until),
+    h('label', { class: 'check' }, skip, h('span', null, 'Skip days with no school')));
+  on.addEventListener('change', () => {
+    box.hidden = !on.checked;
+    if (on.checked && dateInput.value && !dayBoxes.some((b) => b.checked)) {
+      const wd = utcDate(dateInput.value).getUTCDay();
+      dayBoxes.find((b) => b.value === String(wd)).checked = true;
+    }
+    if (on.checked && dateInput.value && !until.value) until.value = MHSCalendar.addDays(dateInput.value, 56); // about two months
+  });
+  return {
+    el: h('div', { class: 'wide repeat' }, h('label', { class: 'check' }, on, h('span', null, 'Repeats every week (meetings, practices)')), box),
+    value: () => (on.checked ? { days: dayBoxes.filter((b) => b.checked).map((b) => Number(b.value)), until: until.value, skipNoSchool: skip.checked } : null),
+    reset() { on.checked = false; box.hidden = true; for (const b of dayBoxes) b.checked = false; until.value = ''; skip.checked = true; }
+  };
+}
+
 function eventRow(e, today, reload) {
   const VIS = { group: 'Group members', private: 'Private' };
   const s = e.signup;
@@ -345,14 +453,19 @@ function eventRow(e, today, reload) {
     s.people && s.people.length ? h('span', { class: 'muted' }, `· ${s.people.map((p) => p.name).join(', ')}`) : null) : null;
   return h('div', { class: 'list-row' },
     h('div', null,
-      h('strong', null, e.title), VIS[e.visibility] ? [' ', h('span', { class: 'badge vis' }, VIS[e.visibility])] : null,
+      h('strong', null, e.title),
+      EVENT_CATEGORIES[e.category] ? [' ', h('span', { class: `badge cat cat-${e.category}` }, EVENT_CATEGORIES[e.category])] : null,
+      e.hidden ? [' ', hiddenBadge(e)] : null,
+      VIS[e.visibility] ? [' ', h('span', { class: 'badge vis' }, VIS[e.visibility])] : null,
       h('div', { class: 'small muted' },
-        fmtRelativeDay(e.date, today) + (e.time ? ` · ${MHSBell.formatTime(e.time)}` : ''),
+        fmtEventWhen(e, today),
+        e.location ? [' · ', h('span', { class: 'where' }, e.location)] : null,
         e.group ? [' · ', h('a', { href: `group.html?id=${encodeURIComponent(e.group.id)}` }, e.group.name)] : null,
         e.by ? ` · added by ${e.by}` : ''),
       e.description ? h('div', { class: 'small' }, e.description) : null,
       e.invitees && e.invitees.length ? h('div', { class: 'small muted' }, `Invited: ${e.invitees.map((p) => p.name).join(', ')}`) : null,
       signupLine),
+    e.by !== undefined && !e.own ? reportButton('event', { id: e.id }, `"${e.title}"`) : null,
     e.mine ? h('button', {
       class: 'linklike danger', type: 'button', 'aria-label': `Delete ${e.title}`,
       onclick: (ev) => busy(ev.currentTarget, async () => {
@@ -366,6 +479,9 @@ function eventRow(e, today, reload) {
 
 // A round avatar: the person's emoji, or their initials, on their color.
 function avatarEl(person, size = 32) {
+  if (person && person.photo) { // an approved profile photo
+    return h('img', { class: 'avatar photo', src: person.photo, alt: '', width: String(size), height: String(size), loading: 'lazy', style: { width: `${size}px`, height: `${size}px` } });
+  }
   const a = MHSAvatars.clean(person && person.avatar);
   return h('span', {
     class: 'avatar', 'aria-hidden': 'true',

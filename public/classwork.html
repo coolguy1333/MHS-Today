@@ -4,27 +4,49 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#1e3a8a" />
-  <title>Assignments · MHS Hub</title>
+  <meta name="theme-color" content="#183890" />
+  <title>Assignments · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
-    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <h1>Assignments</h1>
-    <p class="muted">Your own Google Tasks: the same list as in Gmail, Google Calendar and the Google Tasks app. Only you see them.</p>
+    <p class="muted" id="tasks-intro" hidden>Your own Google Tasks: the same list as in Gmail, Google Calendar and the Google Tasks app. Only you see them.</p>
     <div id="tasks-msg" class="notice" hidden></div>
+    <div class="card" id="class-card" hidden>
+      <h2>Tests &amp; assignments</h2>
+      <p class="small muted">Added by classmates in the same class: same block, class and teacher. Only your class sees them.</p>
+      <div id="class-items"><p class="muted small">Loading…</p></div>
+      <details id="class-add">
+        <summary>Add a test or assignment for my class</summary>
+        <form id="class-form" class="form-grid">
+          <label><span>Class</span><select id="ce-block" required></select></label>
+          <label><span>What</span><select id="ce-kind"><option value="test">Test</option><option value="quiz">Quiz</option><option value="assignment">Assignment</option><option value="project">Project</option></select></label>
+          <label class="wide"><span>Title</span><input type="text" id="ce-title" maxlength="100" required placeholder="Unit 3 quiz" /></label>
+          <label><span>Due</span><input type="date" id="ce-due" required /></label>
+          <label><span>Notes (optional)</span><input type="text" id="ce-notes" maxlength="300" placeholder="Sections 3.1–3.4, calculator allowed" /></label>
+          <p class="small muted wide" id="ce-teacher-note" hidden></p>
+          <div class="wide"><button class="btn" type="submit">Add for my class</button></div>
+        </form>
+      </details>
+    </div>
+    <div class="card soon-card" id="soon-card" hidden>
+      <span class="badge">Coming soon</span>
+      <h2>Your own to-do list</h2>
+      <p class="muted small">Your Google Tasks right here, to check things off. We're working on it with the district.</p>
+    </div>
     <div class="card" id="connect-card" hidden>
       <h2>Connect Google Tasks</h2>
-      <p>See and check off your assignments here. Google will ask you to let MHS Hub see and edit your tasks; you can disconnect any time.</p>
+      <p>See and check off your assignments here. Google will ask you to let MHS Today see and edit your tasks; you can disconnect any time.</p>
       <p><a class="btn" id="connect-btn" href="/auth/google?connect=tasks">Connect Google Tasks</a></p>
     </div>
     <div class="card" id="tasks-card" hidden>
@@ -63,7 +85,7 @@
         </form>
       </details>
     </div>
-    <p class="card muted" id="no-classes" hidden>Add your classes on <a href="schedule.html">Schedule</a> to plan study sessions with classmates.</p>
+    <p class="card muted" id="no-classes" hidden>Add your classes on <a href="schedule.html">My classes</a> (on your profile) to plan study sessions with classmates.</p>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>

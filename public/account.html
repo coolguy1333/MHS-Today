@@ -4,24 +4,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#1e3a8a" />
-  <title>Account · MHS Hub</title>
+  <meta name="theme-color" content="#183890" />
+  <title>Profile · MHS Today</title>
   <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/app-icon-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="MHS Hub" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="nav" id="site-nav"></header>
   <main class="container" id="main">
-    <noscript><p class="notice">MHS Hub needs JavaScript turned on to work.</p></noscript>
-    <h1>Account</h1>
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
+    <div class="profile-hero" id="hero"></div>
+    <nav class="subtabs" id="profile-tabs" aria-label="Your profile"></nav>
+    <section class="profile-section" id="sec-profile" aria-labelledby="h-profile">
     <div class="card">
-      <h2>Profile</h2>
+      <h2 id="h-profile">Profile</h2>
       <p class="notice" id="locked-note" hidden>An admin has locked your profile, so it can't be changed right now.</p>
       <form id="profile-form" class="form-grid">
         <label class="wide"><span>Display name (shown to your friends, in name search and on events you add)</span>
@@ -31,6 +33,15 @@
           <div class="person" id="avatar-preview"></div>
           <div class="picker" id="color-picker" role="radiogroup" aria-label="Avatar color"></div>
           <div class="picker" id="emoji-picker" role="radiogroup" aria-label="Avatar picture"></div>
+          <div class="photo-box">
+            <span class="field-label">Or your own photo</span>
+            <div class="person" id="photo-status"></div>
+            <div class="row">
+              <label class="btn small secondary file-btn">Upload a photo<input type="file" id="photo-file" accept="image/*" class="sr-only" /></label>
+              <button class="linklike danger" type="button" id="photo-remove" hidden>Remove my photo</button>
+            </div>
+            <p class="small muted">An admin approves photos before anyone else sees them. Use a clear, school-appropriate photo of yourself.</p>
+          </div>
         </div>
         <label><span>Pronouns (optional)</span><input type="text" id="pronouns" maxlength="20" placeholder="she/her, he/him, they/them…" /></label>
         <label><span>Grade</span>
@@ -42,20 +53,24 @@
           <input type="text" id="interests" maxlength="140" placeholder="Robotics, soccer, band" /></label>
         <div class="wide row"><button class="btn" type="submit" id="profile-save">Save profile</button></div>
       </form>
-      <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students.</p>
     </div>
+    </section>
+    <section class="profile-section" id="sec-privacy" aria-labelledby="h-privacy" hidden>
     <div class="card">
-      <h2>Privacy</h2>
+      <h2 id="h-privacy">Privacy</h2>
       <label class="check"><input type="checkbox" id="share" /><span>Let friends see my schedule (you can limit each friend on the Friends page)</span></label>
       <label class="check"><input type="checkbox" id="searchable" /><span>Let people find me by searching my name</span></label>
       <p class="small muted">Name search matches your first and last name from Google but only ever shows your display name.</p>
+      <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students. <a href="terms.html">Privacy &amp; Terms</a></p>
     </div>
+    </section>
+    <section class="profile-section" id="sec-alerts" aria-labelledby="h-alerts" hidden>
     <div class="card" id="notify-card">
-      <h2>Notifications</h2>
+      <h2 id="h-alerts">Notifications</h2>
       <div id="notify-body"><p class="muted small">Loading…</p></div>
       <fieldset id="notify-prefs" hidden>
         <legend class="field-label">Send me</legend>
-        <label class="check"><input type="checkbox" data-kind="classwork" /><span>Assignments due tomorrow in my Google Tasks (the evening before)</span></label>
+        <label class="check"><input type="checkbox" data-kind="classwork" /><span>Tests, quizzes and assignments due tomorrow (the evening before)</span></label>
         <label class="check"><input type="checkbox" data-kind="events" /><span>Events and study sessions I'm going to (an hour before)</span></label>
         <label class="check"><input type="checkbox" data-kind="groups" /><span>Announcements in my groups</span></label>
       </fieldset>
@@ -65,11 +80,18 @@
       <p class="small muted">Put every school day (7:00 to the last bell, with the day letter), your groups' events, events you signed up for, study sessions and no-school days into your phone's calendar. It updates by itself.</p>
       <div id="cal-body"><p class="muted small">Loading…</p></div>
     </div>
+    </section>
+    <section class="profile-section" id="sec-account" aria-labelledby="h-account" hidden>
+    <div class="card">
+      <h2 id="h-account">Your data</h2>
+      <p class="small muted">Everything MHS Today keeps about you, as one file.</p>
+      <p><a class="btn secondary" href="/api/me/export" download>Download my data</a></p>
+    </div>
     <div class="card" id="admin-card" hidden>
       <h2>Admin</h2>
       <p><a href="admin.html">Open the admin page</a> to manage the school calendar, users and backups.</p>
     </div>
-    <div class="card">
+    <div class="card" id="delete-card">
       <h2>Delete my account</h2>
       <p class="small muted">Removes your classes, your events, and your friend connections for good. You can always sign in again to start over.</p>
       <form id="delete-form" class="stack">
@@ -77,6 +99,7 @@
         <button class="btn danger" type="submit" id="delete-btn" disabled>Delete my account</button>
       </form>
     </div>
+    </section>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
