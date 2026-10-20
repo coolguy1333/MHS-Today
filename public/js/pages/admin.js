@@ -75,9 +75,16 @@
       $(`tab-${t.dataset.tab}`).hidden = !on;
     }
     if (focus) tab.focus();
+    syncPicker(tab.dataset.tab);
     history.replaceState(null, '', `#${tab.dataset.tab}`);
     if (loaders[tab.dataset.tab]) loaders[tab.dataset.tab]().catch((e) => toast(e.message, 'error'));
   }
+  // on a phone the tabs are a drop-down instead (ten tabs would wrap onto four rows)
+  function syncPicker(current) {
+    const name = (t) => t.firstChild.textContent.trim() + (t.querySelector('.count:not([hidden])') ? ` (${t.querySelector('.count').textContent})` : '');
+    fill($('tab-select'), tabs.filter((t) => !t.hidden).map((t) => h('option', { value: t.dataset.tab, selected: t.dataset.tab === current }, name(t))));
+  }
+  $('tab-select').addEventListener('change', (e) => openTab(e.currentTarget.value));
   window.addEventListener('hashchange', () => openTab(location.hash.slice(1))); // the Overview's #people / #feedback links
   for (const t of tabs) {
     t.setAttribute('aria-controls', `tab-${t.dataset.tab}`);
@@ -91,7 +98,11 @@
       openTab(shown[(j + shown.length) % shown.length].dataset.tab, true);
     });
   }
-  const setCount = (id, n) => { $(id).hidden = !n; $(id).textContent = n ? String(n) : ''; };
+  const setCount = (id, n) => {
+    $(id).hidden = !n; $(id).textContent = n ? String(n) : '';
+    const open = tabs.find((t) => t.getAttribute('aria-selected') === 'true');
+    syncPicker(open ? open.dataset.tab : 'overview');
+  };
 
   // ======================================================================= Overview
   function renderSetup() {

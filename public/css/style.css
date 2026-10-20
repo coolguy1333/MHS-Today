@@ -621,3 +621,15 @@ select.fit { width: auto; min-width: 200px; max-width: 100%; }
   .period-edit > input[name=plabel] { grid-column: 1 / -1; }
   .period-edit > button { justify-self: end; grid-column: 2; }
 }
+
+/* admin sections: tabs on a computer, a drop-down on a phone */
+.tab-picker { display: none; }
+@media (max-width: 560px) {
+  .tab-picker { display: block; margin-bottom: 16px; }
+  .tab-picker select { font-weight: 600; }
+  #tabs { display: none; }
+}
+.days-off-form { grid-template-columns: 1fr 1fr 2fr auto; align-items: end; }
+@media (max-width: 720px) { .days-off-form { grid-template-columns: 1fr 1fr; } .days-off-form > :nth-child(n+3) { grid-column: 1 / -1; } }
+.grad-card { margin-top: 16px; }
+.short-version { margin: 4px 0 8px; padding-left: 20px; } .short-version li { margin-bottom: 4px; }

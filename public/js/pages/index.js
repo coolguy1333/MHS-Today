@@ -146,7 +146,7 @@
         h('span', { class: 'step-mark', 'aria-hidden': 'true' }, s.done ? '✓' : String(i + 1)),
         h('div', { class: 'step-text' }, h('strong', null, s.title), s.done ? h('span', { class: 'sr-only' }, ' (done)') : h('div', { class: 'small muted' }, s.text)),
         s.done ? null : h('a', { class: 'btn small', href: s.href }, s.go)))),
-      h('p', { class: 'small muted' }, 'Reminders and calendar sync are on your ', h('a', { href: 'account.html' }, 'Account'), ' page. ',
+      h('p', { class: 'small muted' }, 'Reminders and calendar sync are in ', h('a', { href: 'account.html#alerts' }, 'Profile → Notifications & calendar'), '. ',
         h('button', {
           class: 'linklike', type: 'button',
           onclick: () => { try { localStorage.setItem('mhs-setup-hidden', '1'); } catch { /* storage blocked */ } card.hidden = true; }
