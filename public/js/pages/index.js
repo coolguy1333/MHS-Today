@@ -30,7 +30,7 @@
     if (!m.view) { add(head, h('p', null, 'There are no school days on the calendar yet.')); return; }
     const v = m.view;
     const badge = v.schoolDay
-      ? [v.dayLetter ? h('span', { class: 'badge blue' }, `Day ${v.dayLetter}`) : h('span', { class: 'badge muted' }, 'Day ?'), ' ' + (SCHEDULE_NAMES[v.scheduleType] || '')]
+      ? [v.dayLetter ? h('span', { class: 'badge blue' }, `Day ${v.dayLetter}`) : h('span', { class: 'badge muted' }, 'Day ?'), ' ' + scheduleTitle(v.scheduleType)]
       : noSchoolText(v);
     const notes = [];
     if (!m.todayInfo.schoolDay && m.viewDate !== m.now.date) {
@@ -73,6 +73,7 @@
       .map((i) => h('div', { class: 'due-line' }, h('span', { class: `badge kind-${i.kind}` }, KIND_LABEL[i.kind]), ` ${i.title} · ${fmtRelativeDay(i.due, m.now.date).replace(/^(Today|Tomorrow)$/, (w) => w.toLowerCase())}`));
   }
   function classCell(p, cls, m, hasAny) {
+    if (p.hour === null) return p.info ? h('span', { class: 'muted small' }, p.info) : null; // not a class (a custom day's assembly…)
     if (p.hour === 'advisory') {
       if (!cls) return h('span', { class: 'muted' }, 'Advisory', S.me ? [' · ', h('a', { class: 'small', href: 'schedule.html#advisory' }, 'Add your advisory')] : null);
       const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes.advisory, cls)).map((f) => f.name);
@@ -115,14 +116,14 @@
         : h('span', null, h('a', { href: 'login.html' }, 'Sign in with Google'), ' to see your own classes here.'));
     }
     const schedule = SCHEDULES[m.view.scheduleType] || SCHEDULES.daily;
-    for (const p of schedule.periods) {
+    schedule.periods.forEach((p, i) => {
       if (p.note) add(body, h('tr', { class: 'note-row' }, h('td', { colspan: 3 }, `${formatTime(p.note.start)} – ${formatTime(p.note.end)} · ${p.note.text}`)));
       const cls = classAt(S.classes, m.view.dayLetter, p.hour);
-      add(body, h('tr', { class: 'period-row', dataset: { hour: String(p.hour) } },
+      add(body, h('tr', { class: 'period-row', dataset: { hour: String(p.hour), index: String(i) } },
         h('th', { scope: 'row' }, p.label),
         h('td', { class: 'time small muted' }, `${formatTime(p.start)} – ${formatTime(p.end)}`),
         h('td', { class: 'cls' }, classCell(p, cls, m, hasAny))));
-    }
+    });
   }
 
   // "Get set up": the few things that make the site useful, until they're done (or hidden on this device).
@@ -165,7 +166,7 @@
       if (i % 7 > 4) continue;
       const d = MHSCalendar.addDays(monday, i);
       const v = dayInfo(m.cal, d);
-      const note = v.schoolDay ? SHORT_TYPES[v.scheduleType] || '' : v.label || 'No school';
+      const note = v.schoolDay ? (v.scheduleType === 'daily' ? '' : SHORT_TYPES[v.scheduleType] || MHSBell.scheduleName(v.scheduleType)) : v.label || 'No school';
       const cls = ['wk-day', v.schoolDay ? null : 'off', d < today ? 'past' : null, d === today ? 'today' : null, d === m.viewDate ? 'viewing' : null].filter(Boolean).join(' ');
       const body = [
         h('span', { class: 'wk-date' }, `${WEEKDAYS[i % 7]} ${Number(d.slice(5, 7))}/${Number(d.slice(8))}`),
@@ -175,7 +176,7 @@
       cells.push(v.schoolDay
         ? h('button', {
           type: 'button', class: cls, 'aria-current': d === m.viewDate ? 'date' : null,
-          'aria-label': `${fmtLongDay(d)}: Day ${v.dayLetter || 'unknown'}${note ? `, ${SCHEDULE_NAMES[v.scheduleType]}` : ''}${d === today ? ' (today)' : ''}`,
+          'aria-label': `${fmtLongDay(d)}: Day ${v.dayLetter || 'unknown'}${note ? `, ${scheduleTitle(v.scheduleType)}` : ''}${d === today ? ' (today)' : ''}`,
           onclick: () => { go(d); $('day-head').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
         }, body)
         : h('div', { class: cls }, body));
@@ -222,7 +223,8 @@
     card.hidden = false;
     fill(card, h('div', { class: 'status-big' }, title), detail ? h('p', { class: 'muted' }, detail) : null);
     if (cur.status === 'in-class') {
-      const row = document.querySelector(`#schedule-body tr.period-row[data-hour="${String(cur.period.hour)}"]`);
+      const i = (SCHEDULES[v.scheduleType] || SCHEDULES.daily).periods.indexOf(cur.period);
+      const row = document.querySelector(`#schedule-body tr.period-row[data-index="${i}"]`);
       if (row) { row.classList.add('current'); row.setAttribute('aria-current', 'time'); }
     }
   }

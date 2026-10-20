@@ -21,7 +21,7 @@
     fill($('lunch-head'),
       h('h1', { class: 'day-title' }, `Lunch · ${fmtLongDay(m.viewDate)}`),
       h('p', { class: 'day-sub muted' }, v.schoolDay
-        ? [v.dayLetter ? h('span', { class: 'badge blue' }, `Day ${v.dayLetter}`) : null, ' ', SCHEDULE_NAMES[v.scheduleType] || '']
+        ? [v.dayLetter ? h('span', { class: 'badge blue' }, `Day ${v.dayLetter}`) : null, ' ', scheduleTitle(v.scheduleType)]
         : (v.reason === 'weekend' ? 'Weekend' : 'No school') + (v.label ? ` – ${v.label}` : '')),
       h('div', { class: 'day-nav' },
         prev ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Previous school day', onclick: () => go(prev) }, '← Previous') : null,

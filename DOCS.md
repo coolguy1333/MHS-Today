@@ -37,9 +37,14 @@ Dockerfile, webmanager.json   what WebManager needs to run it as an app
 ```
 anchorDate, anchorLetter   the first school day on/after anchorDate is this letter
 noSchool      { 'YYYY-MM-DD': 'Fall break' }   weekends are implicit
-types         { 'YYYY-MM-DD': 'advisory' | 'early_release' | 'daily' }   one-day overrides
+types         { 'YYYY-MM-DD': 'advisory' | 'early_release' | 'daily' | 'x-…' }   one-day overrides
 weekdayTypes  { '3': 'advisory' }   repeating pattern, 1 = Monday
+customTypes   { 'x-mukready': { label, periods: [{ label, start, end, hour, info? }], lunches: { A: { start, end }, … } } }
 ```
+
+**Custom day schedules** (Admin → Calendar → Custom day schedules) are for days like MukReady. Each period is an `hour` (1-6: the color block that meets in that hour on the day letter), `'advisory'`, or `null` (not a class: pages show its name, plus `info` if set, and friends show as "in" that period). Lunch times the admin doesn't set follow Hour 4, the same distance in as on a regular day. Up to 12 schedules of 16 periods; deleting one sends its days back to their usual schedule. The browser registers them with `MHSBell.useCustom()` when the calendar loads; the calendar feed reads them from `state.calendar`.
+
+The editor can read one day pasted from Infinite Campus (`MHSImport.parseDay`, in the browser only): `Period Green`-style periods become hours (the day letter whose rotation fits the colors in order), periods named Adv or holding an Advisory class become advisory, and the rest (Speaker1…) become named periods. Class names, teachers and rooms are dropped. A `Lunch: A 10:56-11:21` line sets the lunch times, and `Start:`/`Complete:` dates are offered as days to use the schedule on.
 
 The letter advances one step per school day (a weekday not listed in `noSchool`). "Today" and the live period are computed in the school's time zone, using the server's clock so a wrong phone clock doesn't matter. Bell times, the color-block rotation and lunch times are in `public/js/bellSchedule.js`.
 

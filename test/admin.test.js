@@ -240,7 +240,7 @@ test('restore: everything in the file is sanitised like fresh input', async () =
   const ev = (await boss.get('/api/events')).data.map((e) => e.title);
   assert.deepEqual(ev.sort(), ['Fine', 'Old but in retention window', 'Orphan author']);
   assert.equal(ctx.app.state.events.find((e) => e.title === 'Orphan author').by, null);
-  assert.deepEqual(ctx.app.state.calendar, { anchorDate: null, anchorLetter: 'A', noSchool: { [t]: 'ok' }, types: {}, weekdayTypes: {} });
+  assert.deepEqual(ctx.app.state.calendar, { anchorDate: null, anchorLetter: 'A', noSchool: { [t]: 'ok' }, types: {}, weekdayTypes: {}, customTypes: {} });
 });
 
 test('restore: size limit and admin-only', async () => {
