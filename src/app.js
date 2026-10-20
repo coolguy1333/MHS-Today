@@ -216,6 +216,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     return u;
   }
   for (const u of Object.values(state.users)) fillUserDefaults(u);
+  state.calendar = cal.cleanCalendar(state.calendar); // fills in anything newer than the saved file (customTypes)
 
   function upsertUser(claims) {
     const email = claims.email.toLowerCase();

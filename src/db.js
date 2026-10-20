@@ -14,7 +14,7 @@ function emptyState() {
     users: {},     // id -> { id, sub, email, name, created, lastLogin, classes, friends: [ids], friendCode, shareSchedule, verified }
     sessions: {},  // sha256(token) -> { userId, expires }
     events: [],    // { id, title, date, time, description, by (user id), created }
-    calendar: { anchorDate: null, anchorLetter: 'A', noSchool: {}, types: {}, weekdayTypes: {} },
+    calendar: { anchorDate: null, anchorLetter: 'A', noSchool: {}, types: {}, weekdayTypes: {}, customTypes: {} },
     links: null,   // [{ id, title, url, category, description }]; null = not set up yet (the app adds defaults)
     groups: [],    // see src/groups.js
     tools: null,   // see src/tools.js; null = not set up yet

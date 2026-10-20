@@ -123,7 +123,22 @@ const step = (m) => console.log('•', m);
   await ap.click('#day-panel button:has-text("Early release")');
   await ap.waitForFunction(() => /Early release/.test(document.querySelector('#type-list').innerText));
   assert.match(await dayCell('Friday, October 9').getAttribute('aria-label'), /Early release/);
-  step('calendar: weekday pattern, a break and a special day (clicked in the month); the month updates');
+  // a custom schedule pasted from Infinite Campus, used on a day; then a day off from the day panel
+  await ap.click('#custom-new');
+  await ap.fill('#custom-editor textarea', 'Day: MukReady\nPeriod Pre-Adv\nAdvisory (Juniors)\n7:30 AM - 8:05 AM\nPeriod Speaker1\nTrack #1\n8:10 AM - 8:40 AM\nPeriod Green\nEnglish\n10:56 AM - 12:31 PM\nPeriod Purple\nPhysics\n12:36 PM - 1:38 PM');
+  await ap.click('#custom-editor button:has-text("Read it")');
+  assert.equal(await ap.locator('#custom-editor .period-edit:not(.head)').count(), 4);
+  await ap.click('#custom-editor button[type=submit]');
+  await ap.waitForFunction(() => /MukReady/.test(document.querySelector('#custom-list').innerText));
+  await dayCell('Monday, October 12').click();
+  await ap.click('#day-panel button:has-text("MukReady")');
+  await ap.waitForFunction(() => /MukReady/.test(document.querySelector('#month .mday[aria-label^="Monday, October 12:"]').getAttribute('aria-label')));
+  await dayCell('Tuesday, October 13').click();
+  await ap.click('#day-panel button:has-text("Day off")');
+  await ap.waitForFunction(() => /No school/.test(document.querySelector('#month .mday[aria-label^="Tuesday, October 13:"]').getAttribute('aria-label')));
+  await ap.fill('#day-panel input', 'In-service'); await ap.click('#day-panel button:has-text("Save name")');
+  await ap.waitForFunction(() => /In-service/.test(document.querySelector('#noschool-list').innerText));
+  step('calendar: weekday pattern, a break, a special day, a custom schedule from Infinite Campus, a day off; the month updates');
   // a tool added on the Admin page shows in the Tools section of Links
   await ap.click('#tabs [data-tab="links"]');
   await ap.waitForSelector('#tools-list .list-row');

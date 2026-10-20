@@ -96,7 +96,7 @@
     const [d, i, c] = await Promise.all([api('GET', '/api/friends'), loadCalendar(true), api('GET', '/api/classes')]);
     const live = liveState(i);
     const lunchNow = live.status === 'in-class' && live.cur.period.hour === MHSBell.LUNCH_HOUR ? Math.floor(live.now.minutes) : null;
-    const key = JSON.stringify([d, c, live.status, live.cur && live.cur.period && live.cur.period.hour, live.day.dayLetter, lunchNow]);
+    const key = JSON.stringify([d, c, live.status, live.cur && live.cur.period && live.cur.period.start, live.day.dayLetter, lunchNow]);
     data = d; info = i; myClasses = c;
     if (force || key !== lastKey) { lastKey = key; render(); } // skip identical refreshes so buttons keep keyboard focus
   }

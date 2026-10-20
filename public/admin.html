@@ -22,6 +22,7 @@
     <h1>Admin</h1>
     <div id="admin-error" class="notice error" hidden></div>
     <div id="admin-body" hidden>
+      <label class="tab-picker"><span class="sr-only">Admin section</span><select id="tab-select"></select></label>
       <div class="tabs" role="tablist" aria-label="Admin sections" id="tabs">
         <button type="button" role="tab" data-tab="overview">Overview <span class="count" id="count-overview" hidden></span></button>
         <button type="button" role="tab" data-tab="review">Review <span class="count" id="count-review" hidden></span></button>
@@ -78,37 +79,41 @@
               <button class="btn small secondary" type="button" id="month-next" aria-label="Next month">→</button>
             </div>
           </div>
-          <p class="small muted">Click a school day to change it: regular, advisory, early release, or no school. The day letter moves forward by one on every school day by itself.</p>
+          <p class="small muted">Click a day to change it: regular, advisory, early release, a custom schedule, or a day off. The day letter moves forward by one on every school day by itself.</p>
           <div class="month" id="month" aria-describedby="month-title"></div>
-          <div class="legend small"><span class="key adv">Advisory</span><span class="key er">Early release</span><span class="key off">No school</span><span class="key today">Today</span></div>
+          <div class="legend small"><span class="key adv">Advisory</span><span class="key er">Early release</span><span class="key cus">Custom schedule</span><span class="key off">No school</span><span class="key today">Today</span></div>
           <div class="day-panel" id="day-panel" hidden></div>
         </div>
-        <div class="grid grid-even">
-          <div class="card">
-            <h2>Day letter</h2>
-            <p class="small muted">Only needed once, or if the letter drifts.</p>
-            <form id="anchor-form" class="row">
-              <label><span>Date</span><input type="date" id="anchor-date" required /></label>
-              <label><span>is Day</span><select id="anchor-letter"><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
-              <button class="btn" type="submit">Set</button>
-            </form>
-          </div>
-          <div class="card">
-            <h2>Several days off</h2>
-            <form id="noschool-form" class="form-grid">
-              <label><span>From</span><input type="date" id="ns-from" required /></label>
-              <label><span>To</span><input type="date" id="ns-to" /></label>
-              <label class="wide"><span>Name</span><input type="text" id="ns-label" maxlength="60" placeholder="Thanksgiving break" /></label>
-              <div class="wide"><button class="btn" type="submit">Add days off</button></div>
-            </form>
-          </div>
+        <div class="card">
+          <h2>Days off</h2>
+          <p class="small muted">One day: click it in the month and pick <strong>Day off</strong>. A break: add it here.</p>
+          <form id="noschool-form" class="form-grid days-off-form">
+            <label><span>From</span><input type="date" id="ns-from" required /></label>
+            <label><span>To</span><input type="date" id="ns-to" /></label>
+            <label><span>Name</span><input type="text" id="ns-label" maxlength="60" placeholder="Thanksgiving break" /></label>
+            <div><button class="btn" type="submit">Add days off</button></div>
+          </form>
+          <h3>Coming up</h3>
+          <div id="noschool-list"></div>
+        </div>
+        <div class="card" id="custom-card">
+          <div class="row between"><h2>Special schedules</h2><button class="btn small" type="button" id="custom-new">New custom schedule</button></div>
+          <p class="small muted">Advisory and early release are built in. For a day with its own bell schedule, like MukReady, make a custom schedule (you can paste it from Infinite Campus), then click the day in the month and pick it.</p>
+          <h3>Custom schedules</h3>
+          <div id="custom-list"></div>
+          <form id="custom-editor" class="custom-editor" hidden novalidate></form>
+          <h3>Coming up</h3>
+          <div id="type-list"></div>
         </div>
         <div class="card">
-          <h2>Breaks and special days</h2>
-          <div class="grid grid-even">
-            <div><h3>No school</h3><div id="noschool-list"></div></div>
-            <div><h3>Special schedules</h3><div id="type-list"></div></div>
-          </div>
+          <h2>Set up</h2>
+          <h3>Day letter</h3>
+          <p class="small muted">Only needed once, or if the letter drifts.</p>
+          <form id="anchor-form" class="row">
+            <label><span>Date</span><input type="date" id="anchor-date" required /></label>
+            <label><span>is Day</span><select id="anchor-letter"><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+            <button class="btn" type="submit">Set</button>
+          </form>
           <h3>Usual schedule by weekday</h3>
           <div class="weekday-grid" id="weekday-types"></div>
         </div>
@@ -224,6 +229,7 @@
   <script src="js/bellSchedule.js"></script>
   <script src="js/avatars.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/icimport.js"></script>
   <script src="js/pages/admin.js"></script>
 </body>
 </html>

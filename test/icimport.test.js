@@ -63,3 +63,67 @@ test('classes match by teacher last name, however it is written', () => {
   assert.ok(!same('Jones', 'Smith'));
   assert.ok(!bell.sameClass({ name: 'Algebra', teacher: 'Smith' }, { name: 'Geometry', teacher: 'Smith' }));
 });
+
+// A MukReady day copied from Infinite Campus (names changed)
+const MUK = `Term Qtr 2
+(11/02/2026 - 01/14/2027)
+Day: MukReady
+
+* Period Pre-Adv
+[Advisory (Juniors)](https://x.infinitecampus.org/campus/apps/portal/student/section/1)
+7:30 AM - 8:05 AM
+   * Teacher: Smith, John
+   * Room: 119
+* Period Speaker1
+[Track #1](https://x.infinitecampus.org/campus/apps/portal/student/section/2)
+8:10 AM - 8:40 AM
+   * Teacher: Lee, Sam
+   * Room: 19
+   * Start: 11/04/2026
+   * Complete: 11/04/2026
+* Period PostAdvJob
+[Advisory (Juniors)](https://x.infinitecampus.org/campus/apps/portal/student/section/1)
+9:55 AM - 10:51 AM
+* Period Green
+[Junior English](https://x.infinitecampus.org/campus/apps/portal/student/section/3)
+10:56 AM - 12:31 PM
+   * Lunch: A 10:56-11:21 Adv 11:11-11:36
+* Period Purple
+[AP Physics I](https://x.infinitecampus.org/campus/apps/portal/student/section/4)
+12:36 PM - 1:38 PM
+* Period Silver
+[Personal Finance](https://x.infinitecampus.org/campus/apps/portal/student/section/5)
+1:43 PM - 2:45 PM
+Day: A
+Period Yellow
+Math
+7:30 AM - 8:32 AM`;
+
+test('import a day: periods and times only, colors as hours, advisory, lunch and the date', () => {
+  const { parseDay } = require('../public/js/icimport.js');
+  const r = parseDay(MUK);
+  assert.equal(r.name, 'MukReady');
+  assert.deepEqual(r.periods, [
+    { label: 'Pre-Adv', start: '07:30', end: '08:05', hour: 'advisory' },
+    { label: 'Speaker 1', start: '08:10', end: '08:40', hour: null },
+    { label: 'Post Adv Job', start: '09:55', end: '10:51', hour: 'advisory' },
+    { label: 'Hour 4 (+ Lunch)', start: '10:56', end: '12:31', hour: 4 },
+    { label: 'Hour 5', start: '12:36', end: '13:38', hour: 5 },
+    { label: 'Hour 6', start: '13:43', end: '14:45', hour: 6 }
+  ], 'green, purple, silver fit Day A as hours 4-6; only the first day is read');
+  assert.deepEqual(r.lunch, { letter: 'A', start: '10:56', end: '11:21' });
+  assert.deepEqual(r.dates, ['2026-11-04']);
+  assert.ok(!JSON.stringify(r).match(/English|Smith|Track|119/), 'no classes, teachers or rooms');
+  assert.deepEqual(parseDay('nothing here').periods, []);
+});
+
+test('custom schedules in the bell module: looked up by key, lunches follow Hour 4', () => {
+  bell.useCustom({ 'x-late': { label: 'Late start', lunches: {}, periods: [{ label: 'Hour 4', start: '11:56', end: '13:31', hour: 4 }, { label: 'Assembly', start: '13:36', end: '14:00', hour: null }] } });
+  assert.equal(bell.scheduleName('x-late'), 'Late start');
+  assert.equal(bell.scheduleName('advisory'), 'Advisory');
+  assert.deepEqual(bell.lunchTimes('x-late', 'B'), { start: '12:31', end: '12:56' }, 'an hour later, like Hour 4');
+  assert.equal(bell.getCurrentPeriod('x-late', 13 * 60 + 40).period.label, 'Assembly');
+  bell.useCustom({});
+  assert.equal(bell.SCHEDULES['x-late'], undefined);
+  assert.equal(bell.getCurrentPeriod('x-late', 8 * 60).period.label, 'Hour 1', 'unknown keys fall back to the regular day');
+});

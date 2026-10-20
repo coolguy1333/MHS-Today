@@ -67,9 +67,10 @@ module.exports = function icalendar(app) {
     if (!cal.dayInfo(c, d).schoolDay) d = cal.nextSchoolDay(c, d);
     for (let i = 0; d && d <= last && i < 200; i++, d = cal.nextSchoolDay(c, d)) {
       const info = cal.dayInfo(c, d);
-      const periods = (bell.SCHEDULES[info.scheduleType] || bell.SCHEDULES.daily).periods;
+      const periods = (c.customTypes[info.scheduleType] || bell.SCHEDULES[info.scheduleType] || bell.SCHEDULES.daily).periods;
       const end = periods[periods.length - 1].end;
-      const title = [info.dayLetter ? `Day ${info.dayLetter}` : 'School day', TYPE_NOTES[info.scheduleType]].filter(Boolean).join(' · ');
+      const custom = c.customTypes[info.scheduleType];
+      const title = [info.dayLetter ? `Day ${info.dayLetter}` : 'School day', custom ? custom.label : TYPE_NOTES[info.scheduleType]].filter(Boolean).join(' · ');
       out.push({
         uid: `day-${d}`, date: d, time: DAY_START, minutes: bell.timeToMinutes(end) - bell.timeToMinutes(DAY_START), title,
         description: `School day until ${bell.formatTime(end)}${info.dayLetter ? ` (Day ${info.dayLetter})` : ''}`

@@ -10,7 +10,9 @@
     return;
   }
   const { addDays, dayInfo, nextSchoolDay } = MHSCalendar;
-  const TYPE_NAMES = { daily: 'Regular', advisory: 'Advisory', early_release: 'Early release' };
+  const BUILT_IN_TYPES = ['daily', 'advisory', 'early_release'];
+  const typeName = (t) => MHSBell.scheduleName(t);
+  const allTypes = () => [...BUILT_IN_TYPES, ...Object.keys(info.calendar.customTypes || {})];
   const POSTING_NAMES = { verified: 'admins and verified people', everyone: 'any signed-in student', admins: 'admins only' };
   const WEEKDAYS = [['1', 'Monday'], ['2', 'Tuesday'], ['3', 'Wednesday'], ['4', 'Thursday'], ['5', 'Friday']];
   let info, status, users = [];
@@ -73,9 +75,16 @@
       $(`tab-${t.dataset.tab}`).hidden = !on;
     }
     if (focus) tab.focus();
+    syncPicker(tab.dataset.tab);
     history.replaceState(null, '', `#${tab.dataset.tab}`);
     if (loaders[tab.dataset.tab]) loaders[tab.dataset.tab]().catch((e) => toast(e.message, 'error'));
   }
+  // on a phone the tabs are a drop-down instead (ten tabs would wrap onto four rows)
+  function syncPicker(current) {
+    const name = (t) => t.firstChild.textContent.trim() + (t.querySelector('.count:not([hidden])') ? ` (${t.querySelector('.count').textContent})` : '');
+    fill($('tab-select'), tabs.filter((t) => !t.hidden).map((t) => h('option', { value: t.dataset.tab, selected: t.dataset.tab === current }, name(t))));
+  }
+  $('tab-select').addEventListener('change', (e) => openTab(e.currentTarget.value));
   window.addEventListener('hashchange', () => openTab(location.hash.slice(1))); // the Overview's #people / #feedback links
   for (const t of tabs) {
     t.setAttribute('aria-controls', `tab-${t.dataset.tab}`);
@@ -89,7 +98,11 @@
       openTab(shown[(j + shown.length) % shown.length].dataset.tab, true);
     });
   }
-  const setCount = (id, n) => { $(id).hidden = !n; $(id).textContent = n ? String(n) : ''; };
+  const setCount = (id, n) => {
+    $(id).hidden = !n; $(id).textContent = n ? String(n) : '';
+    const open = tabs.find((t) => t.getAttribute('aria-selected') === 'true');
+    syncPicker(open ? open.dataset.tab : 'overview');
+  };
 
   // ======================================================================= Overview
   function renderSetup() {
@@ -230,11 +243,11 @@
       const inMonth = monthOf(d) === month;
       const day = d;
       const cls = ['mday', inMonth ? null : 'other', di.schoolDay ? null : 'off', di.scheduleType === 'advisory' && di.schoolDay ? 'adv' : null,
-        di.scheduleType === 'early_release' && di.schoolDay ? 'er' : null, d === t ? 'today' : null, d === picked ? 'picked' : null].filter(Boolean).join(' ');
-      const note = di.schoolDay ? (di.scheduleType !== 'daily' ? TYPE_NAMES[di.scheduleType] : '') : (di.label || 'No school');
+        di.scheduleType === 'early_release' && di.schoolDay ? 'er' : null, di.schoolDay && !BUILT_IN_TYPES.includes(di.scheduleType) ? 'cus' : null, d === t ? 'today' : null, d === picked ? 'picked' : null].filter(Boolean).join(' ');
+      const note = di.schoolDay ? (di.scheduleType !== 'daily' ? typeName(di.scheduleType) : '') : (di.label || 'No school');
       cells.push(h('button', {
         type: 'button', class: cls, 'aria-pressed': String(d === picked),
-        'aria-label': `${fmtLongDay(d)}: ${di.schoolDay ? `Day ${di.dayLetter || '?'}, ${TYPE_NAMES[di.scheduleType]}` : note}`,
+        'aria-label': `${fmtLongDay(d)}: ${di.schoolDay ? `Day ${di.dayLetter || '?'}, ${typeName(di.scheduleType)}` : note}`,
         onclick: () => { picked = picked === day ? null : day; renderMonth(); renderDayPanel(); }
       }, h('span', { class: 'mnum' }, String(Number(d.slice(8)))), h('strong', { class: 'mletter' }, di.schoolDay ? di.dayLetter || '?' : '–'), h('span', { class: 'mnote' }, note)));
     }
@@ -254,27 +267,28 @@
       const noSchool = { ...cal.noSchool };
       delete noSchool[d];
       if (type === usual) delete types[d]; else types[d] = type;
-      return saveCalendar({ ...cal, types, noSchool }, `${fmtShortDay(d)}: ${TYPE_NAMES[type]}`);
+      return saveCalendar({ ...cal, types, noSchool }, `${fmtShortDay(d)}: ${typeName(type)}`);
+    };
+    const dayOff = () => {
+      const types = { ...cal.types }; delete types[d];
+      return saveCalendar({ ...cal, types, noSchool: { ...cal.noSchool, [d]: '' } }, `${fmtShortDay(d)}: day off`);
     };
     const current = di.schoolDay ? di.scheduleType : 'off';
-    const choice = (value, label) => h('button', {
+    const choice = (value, label, run) => h('button', {
       class: 'btn small' + (current === value ? '' : ' secondary'), type: 'button', 'aria-pressed': String(current === value),
-      onclick: (e) => busy(e.currentTarget, () => setType(value))
+      onclick: (e) => { if (current !== value) busy(e.currentTarget, run || (() => setType(value))); }
     }, label);
-    const offName = h('input', { type: 'text', maxlength: '60', placeholder: 'Name (optional)', 'aria-label': 'Why there is no school', value: di.label || '' });
+    const offName = h('input', { type: 'text', maxlength: '60', placeholder: 'Name, like Thanksgiving break (optional)', 'aria-label': 'Name of the day off', value: di.label || '' });
     fill(panel,
       h('div', { class: 'row between' }, h('strong', null, fmtLongDay(d)), h('span', { class: 'small muted' }, di.schoolDay ? `Day ${di.dayLetter || '?'}` : 'No school')),
-      h('div', { class: 'row' }, choice('daily', 'Regular'), choice('advisory', 'Advisory'), choice('early_release', 'Early release')),
-      h('form', {
+      h('div', { class: 'row' }, allTypes().map((t) => choice(t, typeName(t))), choice('off', 'Day off', dayOff)),
+      current === 'off' ? h('form', {
         class: 'inline-field',
         onsubmit: (e) => {
           e.preventDefault();
-          busy(e.submitter, () => {
-            const types = { ...cal.types }; delete types[d];
-            return saveCalendar({ ...cal, types, noSchool: { ...cal.noSchool, [d]: offName.value.trim() } }, `${fmtShortDay(d)}: no school`);
-          });
+          busy(e.submitter, () => saveCalendar({ ...cal, noSchool: { ...cal.noSchool, [d]: offName.value.trim() } }, 'Name saved'));
         }
-      }, offName, h('button', { class: 'btn small' + (current === 'off' ? '' : ' secondary'), type: 'submit' }, current === 'off' ? 'Save name' : 'No school')),
+      }, offName, h('button', { class: 'btn small secondary', type: 'submit' }, 'Save name')) : null,
       di.schoolDay ? h('p', { class: 'small' }, h('button', {
         class: 'linklike', type: 'button',
         onclick: (e) => {
@@ -302,7 +316,7 @@
     renderDayPanel();
     fill($('weekday-types'), WEEKDAYS.map(([k, name]) => {
       const sel = h('select', { 'aria-label': `${name} schedule` },
-        Object.entries(TYPE_NAMES).map(([v, label]) => h('option', { value: v, selected: (cal.weekdayTypes[k] || 'daily') === v }, label)));
+        allTypes().map((v) => h('option', { value: v, selected: (cal.weekdayTypes[k] || 'daily') === v }, typeName(v))));
       sel.addEventListener('change', () => busy(sel, () => saveCalendar({ ...cal, weekdayTypes: { ...cal.weekdayTypes, [k]: sel.value } }, 'Saved')));
       return h('label', null, h('span', null, name), sel);
     }));
@@ -320,13 +334,178 @@
       }, 'Remove'))) : h('p', { class: 'muted small' }, 'None coming up.'));
     const specials = Object.keys(cal.types).filter((d) => d >= addDays(t, -30)).sort();
     fill($('type-list'), specials.length ? specials.map((d) => h('div', { class: 'list-row' },
-      h('div', null, h('strong', null, fmtShortDay(d)), ` · ${TYPE_NAMES[cal.types[d]]}`),
+      h('div', null, h('strong', null, fmtShortDay(d)), ` · ${typeName(cal.types[d])}`),
       h('button', {
         class: 'linklike danger', type: 'button', 'aria-label': `Remove the special schedule on ${fmtShortDay(d)}`,
         onclick: (e) => busy(e.currentTarget, () => { const ty = { ...cal.types }; delete ty[d]; return saveCalendar({ ...cal, types: ty }, 'Removed'); })
       }, 'Remove'))) : h('p', { class: 'muted small' }, 'None coming up. Click a day in the month to add one.'));
     if (!$('anchor-date').value) $('anchor-date').value = t;
+    renderCustomList();
   }
+
+  // ---- custom day schedules (MukReady…): periods with times, each one an hour (its color comes from
+  // the day letter), advisory, or not a class; lunch times; pasted from Infinite Campus or typed in
+  const HOUR_CHOICES = [['1', 'Hour 1'], ['2', 'Hour 2'], ['3', 'Hour 3'], ['4', 'Hour 4 (+ lunch)'], ['5', 'Hour 5'], ['6', 'Hour 6'], ['advisory', 'Advisory'], ['', 'Not a class']];
+  const { LUNCH_NAMES, LUNCH_HOUR, SCHEDULES, LUNCHES, timeToMinutes, minutesToTime, formatTime } = MHSBell;
+  let editing = null; // { key, label, periods, lunches, dates } while the editor is open
+  const usesOf = (key) => Object.values(info.calendar.types).filter((t) => t === key).length + Object.values(info.calendar.weekdayTypes).filter((t) => t === key).length;
+  function renderCustomList() {
+    const types = Object.entries(info.calendar.customTypes || {});
+    fill($('custom-list'), types.length ? types.map(([key, t]) => {
+      const n = usesOf(key);
+      return h('div', { class: 'list-row' },
+        h('div', null, h('strong', null, t.label), h('div', { class: 'small muted' },
+          `${t.periods.length} periods · ${formatTime(t.periods[0].start)} – ${formatTime(t.periods[t.periods.length - 1].end)} · ${n ? `used on ${n} day${n === 1 ? '' : 's'}` : 'not used yet'}`)),
+        h('div', { class: 'row nowrap' },
+          h('button', { class: 'btn small secondary', type: 'button', onclick: () => openEditor(key) }, 'Edit'),
+          h('button', {
+            class: 'linklike danger', type: 'button', 'aria-label': `Delete ${t.label}`,
+            onclick: (e) => {
+              if (!confirm(`Delete ${t.label}?${n ? ' Days using it go back to their usual schedule.' : ''}`)) return;
+              busy(e.currentTarget, () => {
+                const cal = info.calendar;
+                const customTypes = { ...cal.customTypes }; delete customTypes[key];
+                const types = Object.fromEntries(Object.entries(cal.types).filter(([, v]) => v !== key));
+                const weekdayTypes = Object.fromEntries(Object.entries(cal.weekdayTypes).filter(([, v]) => v !== key));
+                if (editing && editing.key === key) closeEditor();
+                return saveCalendar({ ...cal, customTypes, types, weekdayTypes }, `${t.label} deleted`);
+              });
+            }
+          }, 'Delete')));
+    }) : h('p', { class: 'muted small' }, 'None yet.'));
+  }
+  // Lunch times that follow Hour 4: the same distance in as on a regular day, or from one lunch we know.
+  function lunchesFor(periods, known) {
+    const h4 = periods.find((p) => p.hour === LUNCH_HOUR);
+    if (!h4) return {};
+    const shift = known && LUNCHES.daily[known.letter] ? timeToMinutes(known.start) - timeToMinutes(LUNCHES.daily[known.letter].start)
+      : timeToMinutes(h4.start) - timeToMinutes(SCHEDULES.daily.periods[LUNCH_HOUR - 1].start);
+    return Object.fromEntries(LUNCH_NAMES.map((l) => [l, { start: minutesToTime(timeToMinutes(LUNCHES.daily[l].start) + shift), end: minutesToTime(timeToMinutes(LUNCHES.daily[l].end) + shift) }]));
+  }
+  function openEditor(key) {
+    const t = key ? info.calendar.customTypes[key] : null;
+    editing = t
+      ? { key, label: t.label, periods: t.periods.map((p) => ({ ...p })), lunches: { ...lunchesFor(t.periods), ...t.lunches }, dates: [] }
+      : { key: null, label: '', periods: [], lunches: {}, dates: [] };
+    renderEditor();
+    $('custom-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function closeEditor() { editing = null; $('custom-editor').hidden = true; clear($('custom-editor')); }
+  // What's typed in the editor right now, back into `editing`.
+  function readEditor() {
+    const form = $('custom-editor');
+    editing.label = form.querySelector('[name=label]').value;
+    editing.periods = [...form.querySelectorAll('.period-edit:not(.head)')].map((row) => {
+      const what = row.querySelector('[name=hour]').value;
+      return {
+        label: row.querySelector('[name=plabel]').value, start: row.querySelector('[name=start]').value, end: row.querySelector('[name=end]').value,
+        hour: what === 'advisory' ? 'advisory' : what ? Number(what) : null, info: what ? '' : row.querySelector('[name=info]').value
+      };
+    });
+    for (const l of LUNCH_NAMES) {
+      const a = form.querySelector(`[name=lunch-${l}-start]`), b = form.querySelector(`[name=lunch-${l}-end]`);
+      if (a && b) editing.lunches[l] = { start: a.value, end: b.value };
+    }
+    editing.dates = [...form.querySelectorAll('[name=use-date]:checked')].map((x) => x.value);
+  }
+  function renderEditor() {
+    const form = $('custom-editor');
+    form.hidden = false;
+    const e = editing;
+    const hasH4 = e.periods.some((p) => p.hour === LUNCH_HOUR);
+    if (hasH4) for (const [l, t] of Object.entries(lunchesFor(e.periods))) if (!e.lunches[l] || !e.lunches[l].start) e.lunches[l] = t;
+    const pasted = h('textarea', { rows: '6', 'aria-label': 'Schedule copied from Infinite Campus', placeholder: 'Day: MukReady\nPeriod Pre-Adv\n7:30 AM - 8:05 AM\n…' });
+    const rebuild = (fn) => () => { readEditor(); fn(); renderEditor(); };
+    const periodRow = (p, i) => {
+      const what = h('select', { name: 'hour', 'aria-label': `Period ${i + 1}: what it is` },
+        HOUR_CHOICES.map(([v, label]) => h('option', { value: v, selected: String(p.hour == null ? '' : p.hour) === v }, label)));
+      const infoBox = h('input', { type: 'text', name: 'info', maxlength: '60', value: p.info || '', placeholder: 'Shown instead of a class (optional)', 'aria-label': `Period ${i + 1}: note`, disabled: p.hour != null });
+      what.addEventListener('change', () => { infoBox.disabled = what.value !== ''; if (what.value === String(LUNCH_HOUR) || hasH4) rebuild(() => {})(); });
+      return h('div', { class: 'period-edit' },
+        h('input', { type: 'text', name: 'plabel', maxlength: '30', value: p.label, placeholder: 'Name, like Speaker 1', 'aria-label': `Period ${i + 1}: name`, required: true }),
+        h('input', { type: 'time', name: 'start', value: p.start, 'aria-label': `Period ${i + 1}: starts`, required: true }),
+        h('input', { type: 'time', name: 'end', value: p.end, 'aria-label': `Period ${i + 1}: ends`, required: true }),
+        what, infoBox,
+        h('button', { class: 'linklike danger', type: 'button', 'aria-label': `Remove period ${i + 1}`, onclick: rebuild(() => e.periods.splice(i, 1)) }, '×'));
+    };
+    fill(form,
+      h('h3', null, e.key ? `Edit ${info.calendar.customTypes[e.key].label}` : 'New schedule'),
+      h('label', null, h('span', null, 'Name'), h('input', { type: 'text', name: 'label', maxlength: '40', value: e.label, placeholder: 'MukReady', required: true })),
+      h('details', { class: 'ic-paste', open: !e.key && !e.periods.length },
+        h('summary', null, 'Paste it from Infinite Campus'),
+        h('p', { class: 'small muted' }, 'In Infinite Campus, open Schedule, select that whole day (from "Day:" to the last period) and copy it. Only period names and times are kept: no classes, teachers or rooms.'),
+        pasted,
+        h('button', {
+          class: 'btn small', type: 'button',
+          onclick: () => {
+            readEditor();
+            const r = MHSImport.parseDay(pasted.value, picked ? dayInfo(info.calendar, picked).dayLetter : null);
+            if (!r.periods.length) { toast('No periods found. Copy from "Day:" through the last period.', 'error'); return; }
+            e.periods = r.periods;
+            if (!e.label && r.name) e.label = r.name;
+            e.lunches = lunchesFor(r.periods, r.lunch);
+            e.dates = r.dates.filter((d) => d >= today());
+            e.datesOffered = e.dates;
+            renderEditor();
+            toast(`Read ${r.periods.length} periods. Check them, then save.`);
+          }
+        }, 'Read it')),
+      h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Or start from:'),
+        BUILT_IN_TYPES.map((t) => h('button', { class: 'linklike', type: 'button', onclick: rebuild(() => { e.periods = SCHEDULES[t].periods.map(({ note, ...p }) => ({ ...p })); e.lunches = {}; }) }, typeName(t)))),
+      h('div', { class: 'period-edit head small muted', 'aria-hidden': 'true' }, h('span', null, 'Period'), h('span', null, 'Starts'), h('span', null, 'Ends'), h('span', null, 'What it is'), h('span', null, 'Note'), h('span', null, '')),
+      e.periods.map(periodRow),
+      h('button', {
+        class: 'btn small secondary', type: 'button',
+        onclick: rebuild(() => {
+          const last = e.periods[e.periods.length - 1];
+          const start = last && last.end ? minutesToTime(timeToMinutes(last.end) + 5) : '07:30';
+          e.periods.push({ label: '', start, end: minutesToTime(timeToMinutes(start) + 30), hour: null });
+        })
+      }, '+ Add period'),
+      hasH4 ? h('fieldset', { class: 'plain lunch-edit' }, h('legend', { class: 'field-label' }, 'Lunch times (during Hour 4)'),
+        LUNCH_NAMES.map((l) => h('div', { class: 'row nowrap' }, h('strong', null, `${l} Lunch`),
+          h('input', { type: 'time', name: `lunch-${l}-start`, value: (e.lunches[l] || {}).start || '', 'aria-label': `${l} Lunch starts` }), '–',
+          h('input', { type: 'time', name: `lunch-${l}-end`, value: (e.lunches[l] || {}).end || '', 'aria-label': `${l} Lunch ends` })))) : null,
+      (e.datesOffered || []).length ? h('div', null, e.datesOffered.map((d) => h('label', { class: 'check' },
+        h('input', { type: 'checkbox', name: 'use-date', value: d, checked: e.dates.includes(d) }), h('span', null, `Use it on ${fmtLongDay(d)} (from Infinite Campus)`)))) : null,
+      h('div', { class: 'row' }, h('button', { class: 'btn', type: 'submit' }, 'Save schedule'), h('button', { class: 'btn secondary', type: 'button', onclick: closeEditor }, 'Cancel')));
+  }
+  $('custom-new').addEventListener('click', () => openEditor(null));
+  $('custom-editor').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    readEditor();
+    busy(ev.submitter, async () => {
+      const e = editing;
+      const label = e.label.trim();
+      if (!label) throw new Error('Give the schedule a name.');
+      if (!e.periods.length) throw new Error('Add at least one period.');
+      const periods = e.periods.map((p) => ({ ...p, label: p.label.trim(), info: (p.info || '').trim() })).sort((a, b) => (a.start < b.start ? -1 : 1));
+      periods.forEach((p, i) => {
+        if (!p.label) throw new Error(`Period ${i + 1} needs a name.`);
+        if (!p.start || !p.end || p.start >= p.end) throw new Error(`${p.label}: the end time has to be after the start time.`);
+        if (i && p.start < periods[i - 1].end) throw new Error(`${p.label} starts before ${periods[i - 1].label} ends.`);
+      });
+      const hasH4 = periods.some((p) => p.hour === LUNCH_HOUR);
+      const lunches = {};
+      if (hasH4) for (const l of LUNCH_NAMES) {
+        const t = e.lunches[l];
+        if (!t || !t.start || !t.end || t.start >= t.end) throw new Error(`Check the ${l} Lunch times.`);
+        lunches[l] = t;
+      }
+      const cal = info.calendar;
+      let key = e.key;
+      if (!key) {
+        const base = `x-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20) || 'day'}`;
+        key = base;
+        for (let n = 2; Object.prototype.hasOwnProperty.call(cal.customTypes, key); n++) key = `${base}-${n}`;
+      }
+      const types = { ...cal.types };
+      for (const d of e.dates) types[d] = key;
+      await saveCalendar({ ...cal, customTypes: { ...cal.customTypes, [key]: { label, periods, lunches } }, types },
+        `${label} saved${e.dates.length ? ` and used on ${e.dates.map(fmtShortDay).join(', ')}` : ''}`);
+      closeEditor();
+    });
+  });
   $('month-prev').addEventListener('click', () => { month = shiftMonth(month, -1); renderMonth(); });
   $('month-next').addEventListener('click', () => { month = shiftMonth(month, 1); renderMonth(); });
   $('month-today').addEventListener('click', () => { month = monthOf(today()); renderMonth(); });

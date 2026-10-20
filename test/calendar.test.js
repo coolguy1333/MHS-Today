@@ -178,3 +178,36 @@ test('bell: every schedule is ordered and non-overlapping', () => {
     }
   }
 });
+
+test('custom day schedules: kept when valid, used by days and weekdays, dropped with their days when not', () => {
+  const muk = {
+    label: '  MukReady ', lunches: { A: { start: '10:56', end: '11:21' }, B: { start: '12:00', end: '11:00' } },
+    periods: [
+      { label: 'Hour 4 (+ Lunch)', start: '10:56', end: '12:31', hour: 4 },
+      { label: 'Pre-Adv', start: '07:30', end: '08:05', hour: 'advisory' },
+      { label: 'Speaker 1', start: '08:10', end: '08:40', hour: 7, info: 'Room is in Infinite Campus' },
+      { label: 'Overlap', start: '08:30', end: '09:00', hour: null },
+      { label: '', start: '09:00', end: '09:10' },
+      { label: 'Backwards', start: '10:00', end: '09:00' }
+    ]
+  };
+  const c = cal.cleanCalendar({
+    anchorDate: '2026-11-02', anchorLetter: 'C',
+    customTypes: { 'x-mukready': muk, 'bad key': muk, 'x-empty': { label: 'Empty', periods: [] }, 'x-nameless': { periods: muk.periods } },
+    types: { '2026-11-04': 'x-mukready', '2026-11-05': 'x-empty' }, weekdayTypes: { 5: 'x-mukready', 4: 'x-nope' }
+  });
+  assert.deepEqual(Object.keys(c.customTypes), ['x-mukready']);
+  assert.deepEqual(c.customTypes['x-mukready'], {
+    label: 'MukReady', lunches: { A: { start: '10:56', end: '11:21' } },
+    periods: [
+      { label: 'Pre-Adv', start: '07:30', end: '08:05', hour: 'advisory' },
+      { label: 'Speaker 1', start: '08:10', end: '08:40', hour: null, info: 'Room is in Infinite Campus' },
+      { label: 'Hour 4 (+ Lunch)', start: '10:56', end: '12:31', hour: 4 }
+    ]
+  });
+  assert.deepEqual(c.types, { '2026-11-04': 'x-mukready' });
+  assert.deepEqual(c.weekdayTypes, { 5: 'x-mukready' });
+  assert.equal(cal.dayInfo(c, '2026-11-04').scheduleType, 'x-mukready');
+  assert.equal(cal.dayInfo(c, '2026-11-04').dayLetter, 'A', 'a custom day is a school day like any other');
+  assert.deepEqual(cal.cleanCalendar({ ...c, customTypes: {} }).types, {}, 'deleting a schedule frees its days');
+});

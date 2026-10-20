@@ -281,7 +281,7 @@ let calendarPromise = null;
 function loadCalendar(force) {
   if (!calendarPromise || force) {
     calendarPromise = api('GET', '/api/calendar')
-      .then((d) => ({ tz: d.tz, calendar: d.calendar, offset: d.serverTime - Date.now() }))
+      .then((d) => { MHSBell.useCustom(d.calendar.customTypes); return { tz: d.tz, calendar: d.calendar, offset: d.serverTime - Date.now() }; })
       .catch((e) => { calendarPromise = null; throw e; });
   }
   return calendarPromise;
@@ -305,6 +305,8 @@ function fmtMinutes(mins) {
   return hrs ? `${hrs} h ${n % 60} min` : `${n} min`;
 }
 const SCHEDULE_NAMES = { daily: 'Daily schedule', advisory: 'Advisory day', early_release: 'Early release' };
+// 'Advisory day', or a custom schedule's name ('MukReady')
+const scheduleTitle = (key) => SCHEDULE_NAMES[key] || MHSBell.scheduleName(key);
 const GROUP_KINDS = { club: 'Club', sport: 'Sport', group: 'Student group' };
 
 // ---- classes and friends -------------------------------------------------------
@@ -351,6 +353,7 @@ function friendNowText(friend, live) {
   if (live.status === 'before-school') return { text: "School hasn't started", muted: true };
   if (live.status === 'after-school') return { text: "School's out", muted: true };
   if (live.status === 'passing') return { text: 'Passing period', muted: true };
+  if (live.cur.period.hour === null) return { text: live.cur.period.label, muted: false }; // not a class (a custom day's assembly…)
   if (live.cur.period.hour === MHSBell.LUNCH_HOUR) {
     const lunch = friendLunch(friend, live.day.dayLetter);
     if (MHSBell.atLunch(live.day.scheduleType, lunch, live.now.minutes)) return { text: `At ${lunch} Lunch`, muted: false };

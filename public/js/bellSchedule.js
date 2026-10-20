@@ -134,13 +134,40 @@
     return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
   }
 
+  // Custom day schedules from the calendar (MukReady…): added next to the built-in ones so every
+  // page can look them up by key. A period's hour is 1-6, 'advisory', or null (not a class: the
+  // page shows its name). Lunches the admin didn't set follow Hour 4, the same distance in as usual.
+  const BUILT_IN = Object.keys(SCHEDULES);
+  function useCustom(customTypes) {
+    for (const k of Object.keys(SCHEDULES)) if (!BUILT_IN.includes(k)) { delete SCHEDULES[k]; delete LUNCHES[k]; }
+    for (const [key, t] of Object.entries(customTypes || {})) {
+      if (BUILT_IN.includes(key) || !t || !Array.isArray(t.periods) || !t.periods.length) continue;
+      SCHEDULES[key] = { key, label: t.label, custom: true, periods: t.periods };
+      const h4 = t.periods.find((p) => p.hour === LUNCH_HOUR);
+      const shift = h4 ? timeToMinutes(h4.start) - timeToMinutes(SCHEDULES.daily.periods[LUNCH_HOUR - 1].start) : 0;
+      const lunches = {};
+      for (const l of LUNCH_NAMES) {
+        const set = t.lunches && t.lunches[l];
+        lunches[l] = set || { start: minutesToTime(timeToMinutes(LUNCHES.daily[l].start) + shift), end: minutesToTime(timeToMinutes(LUNCHES.daily[l].end) + shift) };
+      }
+      LUNCHES[key] = lunches;
+    }
+  }
+  const BUILT_IN_NAMES = { daily: 'Regular', advisory: 'Advisory', early_release: 'Early release' };
+  // 'advisory' -> 'Advisory', 'x-mukready' -> 'MukReady'
+  const scheduleName = (key) => BUILT_IN_NAMES[key] || (Object.prototype.hasOwnProperty.call(SCHEDULES, key) ? SCHEDULES[key].label : 'Regular');
+  function minutesToTime(n) {
+    const m = Math.max(0, Math.min(23 * 60 + 59, Math.round(n)));
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  }
+
   // Where are we in the day? `minutes` = minutes since midnight (fractional ok).
   //   { status: 'before-school', next, minutesUntil }
   //   { status: 'in-class', period, minutesLeft, next? }
   //   { status: 'passing', next, minutesUntil }
   //   { status: 'after-school' }
   function getCurrentPeriod(scheduleKey, minutes) {
-    const schedule = SCHEDULES[scheduleKey] || SCHEDULES.daily;
+    const schedule = (Object.prototype.hasOwnProperty.call(SCHEDULES, scheduleKey) && SCHEDULES[scheduleKey]) || SCHEDULES.daily;
     const periods = schedule.periods;
     for (let i = 0; i < periods.length; i++) {
       const p = periods[i];
@@ -164,7 +191,7 @@
   }
 
   const api = {
-    SCHEDULES, ADVISORY, classAt, timeToMinutes, formatTime, getCurrentPeriod,
+    SCHEDULES, ADVISORY, classAt, timeToMinutes, minutesToTime, formatTime, getCurrentPeriod, useCustom, scheduleName,
     BLOCKS, BLOCK_KEYS, ROTATION, blockInfo, blockFor, meetings,
     LUNCH_HOUR, LUNCH_BLOCKS, LUNCH_NAMES, LUNCHES, lunchFor, lunchTimes, atLunch, sameClass, teacherKey
   };
