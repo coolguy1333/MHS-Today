@@ -144,7 +144,7 @@ input, select, textarea {
   width: 100%; padding: 9px 11px; font: inherit; color: var(--text); background: var(--input-bg);
   border: 1px solid var(--border); border-radius: 8px;
 }
-input[type="checkbox"] { width: auto; }
+input[type="checkbox"], input[type="radio"] { width: auto; padding: 0; accent-color: var(--primary); }
 input[type="color"] { width: 44px; height: 38px; padding: 3px; }
 input[type="file"] { padding: 7px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -432,9 +432,24 @@ html { scroll-padding-top: 12px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-left: 6px; vertical-align: middle; }
 
 /* ---- feedback, terms ---- */
-.choice-row { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.choice { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); cursor: pointer; }
-.choice:has(input:checked) { border-color: var(--primary); background: var(--current); font-weight: 600; }
+/* "What is it?": four tiles; the radio itself is hidden, the whole tile is the choice */
+.choice-row { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.choice-row legend { margin-bottom: 8px; }
+.choice {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 92px; padding: 12px 8px; text-align: center; border: 2px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--text); font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.choice:hover { border-color: var(--primary); }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+.choice .choice-icon { font-size: 1.7rem; line-height: 1; }
+.choice:has(input:checked) { border-color: var(--primary); background: var(--current); }
+.choice:has(input:checked)::after {
+  content: "✓"; position: absolute; top: 6px; right: 8px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--primary); color: var(--on-primary); font-size: 0.75rem; line-height: 20px;
+}
+.choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 560px) { .choice-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .feedback-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .feedback-item:last-child { border-bottom: 0; }
 .feedback-item.unread { box-shadow: inset 4px 0 0 var(--gold-edge); padding-left: 12px; }
