@@ -119,7 +119,7 @@ test('profiles: avatar, pronouns and interests; friends see them, others only se
 
 // ---------------------------------------------------------------- people you may know
 
-test('suggestions: friends of friends and classmates, ranked; respects search opt-out and hidden schedules', async () => {
+test('suggestions: friends of friends and classmates, ranked; respects opt-outs and hidden schedules', async () => {
   const ctx = await startApp({ mock });
   const ann = await as(ctx, 1, { given_name: 'Ann' });
   const ben = await as(ctx, 2, { given_name: 'Ben' });
@@ -128,11 +128,11 @@ test('suggestions: friends of friends and classmates, ranked; respects search op
   const eve = await as(ctx, 5, { given_name: 'Eve' }); // friends with Ben
   const fay = await as(ctx, 6, { given_name: 'Fay' }); // in Ann's Math class
   const gus = await as(ctx, 7, { given_name: 'Gus' }); // in Ann's Math class but hides his schedule
-  const hal = await as(ctx, 8, { given_name: 'Hal' }); // friends with Ben but not searchable
+  const hal = await as(ctx, 8, { given_name: 'Hal' }); // friends with Ben but not suggested to friends of friends
   await as(ctx, 9, { given_name: 'Ivy' });             // no connection at all
   await befriend(ann, ben); await befriend(ann, cy);
   await befriend(dee, ben); await befriend(dee, cy); await befriend(eve, ben); await befriend(hal, ben);
-  await hal.put('/api/me', { searchable: false });
+  await hal.put('/api/me', { suggest: { viaFriends: false } });
   const math = { yellow: { name: 'Algebra II', teacher: 'Smith' }, red: { name: 'English' } };
   await ann.put('/api/classes', math);
   await fay.put('/api/classes', { yellow: { name: 'algebra ii', teacher: '' } });
@@ -153,4 +153,42 @@ test('suggestions: friends of friends and classmates, ranked; respects search op
   s = await list();
   assert.deepEqual(s.map((x) => x.name), ['Dee T.']);
   assert.ok((await cy.get('/api/friends/suggestions')).data.suggestions.some((x) => x.name === 'Ben T.'), "Cy's list is separate");
+});
+
+test('suggestion settings: turn them off, choose how you are suggested, and un-hide people', async () => {
+  const ctx = await startApp({ mock });
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  const ben = await as(ctx, 2, { given_name: 'Ben' });
+  const cy = await as(ctx, 3, { given_name: 'Cy' }); // friends with Ben, in Ann's class
+  await befriend(ann, ben); await befriend(cy, ben);
+  const math = { yellow: { name: 'Algebra II' } };
+  await ann.put('/api/classes', math); await cy.put('/api/classes', math);
+  const list = async () => (await ann.get('/api/friends/suggestions')).data.suggestions.map((x) => [x.name, x.mutual, x.sharedClasses]);
+
+  assert.deepEqual((await ann.me()).suggest, { show: true, viaFriends: true, viaClasses: true });
+  assert.deepEqual(await list(), [['Cy T.', 1, 1]]);
+  for (const bad of [{ suggest: true }, { suggest: { show: 'no' } }, { suggest: { other: true } }]) assert.equal((await ann.put('/api/me', bad)).status, 400);
+  await cy.put('/api/me', { suggest: { viaFriends: false } });
+  assert.deepEqual(await list(), [['Cy T.', 0, 1]], 'only through the class now');
+  await cy.put('/api/me', { suggest: { viaClasses: false } });
+  assert.deepEqual(await list(), []);
+  const cyId = (await cy.me()).id;
+  assert.equal((await ann.post('/api/friends/request', { id: cyId })).status, 200, 'still findable by name search');
+
+  // not searchable but suggested: the Add friend button still works
+  await ann.del(`/api/friends/${cyId}`);
+  await cy.put('/api/me', { searchable: false, suggest: { viaClasses: true } });
+  assert.deepEqual(await list(), [['Cy T.', 0, 1]]);
+  assert.equal((await ann.post('/api/friends/request', { id: cyId })).status, 200);
+  await ann.del(`/api/friends/${cyId}`);
+
+  // hiding and showing again
+  await ann.post(`/api/friends/suggestions/${cyId}/hide`);
+  assert.deepEqual([await list(), (await ann.me()).hiddenSuggestions], [[], 1]);
+  assert.equal((await ann.del('/api/friends/suggestions/hidden')).data.hiddenSuggestions, 0);
+  assert.equal((await list()).length, 1);
+
+  // turning suggestions off hides the list
+  await ann.put('/api/me', { suggest: { show: false } });
+  assert.deepEqual((await ann.get('/api/friends/suggestions')).data, { suggestions: [], off: true });
 });

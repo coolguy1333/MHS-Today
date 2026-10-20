@@ -600,3 +600,4 @@ img.avatar.photo { display: inline-block; flex: none; border-radius: 50%; object
 .friend-card .fc-now { font-weight: 600; }
 .friend-card .fc-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
 .friend-card .fc-actions select { width: auto; font-size: 0.85rem; padding: 4px 8px; }
+select.fit { width: auto; min-width: 200px; max-width: 100%; }

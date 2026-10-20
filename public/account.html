@@ -58,9 +58,27 @@
     <section class="profile-section" id="sec-privacy" aria-labelledby="h-privacy" hidden>
     <div class="card">
       <h2 id="h-privacy">Privacy</h2>
-      <label class="check"><input type="checkbox" id="share" /><span>Let friends see my schedule (you can limit each friend on the Friends page)</span></label>
+      <h3>Friends</h3>
+      <label class="check"><input type="checkbox" id="share" /><span>Let friends see my schedule</span></label>
+      <label for="share-default">What friends see by default</label>
+      <select id="share-default" class="fit">
+        <option value="full">Classes + lunch</option>
+        <option value="lunch">Lunch only</option>
+        <option value="none">Nothing</option>
+      </select>
+      <p class="small muted">Used for every friend, new or old, unless you pick something else for them on the <a href="friends.html">Friends page</a>.</p>
+      <h3>Search</h3>
       <label class="check"><input type="checkbox" id="searchable" /><span>Let people find me by searching my name</span></label>
       <p class="small muted">Name search matches your first and last name from Google but only ever shows your display name.</p>
+      <h3>People you may know</h3>
+      <label class="check"><input type="checkbox" id="suggest-show" /><span>Show me people I may know on the Friends page</span></label>
+      <label class="check"><input type="checkbox" id="suggest-friends" /><span>Suggest me to friends of my friends</span></label>
+      <label class="check"><input type="checkbox" id="suggest-classes" /><span>Suggest me to people in my classes (only while friends can see my schedule; it never says which class)</span></label>
+      <div class="row" id="hidden-row" hidden>
+        <span class="small muted" id="hidden-count"></span>
+        <button class="linklike" type="button" id="unhide">Show them again</button>
+      </div>
+      <h3>Your Google account</h3>
       <p class="small muted">You signed in with Google. The site keeps your Google account ID and email address so you can sign back in; it is never shown to other students. <a href="terms.html">Privacy &amp; Terms</a></p>
     </div>
     </section>
