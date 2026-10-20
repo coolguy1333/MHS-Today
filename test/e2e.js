@@ -371,7 +371,8 @@ const step = (m) => console.log('•', m);
 
   // ---------------------------------------------------------------- feedback, answered in the app; the audit log
   await sp.goto(base + '/feedback.html'); await sp.waitForSelector('#feedback-form');
-  await sp.check('input[name="type"][value="idea"]');
+  await sp.click('.choice:has-text("An idea")'); // the tile is the choice
+  assert.equal(await sp.locator('input[name="type"][value="idea"]').isChecked(), true);
   await sp.fill('#fb-message', 'Could Today show bus changes?');
   await sp.click('#feedback-form button[type=submit]');
   await sp.waitForSelector('#mine .feedback-item');

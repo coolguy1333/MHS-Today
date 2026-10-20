@@ -88,6 +88,16 @@
   showSection();
   $('share').checked = user.shareSchedule;
   $('searchable').checked = user.searchable;
+  $('share-default').value = user.shareDefault;
+  $('share-default').disabled = !user.shareSchedule;
+  $('suggest-show').checked = user.suggest.show;
+  $('suggest-friends').checked = user.suggest.viaFriends;
+  $('suggest-classes').checked = user.suggest.viaClasses;
+  const showHidden = () => {
+    $('hidden-row').hidden = !user.hiddenSuggestions;
+    $('hidden-count').textContent = `You hid ${user.hiddenSuggestions} ${user.hiddenSuggestions === 1 ? 'person' : 'people'} from your suggestions.`;
+  };
+  showHidden();
   $('admin-card').hidden = !user.admin;
 
   $('profile-form').addEventListener('submit', (e) => {
@@ -122,7 +132,42 @@
     });
   }
   autoSave('share', 'shareSchedule', 'Friends can see your schedule', 'Your schedule is hidden from all friends');
+  $('share').addEventListener('change', (e) => { $('share-default').disabled = !e.currentTarget.checked; });
   autoSave('searchable', 'searchable', 'People can find you by name', 'You no longer show up in name search');
+
+  const LEVELS = { full: 'classes + lunch', lunch: 'lunch only', none: 'nothing' };
+  $('share-default').addEventListener('change', async (e) => {
+    const select = e.currentTarget;
+    try {
+      Object.assign(user, await api('PUT', '/api/me', { shareDefault: select.value }));
+      toast(`Friends now see ${LEVELS[select.value]} unless you picked something else for them`);
+    } catch (err) {
+      select.value = user.shareDefault;
+      showError(err);
+    }
+  });
+  // People you may know: each switch saves on its own
+  for (const [id, key, onText, offText] of [
+    ['suggest-show', 'show', 'You\'ll see people you may know', 'People you may know is hidden'],
+    ['suggest-friends', 'viaFriends', 'Friends of your friends can see you as a suggestion', 'You won\'t be suggested to friends of your friends'],
+    ['suggest-classes', 'viaClasses', 'People in your classes can see you as a suggestion', 'You won\'t be suggested to people in your classes']
+  ]) {
+    $(id).addEventListener('change', async (e) => {
+      const box = e.currentTarget;
+      try {
+        Object.assign(user, await api('PUT', '/api/me', { suggest: { [key]: box.checked } }));
+        toast(box.checked ? onText : offText);
+      } catch (err) {
+        box.checked = !box.checked;
+        showError(err);
+      }
+    });
+  }
+  $('unhide').addEventListener('click', (e) => busy(e.currentTarget, async () => {
+    Object.assign(user, await api('DELETE', '/api/friends/suggestions/hidden'));
+    showHidden();
+    toast('People you hid can be suggested again');
+  }));
 
   // ---- notifications (per device)
   const b64ToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));

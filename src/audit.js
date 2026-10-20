@@ -1,5 +1,6 @@
 'use strict';
-// The audit log: who did what, and when, for the school district. Kept forever (never pruned or
+// The audit log: who did what, and when, so the owners can let the school or district look into
+// something if they need to (MHS Today is independent, not run by the school). Kept forever (never pruned or
 // rotated) in $DATA_DIR/audit.log, one JSON object per line, in the order things happened:
 //   { at, action, actor: { id, name, email } | null, target, detail, ip }
 // It lives next to db.json, so WebManager's backups of /data include it; it is not part of the

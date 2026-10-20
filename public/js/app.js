@@ -227,7 +227,7 @@ function renderFooter(user) {
   main.after(h('footer', { class: 'site-footer' },
     h('a', { href: 'about.html' }, 'About'), h('a', { href: 'terms.html' }, 'Privacy & Terms'),
     user ? h('a', { href: 'feedback.html' }, 'Feedback', user.unreadFeedback ? ' (new reply)' : '') : null,
-    h('span', { class: 'muted' }, 'Made by MHS students')));
+    h('span', { class: 'muted' }, 'An independent student project · not endorsed by MHS')));
 }
 
 // Admins' announcements, under the nav on every page. A closed one stays closed on this device.

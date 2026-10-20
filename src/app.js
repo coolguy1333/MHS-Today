@@ -25,6 +25,7 @@ const MAX_FRIENDS = 150;
 const MAX_SESSIONS_PER_USER = 10;
 // What a friend may see of your schedule: everything, only which lunch you have, or nothing.
 const SHARE_LEVELS = ['full', 'lunch', 'none'];
+const SUGGEST_KEYS = ['show', 'viaFriends', 'viaClasses'];
 const GRADES = [9, 10, 11, 12];
 const MAX_LINKS = 100;
 const MAX_HIDDEN_SUGGESTIONS = 300;
@@ -59,7 +60,7 @@ const MIME = {
 
 function createApp(config, { log = (...a) => console.log(new Date().toISOString(), ...a), fetchFn } = {}) {
   const db = openDb(config.dataDir, log);
-  const auditLog = openAudit(config.dataDir, log); // kept forever, for the district (src/audit.js)
+  const auditLog = openAudit(config.dataDir, log); // kept forever; the school can see it if needed (src/audit.js)
   const secrets = openSecretBox(config.dataDir); // encrypts Google Tasks tokens at rest
   const state = db.state;
   const limiter = new RateLimiter();
@@ -191,7 +192,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const resetFields = (u) => ({ name: nameFrom(u.givenName, u.familyName), grade: null, bio: '', pronouns: '', interests: [], avatar: avatars.clean(null) });
   // Everyone agrees to the Privacy & Terms page before using the site; a new version asks again.
   // Change TERMS_VERSION (and the date on public/terms.html) whenever that page changes.
-  const TERMS_VERSION = '2026-10-19';
+  const TERMS_VERSION = '2026-10-20';
   let feedbackFeature = null, photosFeature = null; // set up with the other features below
   const agreedNow = (u) => !!u && isPlainObject(u.agreed) && u.agreed.version === TERMS_VERSION;
   function fillUserDefaults(u) {
@@ -199,6 +200,11 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (typeof u.familyName !== 'string') u.familyName = '';
     if (typeof u.searchable !== 'boolean') u.searchable = true;
     if (!isPlainObject(u.shareLevels)) u.shareLevels = {};
+    if (!SHARE_LEVELS.includes(u.shareDefault)) u.shareDefault = 'full';
+    // People you may know: whether you see suggestions, and how others may be shown you
+    // (before these settings, only people in name search were suggested)
+    if (!isPlainObject(u.suggest)) u.suggest = { show: true, viaFriends: u.searchable, viaClasses: u.searchable };
+    for (const k of SUGGEST_KEYS) if (typeof u.suggest[k] !== 'boolean') u.suggest[k] = true;
     if (!GRADES.includes(u.grade)) u.grade = null;
     if (typeof u.bio !== 'string') u.bio = '';
     if (typeof u.profileLocked !== 'boolean') u.profileLocked = false;
@@ -245,6 +251,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const profile = (u) => ({
     id: u.id, name: u.name, admin: isAdmin(u), owner: isOwner(u), verified: u.verified === true, canPostEvents: canPostEvents(u),
     friendCode: u.friendCode, shareSchedule: u.shareSchedule, searchable: u.searchable,
+    shareDefault: u.shareDefault, suggest: { ...u.suggest }, hiddenSuggestions: u.hiddenSuggestions.length,
     grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, pronouns: u.pronouns, interests: u.interests, avatar: u.avatar,
     mustAgree: !agreedNow(u), termsVersion: TERMS_VERSION,
     photo: photoUrl(u), pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null,
@@ -259,7 +266,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // What friends see: the card plus the rest of the profile.
   const friendCard = (u) => ({ ...publicCard(u), bio: u.bio, pronouns: u.pronouns, interests: u.interests });
   // What `owner` lets `viewer` (a friend) see. The Account page's master switch turns everything off.
-  const shareLevel = (owner, viewerId) => (!owner.shareSchedule ? 'none' : owner.shareLevels[viewerId] || 'full');
+  const shareLevel = (owner, viewerId) => (!owner.shareSchedule ? 'none' : owner.shareLevels[viewerId] || owner.shareDefault);
   // Lunch letter for each day letter, for friends who see only lunch.
   const lunchesOf = (u) => Object.fromEntries(cal.LETTERS.map((l) => [l, bell.lunchFor(u.classes, l)]).filter(([, v]) => v));
 
@@ -374,7 +381,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       users: Object.values(state.users).map((u) => ({
         id: u.id, sub: u.sub, email: u.email, name: u.name, created: u.created, lastLogin: u.lastLogin,
         classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule, verified: u.verified === true,
-        givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels,
+        givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels, shareDefault: u.shareDefault, suggest: u.suggest,
         grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
         pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions,
         calendarToken: u.calendarToken, agreed: u.agreed, photo: u.photo, archived: u.archived
@@ -408,6 +415,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
         verified: u.verified === true, givenName: cleanText(u.givenName, 30), familyName: cleanText(u.familyName, 40),
         searchable: u.searchable !== false, grade: GRADES.includes(u.grade) ? u.grade : null, bio: cleanText(u.bio, 160),
+        shareDefault: u.shareDefault, suggest: isPlainObject(u.suggest) ? Object.fromEntries(SUGGEST_KEYS.map((k) => [k, u.suggest[k] !== false])) : undefined,
         profileLocked: u.profileLocked === true, adminGranted: u.adminGranted === true, avatar: avatars.clean(u.avatar),
         photo: isPlainObject(u.photo) ? u.photo : null // checked against the files by src/photos.js
       });
@@ -425,7 +433,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     }
     for (const u of Object.values(users)) {
       u.friends = [...new Set(friendIds[u.id].filter((f) => typeof f === 'string' && f !== u.id && hasOwn(users, f)))].slice(0, MAX_FRIENDS);
-      for (const f of u.friends) if (hasOwn(u.rawLevels, f) && ['lunch', 'none'].includes(u.rawLevels[f])) u.shareLevels[f] = u.rawLevels[f];
+      for (const f of u.friends) if (hasOwn(u.rawLevels, f) && SHARE_LEVELS.includes(u.rawLevels[f]) && u.rawLevels[f] !== u.shareDefault) u.shareLevels[f] = u.rawLevels[f];
       delete u.rawLevels;
       u.hiddenSuggestions = [...new Set(u.rawHidden.filter((f) => typeof f === 'string' && f !== u.id && hasOwn(users, f)))].slice(0, MAX_HIDDEN_SUGGESTIONS);
       delete u.rawHidden;
@@ -514,9 +522,17 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     for (const k of ['shareSchedule', 'searchable']) {
       if (body[k] !== undefined && typeof body[k] !== 'boolean') throw bad('Invalid setting');
     }
+    if (body.shareDefault !== undefined && !SHARE_LEVELS.includes(body.shareDefault)) throw bad('Invalid setting');
+    if (body.suggest !== undefined && (!isPlainObject(body.suggest) || Object.entries(body.suggest).some(([k, v]) => !SUGGEST_KEYS.includes(k) || typeof v !== 'boolean'))) throw bad('Invalid setting');
     Object.assign(user, fields);
     if (body.shareSchedule !== undefined) user.shareSchedule = body.shareSchedule;
     if (body.searchable !== undefined) user.searchable = body.searchable;
+    if (body.shareDefault !== undefined) {
+      user.shareDefault = body.shareDefault;
+      // a friend set to the new default just follows it from now on
+      for (const [id, level] of Object.entries(user.shareLevels)) if (level === user.shareDefault) delete user.shareLevels[id];
+    }
+    if (body.suggest !== undefined) Object.assign(user.suggest, body.suggest);
     db.save();
     return profile(user);
   });
@@ -595,7 +611,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         friends.push({
           ...friendCard(o),
           level, // what they share with you
-          myLevel: user.shareLevels[o.id] || 'full', // what you share with them (before your master switch)
+          myLevel: user.shareLevels[o.id] || user.shareDefault, // what you share with them (before your master switch)
           classes: level === 'full' ? o.classes : null,
           lunches: level === 'lunch' ? lunchesOf(o) : null
         });
@@ -637,7 +653,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     let other;
     if (body.id !== undefined) {
       other = getUser(body.id);
-      if (!other || other.archived || !(other.searchable || other.friends.includes(user.id))) throw new HttpError(404, 'That person can\'t be found');
+      if (!other || other.archived || !(other.searchable || other.friends.includes(user.id) || suggestReason(user, other))) throw new HttpError(404, 'That person can\'t be found');
       if (other.id === user.id) throw bad("That's you");
     } else {
       other = findByCode(body.code);
@@ -661,18 +677,23 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     }
     return { ok: true };
   });
-  // People you may know: friends of your friends, and people in your classes. Only people who allow
-  // name search are suggested, classes count only when that person shares their schedule, and the
-  // reason never says which class.
+  // People you may know: friends of your friends, and people in your classes. Each person chooses
+  // (Profile → Privacy) whether they're suggested through mutual friends and through classes; classes
+  // count only when that person shares their schedule, and the reason never says which class.
+  function suggestReason(user, o, myFriends = new Set(confirmedFriends(user))) {
+    if (o.id === user.id || o.archived) return null;
+    const mutual = o.suggest.viaFriends ? confirmedFriends(o).filter((id) => myFriends.has(id)).length : 0;
+    const shared = o.suggest.viaClasses && o.shareSchedule ? bell.BLOCK_KEYS.filter((k) => sameClass(user.classes[k], o.classes[k])).length : 0;
+    return mutual || shared ? { mutual, sharedClasses: shared } : null;
+  }
   route('GET', '/api/friends/suggestions', { auth: 'user' }, ({ user }) => {
+    if (!user.suggest.show) return { suggestions: [], off: true };
     const myFriends = new Set(confirmedFriends(user));
     const out = [];
     for (const o of Object.values(state.users)) {
-      if (o.id === user.id || !o.searchable || o.archived || user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
-      const mutual = confirmedFriends(o).filter((id) => myFriends.has(id)).length;
-      const shared = o.shareSchedule ? bell.BLOCK_KEYS.filter((k) => sameClass(user.classes[k], o.classes[k])).length : 0;
-      if (!mutual && !shared) continue;
-      out.push({ ...publicCard(o), mutual, sharedClasses: shared, score: mutual * 3 + shared * 2 });
+      if (user.friends.includes(o.id) || o.friends.includes(user.id) || user.hiddenSuggestions.includes(o.id)) continue;
+      const why = suggestReason(user, o, myFriends);
+      if (why) out.push({ ...publicCard(o), ...why, score: why.mutual * 3 + why.sharedClasses * 2 });
     }
     out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
     return { suggestions: out.slice(0, 8).map(({ score, ...s }) => s) };
@@ -686,12 +707,17 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     }
     return { ok: true };
   });
+  route('DELETE', '/api/friends/suggestions/hidden', { auth: 'user' }, ({ user }) => {
+    user.hiddenSuggestions = [];
+    db.save();
+    return profile(user);
+  });
 
   // What one friend may see of your schedule.
   route('PUT', '/api/friends/:id', { auth: 'user' }, ({ user, params, body }) => {
     if (!user.friends.includes(params.id)) throw new HttpError(404, 'Not on your friend list');
     if (!SHARE_LEVELS.includes(body.level)) throw bad('Invalid setting');
-    if (body.level === 'full') delete user.shareLevels[params.id];
+    if (body.level === user.shareDefault) delete user.shareLevels[params.id];
     else user.shareLevels[params.id] = body.level;
     db.save();
     return { ok: true, level: body.level };

@@ -49,7 +49,7 @@ The letter advances one step per school day (a weekday not listed in `noSchool`)
 
 ## Friends: search and sharing levels
 
-Name search matches every typed word against the start of the person's Google first/last name or display name (accents and punctuation ignored), skips people who turned search off, and returns only display names and grades (120 searches an hour per person). `shareLevels` is what *you* let each friend see: missing = classes and lunch, `lunch` = only which lunch you have on each day letter (sent as `lunches: { A: 'B', ... }`), `none` = nothing. The Profile → Privacy "Let friends see my schedule" switch overrides every level.
+Name search matches every typed word against the start of the person's Google first/last name or display name (accents and punctuation ignored), skips people who turned search off, and returns only display names and grades (120 searches an hour per person). `shareDefault` (`full`, `lunch` or `none`, set in Profile → Privacy) is what friends see unless `shareLevels` has their id: `full` = classes and lunch, `lunch` = only which lunch you have on each day letter (sent as `lunches: { A: 'B', ... }`), `none` = nothing. Picking the default for a friend removes their entry, so they follow the default again. The Profile → Privacy "Let friends see my schedule" switch overrides every level.
 
 ## Feature modules
 
@@ -97,7 +97,7 @@ Owners are the `ADMIN_EMAILS`; they are always admins and can't be demoted or re
 
 Profiles: avatars are an emoji from a fixed list (or initials) on one of eight colors (`public/js/avatars.js`, no uploads). Non-friends (search, suggestions, requests) see only the card: display name, grade, avatar. Friends also see pronouns, bio and interests.
 
-People you may know: confirmed friends of your confirmed friends ("2 mutual friends") and people with the same class in the same block ("In one of your classes", which class is never said). Only people who allow name search are suggested, classes only count when that person shares their schedule, and anyone you already asked, who asked you, or whom you hid is left out. Score = mutual × 3 + shared classes × 2, top 8.
+People you may know: confirmed friends of your confirmed friends ("2 mutual friends") and people with the same class in the same block ("In one of your classes", which class is never said). Each person's `suggest` settings (Profile → Privacy) decide this: `show` (see suggestions at all), `viaFriends` and `viaClasses` (be suggested through mutual friends or classes; accounts from before these settings start with their name-search choice). Classes only count when that person shares their schedule, a suggested person can be sent a request even if they're out of name search, and anyone you already asked, who asked you, or whom you hid is left out ("Show them again" in Privacy clears the hidden list). Score = mutual × 3 + shared classes × 2, top 8.
 
 ## Color blocks and lunch
 

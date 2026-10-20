@@ -24,10 +24,10 @@
     <form class="card stack" id="feedback-form">
       <fieldset class="choice-row">
         <legend class="field-label">What is it?</legend>
-        <label class="choice"><input type="radio" name="type" value="bug" required /><span>🐞 Something's broken</span></label>
-        <label class="choice"><input type="radio" name="type" value="idea" /><span>💡 An idea</span></label>
-        <label class="choice"><input type="radio" name="type" value="question" /><span>❓ A question</span></label>
-        <label class="choice"><input type="radio" name="type" value="other" /><span>💬 Something else</span></label>
+        <label class="choice"><input type="radio" name="type" value="bug" required /><b class="choice-icon" aria-hidden="true">🐞</b>Something's broken</label>
+        <label class="choice"><input type="radio" name="type" value="idea" /><b class="choice-icon" aria-hidden="true">💡</b>An idea</label>
+        <label class="choice"><input type="radio" name="type" value="question" /><b class="choice-icon" aria-hidden="true">❓</b>A question</label>
+        <label class="choice"><input type="radio" name="type" value="other" /><b class="choice-icon" aria-hidden="true">💬</b>Something else</label>
       </fieldset>
       <label><span>Your message</span><textarea id="fb-message" rows="5" maxlength="2000" required placeholder="What happened, or what would make MHS Today better?"></textarea></label>
       <p class="small muted">Your name goes with it so we can answer. Please don't include passwords or anything private.</p>

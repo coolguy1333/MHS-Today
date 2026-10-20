@@ -128,6 +128,36 @@ test('levels: each person picks per friend: classes + lunch, lunch only, or noth
   assert.equal((await annSeenByBen()).level, 'full');
 });
 
+test('levels: a default for every friend you haven\'t picked something else for', async () => {
+  const ctx = await startApp({ mock });
+  const a = await as(ctx, 1, { given_name: 'Ann' });
+  const b = await as(ctx, 2, { given_name: 'Ben' });
+  const c = await as(ctx, 3, { given_name: 'Cy' });
+  await befriend(a, b); await befriend(a, c);
+  const benId = (await b.me()).id, cyId = (await c.me()).id;
+  const seen = async (who) => (await who.get('/api/friends')).data.friends[0].level;
+  const mine = async () => Object.fromEntries((await a.get('/api/friends')).data.friends.map((f) => [f.name, f.myLevel]));
+
+  assert.equal((await a.me()).shareDefault, 'full');
+  assert.equal((await a.put('/api/me', { shareDefault: 'some' })).status, 400);
+  await a.put(`/api/friends/${cyId}`, { level: 'none' });
+  assert.equal((await a.put('/api/me', { shareDefault: 'lunch' })).data.shareDefault, 'lunch');
+  assert.deepEqual([await seen(b), await seen(c)], ['lunch', 'none'], 'a friend you picked for keeps it');
+  assert.deepEqual(await mine(), { 'Ben T.': 'lunch', 'Cy T.': 'none' });
+  // new friends get the default too
+  const d = await as(ctx, 4, { given_name: 'Dee' });
+  await befriend(a, d);
+  assert.equal(await seen(d), 'lunch');
+  // picking the default for someone makes them follow it again
+  await a.put(`/api/friends/${benId}`, { level: 'full' });
+  await a.put(`/api/friends/${benId}`, { level: 'lunch' });
+  await a.put('/api/me', { shareDefault: 'none' });
+  assert.deepEqual([await seen(b), await seen(d)], ['none', 'none']);
+  // and it travels with backups
+  const backup = (await (await admin(ctx)).get('/api/admin/backup')).data;
+  assert.equal(backup.users.find((u) => u.name === 'Ann T.').shareDefault, 'none');
+});
+
 // ---------------------------------------------------------------- profiles
 
 test('profile: grade and bio, validated, shown to friends', async () => {
