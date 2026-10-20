@@ -2,6 +2,8 @@
 
 Schedule, events and friends for Mukwonago High School students.
 
+MHS Today is an independent, self-hosted student project. It is not run by, part of, or endorsed by Mukwonago High School or the Mukwonago Area School District; the school can look into things on it if needed.
+
 - **Today**: the day letter (A–D) and bell schedule, worked out automatically from a school calendar, with a live "Hour 3 · 23 min left" countdown ("B Lunch · 12 min left" at lunch), your own classes, what's next, and the next two weeks of day letters at a glance. New students get a short "Get set up" checklist (classes, a friend).
 - **My classes** (part of your profile): enter each class once, by color block (Yellow, Red, Pink, Green, Orange, Purple, Silver, Blue). The day letter decides which hour each block meets in, following the MHS Daily Schedule grid. Pick your A, B or C lunch on your Hour 4 classes (Green on Day A, Orange on Days B–D). Or paste your schedule copied from Infinite Campus and it fills everything in, lunches included (read on your device; nothing is sent until you save).
 - **Assignments**: classmates add **tests, quizzes, assignments and projects** for a class; only people with the same block, class and teacher see them, on Assignments, next to the class on Today, in "Due soon", calendar feeds and the evening-before reminder. Classmates plan **study sessions** too. Each student's own **Google Tasks** is *coming soon* (built, switched off with `GOOGLE_TASKS` until the district allows the Tasks API).
@@ -21,7 +23,7 @@ Schedule, events and friends for Mukwonago High School students.
 - **Graduation**: admins set graduation day; then seniors' accounts are archived (deleted 90 days later unless restored) and everyone else moves up a grade.
 - **Feedback, About, Privacy & Terms**: students send bugs, ideas and questions from the Feedback page and see admins' answers there. Everyone reads and agrees to the Privacy & Terms on first sign-in (and again if they change), and can download their data or delete their account.
 - **Admin page**, in tabs: Overview (only what needs fixing, and what's waiting), Review (reports and photos to approve), Calendar (click a day in the month to make it advisory, early release or no school), People (search and filter; click someone to verify, make admin, edit, lock or remove), Announcements, Blocked words, Links & tools, Feedback (reply in the app), Audit log (owners only) and Backup.
-- **Audit log, kept forever** for the district: every sign-in and change, who did it and when, in `/data/audit.log`. Owners can search it and download it as a spreadsheet.
+- **Audit log, kept forever**, so the school or district can look into something if they need to: every sign-in and change, who did it and when, in `/data/audit.log`. Owners can search it and download it as a spreadsheet.
 
 It is a small Node app with no dependencies (`server.js`, `src/`, pages in `public/`). All data is one file, `db.json`.
 
@@ -50,7 +52,7 @@ This repo is a WebManager **app** (`Dockerfile` + `webmanager.json`), so [app ho
 
 Sign-in works on the app's main address (the one you chose in step 1), not on extra domain aliases.
 
-The **audit log** (`/data/audit.log`) is never trimmed and is not in downloaded backups; WebManager's `/data` backups include it. Keep it as long as the district needs.
+The **audit log** (`/data/audit.log`) is never trimmed and is not in downloaded backups; WebManager's `/data` backups include it. Keep it as long as you might need it.
 
 **Google Tasks** connections are kept encrypted in `db.json` with a key in `/data/secret.key` (made on first start). Neither is in downloaded backups; restoring a backup on the same server keeps everyone's connection, and on a new server people press *Connect Google Tasks* again. WebManager's own `/data` backups include both.
 

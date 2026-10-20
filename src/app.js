@@ -59,7 +59,7 @@ const MIME = {
 
 function createApp(config, { log = (...a) => console.log(new Date().toISOString(), ...a), fetchFn } = {}) {
   const db = openDb(config.dataDir, log);
-  const auditLog = openAudit(config.dataDir, log); // kept forever, for the district (src/audit.js)
+  const auditLog = openAudit(config.dataDir, log); // kept forever; the school can see it if needed (src/audit.js)
   const secrets = openSecretBox(config.dataDir); // encrypts Google Tasks tokens at rest
   const state = db.state;
   const limiter = new RateLimiter();
@@ -191,7 +191,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const resetFields = (u) => ({ name: nameFrom(u.givenName, u.familyName), grade: null, bio: '', pronouns: '', interests: [], avatar: avatars.clean(null) });
   // Everyone agrees to the Privacy & Terms page before using the site; a new version asks again.
   // Change TERMS_VERSION (and the date on public/terms.html) whenever that page changes.
-  const TERMS_VERSION = '2026-10-19';
+  const TERMS_VERSION = '2026-10-20';
   let feedbackFeature = null, photosFeature = null; // set up with the other features below
   const agreedNow = (u) => !!u && isPlainObject(u.agreed) && u.agreed.version === TERMS_VERSION;
   function fillUserDefaults(u) {
