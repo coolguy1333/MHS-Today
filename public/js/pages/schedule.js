@@ -1,7 +1,9 @@
 // My classes (part of your profile): one row per color block plus Advisory; the rotation grid shows where each block lands on Days A-D.
 (async function () {
   renderNav('account'); // My classes is part of your profile
-  renderProfileHeader(await requireLogin(), 'classes');
+  const me = await requireLogin();
+  renderProfileHeader(me, 'classes');
+  const teacher = isTeacher(me); // teachers: just the class names (no teacher or room), and no Infinite Campus import
 
   const { BLOCKS, ADVISORY, ROTATION, LUNCH_BLOCKS, LUNCH_NAMES, LUNCH_HOUR, LUNCHES, SCHEDULES, blockInfo, meetings, formatTime } = MHSBell;
   const DAYS = Object.keys(ROTATION);
@@ -32,12 +34,11 @@
 
   function setBlock(key, c) {
     input(key, 'name').value = c ? c.name : '';
-    input(key, 'teacher').value = c ? c.teacher : '';
-    input(key, 'room').value = c ? c.room : '';
+    if (!teacher) { input(key, 'teacher').value = c ? c.teacher : ''; input(key, 'room').value = c ? c.room : ''; }
     if (LUNCH_BLOCKS.includes(key)) input(key, 'lunch').value = (c && c.lunch) || '';
   }
   function readBlock(key) {
-    const c = { name: input(key, 'name').value, teacher: input(key, 'teacher').value, room: input(key, 'room').value };
+    const c = teacher ? { name: input(key, 'name').value } : { name: input(key, 'name').value, teacher: input(key, 'teacher').value, room: input(key, 'room').value };
     if (LUNCH_BLOCKS.includes(key)) c.lunch = input(key, 'lunch').value;
     return c;
   }
@@ -48,7 +49,9 @@
   }
 
   // ---- column headings (wide screens; on phones each box keeps its placeholder), one row per block, then Advisory
-  add(panel, h('div', { class: 'slot slot-head', 'aria-hidden': 'true' }, h('span', null, 'Block'), h('span', null, 'Class'), h('span', null, 'Teacher'), h('span', null, 'Room'), h('span', null, 'Lunch')));
+  if (teacher) panel.classList.add('names-only');
+  add(panel, h('div', { class: 'slot slot-head', 'aria-hidden': 'true' }, h('span', null, 'Block'), h('span', null, teacher ? 'Class you teach' : 'Class'),
+    teacher ? null : [h('span', null, 'Teacher'), h('span', null, 'Room')], h('span', null, 'Lunch')));
   const ADV_ROW = { key: ADVISORY, label: 'Advisory' };
   for (const b of [...BLOCKS, ADV_ROW]) {
     const adv = b === ADV_ROW;
@@ -62,8 +65,8 @@
         ? h('div', { class: 'slot-hour' }, h('span', { class: 'block-chip advisory-chip' }, 'Advisory'), h('div', { class: 'small muted' }, `Advisory days, ${formatTime(SCHEDULES.advisory.periods.find((p) => p.hour === ADVISORY).start)}`))
         : h('div', { class: 'slot-hour' }, chip(b), h('div', { class: 'small muted', title: 'Day and hour this block meets' }, where(b.key))),
       h('div', { class: 'name' }, field('name', adv ? 'name' : 'class name', { placeholder: adv ? 'Advisory (optional name)' : 'Class name', maxlength: '60' })),
-      field('teacher', 'teacher', { placeholder: 'Teacher', maxlength: '60' }),
-      field('room', 'room', { placeholder: 'Room', maxlength: '20' }),
+      teacher ? null : field('teacher', 'teacher', { placeholder: 'Teacher', maxlength: '60' }),
+      teacher ? null : field('room', 'room', { placeholder: 'Room', maxlength: '20' }),
       lunch));
     setBlock(b.key, classes[b.key]);
   }
@@ -147,5 +150,6 @@
 
   renderGrid();
   // Nothing saved yet: the Infinite Campus import is the quickest start
-  if (!Object.keys(classes).length) $('import-card').open = true;
+  if (teacher) $('import-card').remove();
+  else if (!Object.keys(classes).length) $('import-card').open = true;
 })();

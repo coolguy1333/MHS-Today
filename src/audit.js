@@ -24,8 +24,9 @@ function openAudit(dataDir, log = () => {}) {
   }
 
   // Newest first, starting before byte offset `before` (the `next` of the previous page). Reads the
-  // file backwards a chunk at a time, so memory stays small however big it grows.
-  function page({ before = null, limit = 100, q = '' } = {}) {
+  // file backwards a chunk at a time, so memory stays small however big it grows. `keep(entry)` picks
+  // entries; `done(entry)` stops the search (entries are in time order, so a "from" date can stop it).
+  function page({ before = null, limit = 100, q = '', keep = null, done = null } = {}) {
     const needle = String(q || '').toLowerCase();
     const rfd = fs.openSync(file, 'r');
     try {
@@ -34,7 +35,8 @@ function openAudit(dataDir, log = () => {}) {
       const entries = [];
       let tail = Buffer.alloc(0); // the start of a line whose beginning is in an earlier chunk
       let pos = end;
-      while (pos > 0 && entries.length < limit) {
+      let stopped = false;
+      while (pos > 0 && entries.length < limit && !stopped) {
         const start = Math.max(0, pos - CHUNK);
         const buf = Buffer.alloc(pos - start);
         fs.readSync(rfd, buf, 0, buf.length, start);
@@ -49,8 +51,12 @@ function openAudit(dataDir, log = () => {}) {
           cut = i;
           if (!line) continue;
           if (needle && !line.toLowerCase().includes(needle)) continue;
-          try { entries.push({ ...JSON.parse(line), pos: start + lineStart }); } catch { /* a damaged line is skipped */ }
+          let e;
+          try { e = JSON.parse(line); } catch { continue; } // a damaged line is skipped
+          if (done && done(e)) { pos = 0; tail = Buffer.alloc(0); stopped = true; break; }
+          if (!keep || keep(e)) entries.push({ ...e, pos: start + lineStart });
         }
+        if (stopped) break;
         tail = data.subarray(0, Math.max(cut, 0));
         if (entries.length >= limit) { pos = start + Math.max(cut, 0); break; }
         pos = start;

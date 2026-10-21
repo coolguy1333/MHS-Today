@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { openAudit } = require('../src/audit');
+const cal = require('../public/js/calendar.js');
 const { startApp, closeAll, user } = require('./helpers');
 const { startMockGoogle } = require('./mock-google');
 
@@ -102,4 +103,24 @@ test('audit: sign-ins, changes and refused admin attempts are recorded; owners r
 
   // it is never part of the in-app backup
   assert.ok(!JSON.stringify(backup).includes('sign-in'));
+});
+
+test('audit filters: kind of action, who did it, and dates', async () => {
+  const ctx = await startApp({ mock });
+  const boss = await owner(ctx);
+  const kid = await as(ctx, 1, { given_name: 'Kim' });
+  await kid.put('/api/me', { bio: 'robots' });
+  await kid.post('/api/events', { title: 'Study group', date: new Date(Date.now() + 86400e3).toISOString().slice(0, 10), visibility: 'private', invitees: [] });
+  await boss.put('/api/admin/notices', { blockedWords: ['meanword'] });
+  const list = async (qs) => (await boss.get(`/api/admin/audit?${qs}`)).data.entries.map((e) => `${e.action} by ${e.actor ? e.actor.name : '-'}`);
+  assert.deepEqual(await list('kind=signin'), ['sign-in (new account) by Kim T.', 'sign-in (new account) by Ada T.']);
+  assert.deepEqual(await list('kind=admin'), ['PUT /api/admin/notices by Ada T.']);
+  assert.deepEqual(await list('kind=events'), ['POST /api/events by Kim T.']);
+  assert.deepEqual(await list('who=kim&kind=profile'), ['PUT /api/me by Kim T.', 'POST /api/me/agree by Kim T.']);
+  assert.ok((await list('who=kim')).every((a) => a.endsWith('by Kim T.')));
+  assert.equal((await list('kind=constructor')).length >= 5, true, 'an unknown kind means everything');
+  const today = cal.schoolNow('America/Chicago').date;
+  assert.ok((await list(`from=${today}&to=${today}`)).length >= 5);
+  assert.deepEqual(await list(`to=${cal.addDays(today, -1)}`), [], 'nothing before today');
+  assert.deepEqual(await list(`from=${cal.addDays(today, 1)}`), [], 'nothing after today');
 });

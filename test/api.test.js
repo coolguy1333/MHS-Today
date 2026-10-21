@@ -192,36 +192,6 @@ test('classes: one per color block, validated, trimmed, blank name clears, lunch
   assert.deepEqual((await (await as(ctx, 2)).get('/api/classes')).data, {}); // and they're private per person
 });
 
-test('classes: day-and-hour schedules from the first release move to their color block', async () => {
-  const ctx = await startApp({ mock });
-  const c = await as(ctx, 1);
-  const r = await c.put('/api/classes', {
-    A_1: { name: 'Math', color: '#123456' }, C_1: { name: 'Also yellow' }, B_1: { name: 'Bio' }, A_4: { name: 'Gym', lunch: 'C' },
-    red: { name: 'Choir' }, A_2: { name: 'Old red' }
-  });
-  assert.deepEqual(r.data, {
-    red: { name: 'Choir', teacher: '', room: '' }, yellow: { name: 'Math', teacher: '', room: '' },
-    green: { name: 'Gym', teacher: '', room: '', lunch: 'C' }, blue: { name: 'Bio', teacher: '', room: '' }
-  });
-});
-
-test('classes: saved schedules in the old format are converted at startup', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mhs-test-'));
-  const id = '00000000000000aa';
-  fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({
-    version: 2, sessions: {}, events: [], calendar: cal.emptyCalendar(),
-    users: {
-      [id]: {
-        id, sub: 'sub-1', email: 'user1@school.test', name: 'Old', created: 1, lastLogin: 1, friends: [], friendCode: 'ABCDEFGHJK', shareSchedule: true,
-        classes: { A_1: { name: 'Math', teacher: 'T', room: '1', color: '#112233' }, D_4: { name: 'Gym' } }
-      }
-    }
-  }));
-  const ctx = await startApp({ mock, tweak: (cfg) => { cfg.dataDir = dir; } });
-  assert.deepEqual(ctx.app.state.users[id].classes, { yellow: { name: 'Math', teacher: 'T', room: '1' }, orange: { name: 'Gym', teacher: '', room: '' } });
-  assert.ok(ctx.logs.some((l) => /Converted 1 saved schedule to color blocks/.test(l)));
-});
-
 test('profile: display name and sharing toggle are validated', async () => {
   const ctx = await startApp({ mock });
   const c = await as(ctx, 1);

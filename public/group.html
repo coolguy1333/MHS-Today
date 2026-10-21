@@ -77,6 +77,16 @@
           <h2>Members</h2>
           <div id="members"></div>
         </div>
+        <div class="card" id="advisor-card" hidden>
+          <h2>Invite an advisor</h2>
+          <p class="small muted">A teacher who uses MHS Today can be the group's advisor and run it with its leaders. Find them by name; they accept the invitation on their Groups page.</p>
+          <form id="advisor-form" class="inline-field" role="search">
+            <input type="search" id="advisor-q" maxlength="60" placeholder="Teacher's name" aria-label="Find a teacher by name" />
+            <button class="btn small" type="submit">Find</button>
+          </form>
+          <div id="advisor-results"></div>
+          <div id="advisor-invites"></div>
+        </div>
         <details class="card" id="edit-card" hidden>
           <summary>Edit group</summary>
           <form id="edit-form" class="form-grid">

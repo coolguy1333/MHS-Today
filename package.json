@@ -6,7 +6,7 @@
   "license": "UNLICENSED",
   "engines": { "node": ">=22" },
   "scripts": {
-    "start": "node server.js",
+    "start": "node --max-semi-space-size=2 server.js",
     "test": "node --test \"test/*.test.js\"",
     "test:e2e": "node test/e2e.js"
   }

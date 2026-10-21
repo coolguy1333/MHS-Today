@@ -52,8 +52,84 @@
       h('div', { class: 'day-nav' },
         prev ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Previous school day', onclick: () => go(prev) }, '← Previous') : null,
         S.viewDate ? h('button', { class: 'btn small', type: 'button', onclick: () => go(null) }, 'Back to today') : null,
-        next ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Next school day', onclick: () => go(next) }, 'Next →') : null)
+        next ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Next school day', onclick: () => go(next) }, 'Next →') : null,
+        h('button', { class: 'linklike small simple-open-btn', type: 'button', onclick: openSimple, title: 'Just the clock, time left and what is next' }, 'Simple mode'))
     );
+  }
+
+  // ---- Simple mode: the clock, the block you're in, time left and what's next, big (a classroom
+  // screen, a Chromebook on the desk). It sits over the Today page, which stays as it is.
+  let simple = null; // { el, timer, wake }
+  const countdown = (mins) => {
+    const s = Math.max(0, Math.ceil(mins * 60));
+    const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, '0');
+    return hh ? `${hh}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
+  };
+  function simpleState() {
+    const now = schoolClock(S.info);
+    const day = dayInfo(S.info.calendar, now.date);
+    const out = { now, day, title: '', left: null, leftLabel: 'left', next: '' };
+    if (!day.schoolDay) { out.title = noSchoolText(day); return out; }
+    const name = (p) => {
+      const c = classAt(S.classes, day.dayLetter, p.hour);
+      if (MHSBell.outOfSchool(c)) return `${p.label} – out of school`;
+      return c && !(p.hour === 'advisory' && c.name === 'Advisory') ? `${p.label} – ${c.name}` : p.label;
+    };
+    const nextLine = (p) => (p ? `Next: ${name(p)} at ${formatTime(p.start)}` : 'Last block of the day');
+    const cur = getCurrentPeriod(day.scheduleType, now.minutes);
+    const lunch = cur.status === 'in-class' && cur.period.hour === LUNCH_HOUR ? lunchFor(S.classes, day.dayLetter) : null;
+    const eating = lunch && atLunch(day.scheduleType, lunch, now.minutes);
+    if (eating) Object.assign(out, { title: `${lunch} Lunch`, left: eating.minutesLeft, next: eating.minutesLeft < cur.minutesLeft ? `Then ${name(cur.period)} until ${formatTime(cur.period.end)}` : nextLine(cur.next) });
+    else if (cur.status === 'in-class') Object.assign(out, { title: name(cur.period), left: cur.minutesLeft, next: nextLine(cur.next) });
+    else if (cur.status === 'passing') Object.assign(out, { title: 'Passing period', left: cur.minutesUntil, leftLabel: 'until the bell', next: nextLine(cur.next) });
+    else if (cur.status === 'before-school') Object.assign(out, { title: 'Before school', left: cur.minutesUntil, leftLabel: 'until school starts', next: `First: ${name(cur.next)} at ${formatTime(cur.next.start)}` });
+    else out.title = "School's out";
+    return out;
+  }
+  function paintSimple() {
+    const st = simpleState();
+    const [hm, ampm] = formatTime(MHSBell.minutesToTime(Math.floor(st.now.minutes))).split(' ');
+    const q = (c) => simple.el.querySelector(c);
+    q('.sm-clock').firstChild.textContent = hm;
+    q('.sm-ampm').textContent = ampm;
+    q('.sm-date').textContent = `${fmtLongDay(st.now.date)}${st.day.dayLetter ? ` · Day ${st.day.dayLetter}` : ''}`;
+    q('.sm-title').textContent = st.title;
+    q('.sm-left').hidden = st.left === null;
+    q('.sm-left strong').textContent = st.left === null ? '' : countdown(st.left);
+    q('.sm-left span').textContent = st.leftLabel;
+    q('.sm-next').textContent = st.next;
+  }
+  function openSimple() {
+    if (simple || !S.info) return;
+    const full = h('button', { class: 'sm-btn', type: 'button', hidden: !document.fullscreenEnabled }, 'Full screen');
+    const el = h('div', { class: 'simple-mode', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Simple mode' },
+      h('div', { class: 'sm-bar' }, full, h('button', { class: 'sm-btn', type: 'button', onclick: closeSimple }, 'Close')),
+      h('div', { class: 'sm-date' }),
+      h('div', { class: 'sm-clock', 'aria-live': 'off' }, '', h('span', { class: 'sm-ampm' })),
+      h('div', { class: 'sm-title' }),
+      h('div', { class: 'sm-left' }, h('strong', null), h('span', null)),
+      h('div', { class: 'sm-next' }));
+    full.addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen()).catch(() => {}));
+    el.addEventListener('fullscreenchange', () => { full.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; });
+    el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.fullscreenElement) closeSimple(); });
+    document.body.append(el);
+    document.body.classList.add('simple-open');
+    simple = { el, timer: setInterval(() => { if (!document.hidden) paintSimple(); }, 1000), wake: null };
+    paintSimple();
+    el.querySelector('.sm-btn:not([hidden])').focus();
+    // keep the screen on while it's showing, where the browser allows it
+    if (navigator.wakeLock) navigator.wakeLock.request('screen').then((w) => { if (simple) simple.wake = w; else w.release(); }).catch(() => {});
+  }
+  function closeSimple() {
+    if (!simple) return;
+    clearInterval(simple.timer);
+    if (simple.wake) simple.wake.release().catch(() => {});
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    simple.el.remove();
+    simple = null;
+    document.body.classList.remove('simple-open');
+    const back = document.querySelector('.simple-open-btn');
+    if (back) back.focus();
   }
 
   // Hour 4 also says which lunch you have and which friends share it.
@@ -61,9 +137,7 @@
     const lunch = lunchFor(S.classes, m.view.dayLetter);
     if (!lunch) return S.me ? h('div', { class: 'small muted' }, 'Lunch not set. ', h('a', { href: 'schedule.html' }, 'Pick A, B or C')) : null;
     const t = lunchTimes(m.view.scheduleType, lunch);
-    const buddies = S.friends.filter((f) => friendLunch(f, m.view.dayLetter) === lunch).map((f) => f.name);
-    return h('div', { class: 'small muted' }, `${lunch} Lunch ${formatTime(t.start)} – ${formatTime(t.end)}`,
-      buddies.length ? h('span', { class: 'with' }, `Lunch with ${listNames(buddies)}`) : null);
+    return h('div', { class: 'small muted' }, `${lunch} Lunch ${formatTime(t.start)} – ${formatTime(t.end)}`);
   }
 
   // "Quiz today: Unit 3" under a class, for things due in it in the next few days (from the day shown)
@@ -84,6 +158,7 @@
       ];
     }
     const block = blockInfo(blockFor(m.view.dayLetter, p.hour));
+    if (MHSBell.outOfSchool(cls)) return [h('div', null, colorDot(block.color), h('strong', null, 'Out of school')), h('div', { class: 'small muted' }, `${block.label} · ${cls.name}`)];
     if (cls) {
       const buddies = S.friends.filter((f) => f.classes && sameClass(f.classes[block.key], cls)).map((f) => f.name);
       // the class; then block and teacher; then which friends are in it
@@ -117,11 +192,11 @@
     }
     const schedule = SCHEDULES[m.view.scheduleType] || SCHEDULES.daily;
     schedule.periods.forEach((p, i) => {
-      if (p.note) add(body, h('tr', { class: 'note-row' }, h('td', { colspan: 3 }, `${formatTime(p.note.start)} – ${formatTime(p.note.end)} · ${p.note.text}`)));
       const cls = classAt(S.classes, m.view.dayLetter, p.hour);
       add(body, h('tr', { class: 'period-row', dataset: { hour: String(p.hour), index: String(i) } },
         h('th', { scope: 'row' }, p.label),
-        h('td', { class: 'time small muted' }, `${formatTime(p.start)} – ${formatTime(p.end)}`),
+        h('td', { class: 'time small muted' }, `${formatTime(p.start)} – ${formatTime(p.end)}`,
+          p.note ? h('div', { class: 'period-note' }, `Starts with ${p.note.text} (${formatTime(p.note.start)} – ${formatTime(p.note.end)})`) : null),
         h('td', { class: 'cls' }, classCell(p, cls, m, hasAny))));
     });
   }
@@ -131,7 +206,9 @@
     const card = $('setup-card');
     let hidden = false;
     try { hidden = localStorage.getItem('mhs-setup-hidden') === '1'; } catch { /* storage blocked */ }
-    const steps = S.me ? [
+    const steps = isTeacher(S.me) ? [
+      { done: Object.keys(S.classes).length > 0, title: 'Add your classes', text: 'Type in the classes you teach, by color block.', href: 'schedule.html', go: 'Add classes' }
+    ] : S.me ? [
       { done: Object.keys(S.classes).length > 0, title: 'Add your classes', text: 'Paste your schedule from Infinite Campus, or type it in.', href: 'schedule.html', go: 'Add classes' },
       S.tasks && S.tasks.available !== false
         ? { done: !!S.tasks.connected, title: 'Connect Google Tasks', text: 'See your assignments and what is due here.', href: 'classwork.html', go: 'Connect' } : null,
@@ -194,6 +271,7 @@
     const nameFor = (p) => {
       if (!p) return null;
       const c = classAt(S.classes, v.dayLetter, p.hour);
+      if (MHSBell.outOfSchool(c)) return `out of school (${c.name})`;
       if (p.hour === 'advisory' && c) return c.name === 'Advisory' ? (c.room ? `Rm ${c.room}` : null) : c.name + (c.room ? ` (Rm ${c.room})` : '');
       return c ? c.name + (c.room ? ` (Rm ${c.room})` : '') : null;
     };
@@ -201,7 +279,21 @@
     let title, detail = null;
     const lunch = cur.status === 'in-class' && cur.period.hour === LUNCH_HOUR ? lunchFor(S.classes, v.dayLetter) : null;
     const eating = lunch && atLunch(v.scheduleType, lunch, m.now.minutes);
-    if (eating) {
+    // Early Release / Late Arrival: out of school, back for the next real class
+    const periods = (SCHEDULES[v.scheduleType] || SCHEDULES.daily).periods;
+    const off = (p) => MHSBell.outOfSchool(classAt(S.classes, v.dayLetter, p.hour));
+    const backFor = (from) => periods.slice(from).find((p) => !off(p)) || null;
+    const offNow = cur.status === 'in-class' && off(cur.period);
+    const lateStart = cur.status === 'before-school' && off(cur.next) ? backFor(periods.indexOf(cur.next)) : null;
+    if (offNow) {
+      const back = backFor(periods.indexOf(cur.period) + 1);
+      title = `Out of school (${classAt(S.classes, v.dayLetter, cur.period.hour).name})`;
+      detail = back ? `Back for ${periodText(back)} at ${formatTime(back.start)}` : 'Nothing else today';
+    } else if (lateStart) {
+      const mins = MHSBell.timeToMinutes(lateStart.start) - m.now.minutes;
+      title = `Your day starts at ${formatTime(lateStart.start)} (in ${fmtMinutes(mins)})`;
+      detail = `First up: ${periodText(lateStart)}`;
+    } else if (eating) {
       title = `${lunch} Lunch · ${fmtMinutes(eating.minutesLeft)} left`;
       detail = eating.minutesLeft < cur.minutesLeft
         ? `Then back to ${periodText(cur.period)} until ${formatTime(cur.period.end)}`
@@ -209,7 +301,9 @@
     } else if (cur.status === 'in-class') {
       title = `${cur.period.label} · ${fmtMinutes(cur.minutesLeft)} left`;
       const here = nameFor(cur.period);
-      detail = [here, cur.next ? `Next: ${periodText(cur.next)} at ${formatTime(cur.next.start)}` : 'Last period of the day'].filter(Boolean).join(' · ');
+      const n = cur.period.note;
+      const inNote = n && m.now.minutes < MHSBell.timeToMinutes(n.end) ? `${n.text} until ${formatTime(n.end)}` : null;
+      detail = [inNote, here, cur.next ? `Next: ${periodText(cur.next)} at ${formatTime(cur.next.start)}` : 'Last period of the day'].filter(Boolean).join(' · ');
     } else if (cur.status === 'passing') {
       title = `Passing period · ${cur.next.label} starts in ${fmtMinutes(cur.minutesUntil)}`;
       detail = `Next: ${periodText(cur.next)} at ${formatTime(cur.next.start)}`;
@@ -290,7 +384,7 @@
   // Due soon: classmates' tests and assignments for your classes, and your Google Tasks when they're on.
   function renderTasks(m) {
     const card = $('tasks-card');
-    card.hidden = !S.me || !Object.keys(S.classes).length;
+    card.hidden = !S.me || isTeacher(S.me) || !Object.keys(S.classes).length;
     if (card.hidden) return;
     const t = m.now.date;
     const week = MHSCalendar.addDays(t, 7);
@@ -333,7 +427,8 @@
     try {
       const [info, me, events, notices] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events'), api('GET', '/api/notices')]);
       let classes = {}, friends = [], tasks = null, classItems = [];
-      if (me.user) {
+      if (isTeacher(me.user)) classes = await api('GET', '/api/classes'); // teachers: their own classes; no friends, events or assignments
+      else if (me.user) {
         // Google Tasks can be slow or unreachable; the rest of the page doesn't wait on it failing
         const [c, f, t, ci] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
           api('GET', '/api/tasks').catch((e) => (e.status === 409 ? { available: true, connected: false } : { connected: true, error: e.message, tasks: [] })),
@@ -345,7 +440,8 @@
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events, tasks, classItems, notices });
+      Object.assign(S, { me: me.user, classes, friends, events: isTeacher(me.user) ? [] : events, tasks, classItems, notices });
+      document.body.classList.toggle('teacher', isTeacher(me.user));
       S.lastDate = schoolClock(info).date;
       renderAll();
     } catch (e) {

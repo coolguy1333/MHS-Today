@@ -107,10 +107,15 @@ function getMe() { // { user | null, config }
   if (!mePromise) mePromise = api('GET', '/api/me').catch((e) => { mePromise = null; throw e; }); // don't cache a failure
   return mePromise;
 }
+// Teachers use Today (their own classes), the groups they advise, and their profile.
+const isTeacher = (user) => !!user && user.role === 'teacher';
+const TEACHER_PAGES = ['index', 'groups', 'group', 'account', 'schedule', 'feedback', 'terms', 'about', 'admin', 'login'];
+const pageName = () => (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '') || 'index';
 async function requireLogin() {
   const me = await getMe();
   if (!me.user) { goToLogin(); await new Promise(() => {}); }
   if (me.user.mustAgree && !/terms\.html$/.test(location.pathname)) { goToTerms(); await new Promise(() => {}); }
+  if (isTeacher(me.user) && !TEACHER_PAGES.includes(pageName())) { location.replace('index.html'); await new Promise(() => {}); }
   return me.user;
 }
 
@@ -120,6 +125,7 @@ const ICONS = {
   events: 'M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4',
   classwork: 'M9 11l3 3 8-8 M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11',
   friends: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7 M22 21v-1a6 6 0 0 0-4-5.6',
+  groups: 'M5 21V4 M5 4h12l-2 4 2 4H5',
   more: 'M4 6h16 M4 12h16 M4 18h16',
   login: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4 M10 17l5-5-5-5 M15 12H3'
 };
@@ -149,10 +155,10 @@ function renderNav(active) {
   // (your classes are part of your profile: the avatar link, then "My classes")
   const ALL = [
     ['index.html', 'Today', 'dashboard'], ['classwork.html', 'Assignments', 'classwork'],
-    ['events.html', 'Events', 'events'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
+    ['events.html', 'Events', 'events'], ['calendar.html', 'Calendar', 'calendar'], ['groups.html', 'Groups', 'groups'], ['lunch.html', 'Lunch', 'lunch'],
     ['friends.html', 'Friends', 'friends'], ['links.html', 'Links', 'links']
   ];
-  const TABS = ['dashboard', 'classwork', 'events', 'friends'];
+  let TABS = ['dashboard', 'classwork', 'events', 'friends'];
   const current = (key) => ({ class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null });
   const wide = h('nav', { 'aria-label': 'Main', class: 'nav-wide' });
   const auth = h('span', { class: 'nav-auth' });
@@ -166,8 +172,11 @@ function renderNav(active) {
   getMe().catch(() => ({ user: null })).then((me) => {
     const user = me.user;
     if (user && user.mustAgree) goToTerms(); // signed in but hasn't agreed to the (latest) Privacy & Terms
+    document.body.classList.toggle('teacher', isTeacher(user)); // pages hide .student-only parts
     renderFooter(user);
-    const links = user ? ALL : ALL.filter(([, , key]) => key === 'dashboard');
+    // teachers: Today and Groups (the groups they advise); signed out: Today
+    const links = isTeacher(user) ? ALL.filter(([, , key]) => ['dashboard', 'groups'].includes(key)) : user ? ALL : ALL.filter(([, , key]) => key === 'dashboard');
+    if (isTeacher(user)) TABS = ['dashboard', 'groups'];
     add(wide, links.map(([href, label, key]) => h('a', { href, ...current(key) }, label)));
     if (user) {
       add(auth,
@@ -183,7 +192,7 @@ function renderNav(active) {
     let tabs;
     if (user) {
       const sheet = h('div', { class: 'more-sheet', id: 'more-sheet', hidden: true }, h('div', { class: 'sheet-links' },
-        ALL.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)),
+        links.filter(([, , key]) => !TABS.includes(key)).map(([href, label, key]) => h('a', { href, ...current(key) }, label)),
         h('a', { href: 'account.html', ...current('account') }, 'Profile & my classes'),
         h('a', { href: 'feedback.html', ...current('feedback') }, 'Feedback', user.unreadFeedback ? h('span', { class: 'dot', 'aria-label': ' (new reply)' }) : null),
         user.admin ? h('a', { href: 'admin.html', ...current('admin') }, 'Admin') : null,
@@ -200,7 +209,7 @@ function renderNav(active) {
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) { setSheet(false); moreBtn.focus(); } }, { signal });
       document.addEventListener('click', (e) => { if (!sheet.hidden && !sheet.contains(e.target) && !moreBtn.contains(e.target)) setSheet(false); }, { signal });
       document.body.append(sheet);
-      tabs = [ALL.filter(([, , key]) => TABS.includes(key)).map(tabLink), moreBtn];
+      tabs = [links.filter(([, , key]) => TABS.includes(key)).map(tabLink), moreBtn];
     } else {
       tabs = [tabLink(ALL[0]), tabLink(['login.html', 'Sign in', 'login'])];
     }
@@ -216,7 +225,7 @@ const PROFILE_TABS = [['profile', 'Profile', 'account.html#profile'], ['classes'
 function renderProfileHeader(user, active) {
   fill($('hero'), avatarEl(user, 64), h('div', null, h('h1', null, user.name),
     h('div', { class: 'muted small' }, [user.pronouns, gradeText(user.grade)].filter(Boolean).join(' · ') || 'Your profile')));
-  fill($('profile-tabs'), PROFILE_TABS.map(([key, label, href]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)));
+  fill($('profile-tabs'), PROFILE_TABS.filter(([key]) => !(isTeacher(user) && key === 'privacy')).map(([key, label, href]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)));
 }
 
 // The footer on every page: About, Privacy & Terms, Feedback.
@@ -319,6 +328,7 @@ const classAt = (classes, letter, hour) => MHSBell.classAt(classes, letter, hour
 function friendClassText(friend, letter, hour) {
   if (!friend.classes) return { text: 'Schedule hidden', muted: true };
   const c = classAt(friend.classes, letter, hour);
+  if (MHSBell.outOfSchool(c)) return { text: 'Out of school', muted: true };
   if (!c && hour === 'advisory') return { text: 'Advisory', muted: false };
   if (!c) return { text: 'No class set', muted: true };
   return { text: c.name + (c.room ? ` · Rm ${c.room}` : ''), muted: false };

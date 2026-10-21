@@ -12,7 +12,7 @@
       periods: [
         { hour: 1, label: 'Hour 1', start: '07:30', end: '08:32' },
         { hour: 2, label: 'Hour 2', start: '08:37', end: '09:39' },
-        { hour: 3, label: 'Hour 3', start: '09:49', end: '10:51', note: { text: 'MTV & Announcements', start: '09:44', end: '09:49' } },
+        { hour: 3, label: 'Hour 3', start: '09:44', end: '10:51', note: { text: 'MTV & Announcements', start: '09:44', end: '09:49' } }, // MTV is the start of Hour 3
         { hour: 4, label: 'Hour 4 (+ Lunch)', start: '10:56', end: '12:31' },
         { hour: 5, label: 'Hour 5', start: '12:36', end: '13:38' },
         { hour: 6, label: 'Hour 6', start: '13:43', end: '14:45' }
@@ -117,8 +117,10 @@
       .filter((w) => w.length > 1 && !['mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'coach', 'prof', 'sr', 'jr'].includes(w));
     return words.length ? words[words.length - 1] : '';
   }
+  // A "class" that means you're not at school then: Early Release, Late Arrival (from Infinite Campus).
+  const outOfSchool = (c) => !!c && /\b(early\s*release|late\s*(arrival|start)|release\s*time|work\s*release)\b/i.test(c.name || '');
   function sameClass(a, b) {
-    if (!a || !b || normClass(a.name) !== normClass(b.name)) return false;
+    if (!a || !b || outOfSchool(a) || outOfSchool(b) || normClass(a.name) !== normClass(b.name)) return false;
     const ta = teacherKey(a.teacher), tb = teacherKey(b.teacher);
     return !ta || !tb || ta === tb;
   }
@@ -193,7 +195,7 @@
   const api = {
     SCHEDULES, ADVISORY, classAt, timeToMinutes, minutesToTime, formatTime, getCurrentPeriod, useCustom, scheduleName,
     BLOCKS, BLOCK_KEYS, ROTATION, blockInfo, blockFor, meetings,
-    LUNCH_HOUR, LUNCH_BLOCKS, LUNCH_NAMES, LUNCHES, lunchFor, lunchTimes, atLunch, sameClass, teacherKey
+    LUNCH_HOUR, LUNCH_BLOCKS, LUNCH_NAMES, LUNCHES, lunchFor, lunchTimes, atLunch, sameClass, teacherKey, outOfSchool
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.MHSBell = api;

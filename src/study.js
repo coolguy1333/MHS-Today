@@ -81,7 +81,7 @@ module.exports = function study(app) {
     // for reminders (src/push.js): sessions starting soon, with who is going
     studySessions: () => state.studySessions,
     calendarItems: (user) => state.studySessions.filter((s) => s.going.includes(user.id)).map((s) => ({
-      uid: `study-${s.id}`, date: s.date, time: s.time || null, title: `Study: ${s.title} (${s.name})`, description: s.notes, location: s.place
+      uid: `study-${s.id}`, kind: 'study', date: s.date, time: s.time || null, title: `Study: ${s.title} (${s.name})`, description: s.notes, location: s.place
     })),
     status: () => ({ studySessions: state.studySessions.length }),
     exportData: () => ({ studySessions: state.studySessions }),

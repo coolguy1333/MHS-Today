@@ -19,6 +19,11 @@ module.exports = function icalendar(app) {
     db.save();
     return { url: feedUrl(user) };
   });
+  // Everything for the Calendar page: every event you can see (not only yours), tests and assignments
+  // for your classes, and your study sessions; school days and days off come from /api/calendar.
+  route('GET', '/api/me/calendar/items', { auth: 'user' }, ({ user }) => ({
+    items: features.flatMap((f) => (f.calendarItems ? f.calendarItems(user, { all: true }) : [])).sort((a, b) => `${a.date} ${a.time || ''}`.localeCompare(`${b.date} ${b.time || ''}`))
+  }));
   route('DELETE', '/api/me/calendar', { auth: 'user' }, ({ user }) => {
     delete user.calendarToken;
     db.save();

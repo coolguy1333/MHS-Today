@@ -9,9 +9,15 @@
   if (!me || !me.mustAgree) return;
   $('agree-card').hidden = false;
   $('agree-bottom').hidden = false;
-  $('agree-box').addEventListener('change', () => { $('agree-btn').disabled = !$('agree-box').checked; });
+  // a new account also says whether it's a student or a teacher
+  const pickRole = me.role === null;
+  $('role-pick').hidden = !pickRole;
+  const role = () => { const r = document.querySelector('input[name="role"]:checked'); return r ? r.value : null; };
+  const sync = () => { $('agree-btn').disabled = !$('agree-box').checked || (pickRole && !role()); };
+  $('agree-box').addEventListener('change', sync);
+  for (const r of document.querySelectorAll('input[name="role"]')) r.addEventListener('change', sync);
   $('agree-btn').addEventListener('click', (e) => busy(e.currentTarget, async () => {
-    await api('POST', '/api/me/agree', { version: me.termsVersion });
+    await api('POST', '/api/me/agree', { version: me.termsVersion, ...(pickRole ? { role: role() } : {}) });
     const next = params.get('next');
     location.href = next && /^[a-z]+\.html(\?[A-Za-z0-9_=&.%-]{0,200})?$/.test(next) && !next.startsWith('terms.html') ? next : 'index.html';
   }));
