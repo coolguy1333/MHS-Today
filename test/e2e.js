@@ -224,7 +224,7 @@ const step = (m) => console.log('•', m);
   assert.match(status, /Chemistry \(Rm 305\)/);
   assert.match(status, /Next: Hour 4 \(\+ Lunch\) – Spanish 2 \(Rm 118\) at 10:56 AM/);
   assert.match(await text(sp, '#day-head'), /Thursday, October 1[\s\S]*Day A/);
-  assert.match(await text(sp, '#schedule-body tr.current'), /Hour 3[\s\S]*9:44 AM – 10:51 AM[\s\S]*Starts with MTV & Announcements \(9:44 AM – 9:49 AM\)[\s\S]*Chemistry/);
+  assert.match(await text(sp, '#schedule-body tr.current'), /Hour 3[\s\S]*9:44 AM – 10:51 AM[\s\S]*MTV & Announcements until 9:49 AM[\s\S]*Chemistry/);
   // Hour 4 on Day A is Green, so it shows Green's B Lunch time
   assert.match(await text(sp, '#schedule-body tr[data-hour="4"]'), /Spanish 2[\s\S]*Green[\s\S]*B Lunch 11:31 AM – 11:56 AM/);
   assert.equal(await sp.evaluate(() => window.__xss), undefined);
@@ -355,7 +355,7 @@ const step = (m) => console.log('•', m);
   // ---------------------------------------------------------------- account: privacy, rename, delete
   await sp.goto(base + '/account.html'); await sp.waitForSelector('#name');
   await sp.fill('#name', 'Annie'); await sp.click('#profile-save');
-  await sp.waitForFunction(() => document.querySelector('.nav-auth').innerText.includes('Annie'));
+  await sp.waitForFunction(() => (document.querySelector('.nav-me').getAttribute('aria-label') || '').includes('Annie')); // (the name itself shows on wide screens)
   assert.equal(await sp.locator('body > .tabbar').count(), 1, 'drawing the nav again replaces the tab bar');
   assert.match(await text(sp, '#hero'), /Annie/, 'the profile header follows the new name');
   assert.deepEqual(await sp.locator('#profile-tabs a').allInnerTexts(), ['Profile', 'My classes', 'Privacy', 'Notifications & calendar', 'Account']);

@@ -171,7 +171,8 @@
       ];
     }
     if (!block) return null;
-    if (S.me && hasAny) return h('span', { class: 'muted small' }, colorDot(block.color), `${block.label}: not set. `, h('a', { href: 'schedule.html' }, 'Add it'));
+    if (S.me && hasAny && !isTeacher(S.me)) return h('span', { class: 'muted small' }, colorDot(block.color), `${block.label}: not set. `, h('a', { href: 'schedule.html' }, 'Add it'));
+    if (isTeacher(S.me) && hasAny) return h('span', { class: 'muted small' }, colorDot(block.color), `${block.label} · no class`); // a teacher's free block
     return h('span', { class: 'muted small' }, colorDot(block.color), block.label);
   }
 
@@ -196,7 +197,7 @@
       add(body, h('tr', { class: 'period-row', dataset: { hour: String(p.hour), index: String(i) } },
         h('th', { scope: 'row' }, p.label),
         h('td', { class: 'time small muted' }, `${formatTime(p.start)} – ${formatTime(p.end)}`,
-          p.note ? h('div', { class: 'period-note' }, `Starts with ${p.note.text} (${formatTime(p.note.start)} – ${formatTime(p.note.end)})`) : null),
+          p.note ? h('div', { class: 'period-note' }, `${p.note.text} until ${formatTime(p.note.end)}`) : null),
         h('td', { class: 'cls' }, classCell(p, cls, m, hasAny))));
     });
   }

@@ -47,8 +47,16 @@ test('teachers: classes without rooms or teachers; none of the student parts; ne
   const boss = await owner(ctx);
   const kidId = (await kid.me()).id;
   assert.equal((await boss.put(`/api/admin/users/${kidId}`, { role: 'admin' })).status, 400);
+  const pal = await as(ctx, 3, { given_name: 'Pal' });
+  await kid.post('/api/friends/request', { code: (await pal.me()).friendCode }); await pal.post('/api/friends/request', { code: (await kid.me()).friendCode });
+  await kid.put('/api/classes', { red: { name: 'Art', teacher: 'Lee', room: '12' } });
   await boss.put(`/api/admin/users/${kidId}`, { role: 'teacher' });
   assert.equal((await kid.get('/api/friends')).status, 403);
+  assert.deepEqual((await pal.get('/api/friends')).data.friends, [], 'a student made a teacher leaves friends lists');
+  assert.deepEqual((await kid.get('/api/classes')).data.red, { name: 'Art', teacher: '', room: '' });
+  await boss.put(`/api/admin/users/${kidId}`, { role: 'student' });
+  assert.equal((await kid.me()).searchable, true, 'back to a student: findable again');
+  await boss.put(`/api/admin/users/${kidId}`, { role: 'teacher' });
   assert.equal((await boss.get('/api/admin/users')).data.find((u) => u.id === kidId).role, 'teacher');
 });
 
