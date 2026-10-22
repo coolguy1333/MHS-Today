@@ -444,10 +444,12 @@ html { scroll-padding-top: 12px; }
 .choice input { position: absolute; opacity: 0; pointer-events: none; }
 .choice .choice-icon { font-size: 1.7rem; line-height: 1; }
 .choice:has(input:checked) { border-color: var(--primary); background: var(--current); }
-.choice:has(input:checked)::after {
-  content: "✓"; position: absolute; top: 6px; right: 8px; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--primary); color: var(--on-primary); font-size: 0.75rem; line-height: 20px;
+/* a circle in the corner shows each tile can be picked; the picked one fills in with a check */
+.choice::after {
+  content: ""; position: absolute; top: 6px; right: 8px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid var(--muted); background: var(--card); font-size: 0.75rem; line-height: 16px; text-align: center;
 }
+.choice:has(input:checked)::after { content: "✓"; border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
 .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
 @media (max-width: 560px) { .choice-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .feedback-item { padding: 12px 0; border-bottom: 1px solid var(--border); }

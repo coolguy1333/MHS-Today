@@ -477,6 +477,20 @@ const step = (m) => console.log('•', m);
   assert.equal(await pp.locator('#save-bar').evaluate((e) => getComputedStyle(e).position), 'sticky', 'Save stays in view with unsaved changes');
   step('phone: tab bar, More sheet (Escape closes, active page lit), profile → My classes, sticky Save');
 
+  // ---------------------------------------------------------------- a teacher
+  const tea = await newUser('teacher', { sub: 'teach-1', email: 'wienke@school.test', given_name: 'Jason', family_name: 'Wienke' });
+  await signIn(tea, null, 'teacher');
+  assert.deepEqual(await tea.page.locator('.nav-wide a').allInnerTexts(), ['Today', 'Groups']);
+  await tea.page.goto(base + '/friends.html'); await tea.page.waitForURL(/index\.html/);
+  await tea.page.goto(base + '/schedule.html'); await tea.page.waitForSelector('[data-block="red"][data-field="name"]');
+  assert.equal(await tea.page.locator('[data-field="teacher"], [data-field="room"], #import-card').count(), 0, 'class names only');
+  await tea.page.fill('[data-block="red"][data-field="name"]', 'Machine Tool I');
+  await tea.page.click('#save-btn'); await tea.page.waitForSelector('.toast:has-text("Schedule saved")');
+  await tea.page.goto(base + '/index.html'); await tea.page.waitForSelector('#schedule-body tr');
+  assert.match(await text(tea.page, '#schedule-body'), /Machine Tool I/);
+  assert.equal(await tea.page.locator('#friends-card').isVisible(), false);
+  step('teacher: picked at sign-up; Today and Groups only; classes saved without room or teacher');
+
   // ---------------------------------------------------------------- look & feel: dark mode + keyboard
   const dark = await newUser('dark', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' }, { colorScheme: 'dark' });
   await signIn(dark);
