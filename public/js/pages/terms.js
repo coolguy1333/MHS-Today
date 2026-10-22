@@ -8,6 +8,7 @@
   $('export-link').hidden = !me;
   if (!me || !me.mustAgree) return;
   $('agree-card').hidden = false;
+  document.body.classList.add('agreeing'); // nothing else to go to until they agree
   $('agree-bottom').hidden = false;
   // a new account also says whether it's a student or a teacher
   const pickRole = me.role === null;

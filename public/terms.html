@@ -28,9 +28,24 @@
         <li>A record of activity is kept. If the school needs to look into something, like bullying, they can see it.</li>
         <li>Be kind and follow the student code of conduct.</li>
       </ul>
-      <p class="small">The details are below. <a href="#agree-bottom">Go to the agree box</a></p>
+      <p class="small">Everything in full is below this box: <a href="#full-terms">read the details</a>.</p>
     </div>
-    <h1>Privacy &amp; Terms</h1>
+    <div class="card agree-card" id="agree-bottom" hidden>
+      <fieldset class="plain" id="role-pick" hidden>
+        <legend class="field-label">I'm a…</legend>
+        <div class="choice-row two">
+          <label class="choice"><input type="radio" name="role" value="student" /><b class="choice-icon" aria-hidden="true">🎒</b>Student</label>
+          <label class="choice"><input type="radio" name="role" value="teacher" /><b class="choice-icon" aria-hidden="true">🍎</b>Teacher or staff</label>
+        </div>
+        <p class="small muted">Teachers see their own schedule on Today and the clubs that invite them as advisor.</p>
+      </fieldset>
+      <label class="check"><input type="checkbox" id="agree-box" /><span>I've read the Privacy &amp; Terms and agree to them.</span></label>
+      <div class="row">
+        <button class="btn" type="button" id="agree-btn" disabled>Agree and continue</button>
+        <button class="linklike" type="button" id="decline-btn">No thanks, sign me out</button>
+      </div>
+    </div>
+    <h1 id="full-terms">Privacy &amp; Terms</h1>
     <p class="muted small">Last updated October 20, 2026.</p>
     <div class="card prose">
       <h2>Privacy: what we keep and why</h2>
@@ -73,21 +88,6 @@
         <li>MHS Today is an independent student project, offered as is. It may change or stop.</li>
       </ul>
       <p>Questions? <a href="feedback.html">Send us feedback</a>.</p>
-    </div>
-    <div class="card agree-card" id="agree-bottom" hidden>
-      <fieldset class="plain" id="role-pick" hidden>
-        <legend class="field-label">I'm a…</legend>
-        <div class="choice-row two">
-          <label class="choice"><input type="radio" name="role" value="student" /><b class="choice-icon" aria-hidden="true">🎒</b>Student</label>
-          <label class="choice"><input type="radio" name="role" value="teacher" /><b class="choice-icon" aria-hidden="true">🍎</b>Teacher or staff</label>
-        </div>
-        <p class="small muted">Teachers see their own schedule on Today and the clubs that invite them as advisor.</p>
-      </fieldset>
-      <label class="check"><input type="checkbox" id="agree-box" /><span>I've read the Privacy &amp; Terms and agree to them.</span></label>
-      <div class="row">
-        <button class="btn" type="button" id="agree-btn" disabled>Agree and continue</button>
-        <button class="linklike" type="button" id="decline-btn">No thanks, sign me out</button>
-      </div>
     </div>
   </main>
   <script src="js/calendar.js"></script>

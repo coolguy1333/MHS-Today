@@ -777,7 +777,12 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (body.role !== undefined) { // someone who picked the wrong one at sign-up
       if (!ROLES.includes(body.role)) throw bad('Invalid setting');
       target.role = body.role;
-      if (body.role === 'teacher') { target.searchable = false; target.suggest = { show: false, viaFriends: false, viaClasses: false }; target.grade = null; }
+      if (body.role === 'teacher') { // as if they'd signed up as one: no friends, not findable, class names only
+        Object.assign(target, { searchable: false, suggest: { show: false, viaFriends: false, viaClasses: false }, grade: null, shareLevels: {} });
+        for (const o of Object.values(state.users)) { o.friends = o.friends.filter((f) => f !== target.id); delete o.shareLevels[target.id]; }
+        target.friends = [];
+        for (const c of Object.values(target.classes)) { c.teacher = ''; c.room = ''; }
+      } else Object.assign(target, { searchable: true, suggest: { show: true, viaFriends: true, viaClasses: true } });
       log(`User ${target.id} is now a ${body.role} (admin ${user.id})`);
       db.save();
       return { ok: true, role: target.role };

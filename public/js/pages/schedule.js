@@ -139,7 +139,7 @@
     const out = {};
     for (const k of KEYS) {
       const c = readBlock(k);
-      if (c.name.trim() || (k === ADVISORY && (c.teacher.trim() || c.room.trim()))) out[k] = c;
+      if (c.name.trim() || (k === ADVISORY && ((c.teacher || '').trim() || (c.room || '').trim()))) out[k] = c; // (teachers have no teacher or room boxes)
     }
     classes = await api('PUT', '/api/classes', out);
     for (const k of KEYS) setBlock(k, classes[k]); // show what the server kept
