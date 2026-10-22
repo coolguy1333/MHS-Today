@@ -11,6 +11,7 @@ const avatars = require('../public/js/avatars.js');
 const { openDb } = require('./db');
 const { openSecretBox } = require('./secretbox');
 const { openAudit } = require('./audit');
+const { openVisits } = require('./visits');
 const { createGoogle, AuthError, newPkce } = require('./google');
 const { createMenu } = require('./menu');
 const { createFilter } = require('./wordfilter');
@@ -26,6 +27,9 @@ const MAX_SESSIONS_PER_USER = 10;
 // What a friend may see of your schedule: everything, only which lunch you have, or nothing.
 const SHARE_LEVELS = ['full', 'lunch', 'none'];
 const SUGGEST_KEYS = ['show', 'viaFriends', 'viaClasses'];
+const ROLES = ['student', 'teacher'];
+// Teachers use Today (their own classes) and the groups they advise; the rest is for students.
+const STUDENT_ONLY = /^\/api\/(friends|study|classwork|tasks|tools\/suggestions|me\/friend-code)(\/|$)/;
 const GRADES = [9, 10, 11, 12];
 const MAX_LINKS = 100;
 const MAX_HIDDEN_SUGGESTIONS = 300;
@@ -61,6 +65,7 @@ const MIME = {
 function createApp(config, { log = (...a) => console.log(new Date().toISOString(), ...a), fetchFn } = {}) {
   const db = openDb(config.dataDir, log);
   const auditLog = openAudit(config.dataDir, log); // kept forever; the school can see it if needed (src/audit.js)
+  const visits = openVisits(config.dataDir, { today: () => cal.schoolNow(config.tz).date, log }); // daily visitor counts
   const secrets = openSecretBox(config.dataDir); // encrypts Google Tasks tokens at rest
   const state = db.state;
   const limiter = new RateLimiter();
@@ -201,6 +206,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (typeof u.searchable !== 'boolean') u.searchable = true;
     if (!isPlainObject(u.shareLevels)) u.shareLevels = {};
     if (!SHARE_LEVELS.includes(u.shareDefault)) u.shareDefault = 'full';
+    // 'student' or 'teacher', picked at sign-up (null until then); accounts from before roles are students
+    if (!(ROLES.includes(u.role) || u.role === null)) u.role = 'student';
     // People you may know: whether you see suggestions, and how others may be shown you
     // (before these settings, only people in name search were suggested)
     if (!isPlainObject(u.suggest)) u.suggest = { show: true, viaFriends: u.searchable, viaClasses: u.searchable };
@@ -228,7 +235,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (userCount() >= config.maxUsers) throw new AuthError('user limit reached', 'full');
       user = fillUserDefaults({
         id: randomId(), sub: claims.sub, email, name: nameFrom(names.givenName, names.familyName), created: Date.now(), lastLogin: 0,
-        classes: {}, friends: [], friendCode: uniqueFriendCode(), shareSchedule: true, verified: false
+        classes: {}, friends: [], friendCode: uniqueFriendCode(), shareSchedule: true, verified: false, role: null
       });
       state.users[user.id] = user;
     }
@@ -251,7 +258,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }
   const profile = (u) => ({
     id: u.id, name: u.name, admin: isAdmin(u), owner: isOwner(u), verified: u.verified === true, canPostEvents: canPostEvents(u),
-    friendCode: u.friendCode, shareSchedule: u.shareSchedule, searchable: u.searchable,
+    friendCode: u.friendCode, shareSchedule: u.shareSchedule, searchable: u.searchable, role: u.role,
     shareDefault: u.shareDefault, suggest: { ...u.suggest }, hiddenSuggestions: u.hiddenSuggestions.length,
     grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, pronouns: u.pronouns, interests: u.interests, avatar: u.avatar,
     mustAgree: !agreedNow(u), termsVersion: TERMS_VERSION,
@@ -274,17 +281,12 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // ---------- validation ----------
   // Classes are keyed by color block: { yellow: { name, teacher, room }, green: { ..., lunch: 'A' } },
   // plus `advisory` ({ name, teacher, room }; the name defaults to "Advisory").
-  // The first release keyed them by day and hour ('A_1'); those are moved to the block that meets
-  // then (a block that is already set wins, then the earliest day).
-  const LEGACY_KEY = /^[A-D]_[1-6]$/;
   function cleanClasses(input) {
     if (!isPlainObject(input)) throw bad('Invalid classes');
     const out = {};
-    const keys = [...[...bell.BLOCK_KEYS, bell.ADVISORY].filter((k) => hasOwn(input, k)), ...Object.keys(input).filter((k) => LEGACY_KEY.test(k)).sort()];
-    for (const key of keys) {
-      const block = LEGACY_KEY.test(key) ? bell.blockFor(key[0], Number(key[2])) : key;
-      const c = input[key];
-      if (hasOwn(out, block) || !isPlainObject(c)) continue;
+    for (const block of [...bell.BLOCK_KEYS, bell.ADVISORY].filter((k) => hasOwn(input, k))) {
+      const c = input[block];
+      if (!isPlainObject(c)) continue;
       const teacher = cleanText(c.teacher, 60), room = cleanText(c.room, 20);
       const name = cleanText(c.name, 60) || (block === bell.ADVISORY && (teacher || room) ? 'Advisory' : '');
       if (!name) continue; // a blank name clears the block
@@ -292,14 +294,6 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (bell.LUNCH_BLOCKS.includes(block) && bell.LUNCH_NAMES.includes(c.lunch)) out[block].lunch = c.lunch;
     }
     return out;
-  }
-  // Schedules saved by the first release are converted once, at startup.
-  {
-    let converted = 0;
-    for (const u of Object.values(state.users)) {
-      if (isPlainObject(u.classes) && Object.keys(u.classes).some((k) => LEGACY_KEY.test(k))) { u.classes = cleanClasses(u.classes); converted++; }
-    }
-    if (converted) { log(`Converted ${converted} saved schedule${converted === 1 ? '' : 's'} to color blocks`); db.save(); }
   }
   function cleanGrade(v) {
     if (v === null || v === '') return null;
@@ -365,9 +359,6 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     db.save();
   } else {
     state.links = state.links.map(cleanLink).filter(Boolean).slice(0, MAX_LINKS);
-    // the first default lunch link pointed at the whole district; point it at the high school menu
-    const old = state.links.find((l) => l.url === 'https://www.myschoolmenus.com/organizations/2534');
-    if (old) { Object.assign(old, { title: 'Lunch menu', url: 'https://menus.healthepro.com/organizations/2534/sites/15466/menus/133305', description: old.description || "This week's high school lunches." }); db.save(); }
   }
   // Lowercase, accents removed, only letters/digits: 'José O\'Neil' -> ['jose', 'oneil']
   const nameWords = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -385,7 +376,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels, shareDefault: u.shareDefault, suggest: u.suggest,
         grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
         pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, hiddenSuggestions: u.hiddenSuggestions,
-        calendarToken: u.calendarToken, agreed: u.agreed, photo: u.photo, archived: u.archived
+        calendarToken: u.calendarToken, agreed: u.agreed, photo: u.photo, archived: u.archived, role: u.role
       })),
       events: state.events,
       calendar: state.calendar,
@@ -416,6 +407,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
         verified: u.verified === true, givenName: cleanText(u.givenName, 30), familyName: cleanText(u.familyName, 40),
         searchable: u.searchable !== false, grade: GRADES.includes(u.grade) ? u.grade : null, bio: cleanText(u.bio, 160),
+        role: ROLES.includes(u.role) ? u.role : u.role === null ? null : 'student',
         shareDefault: u.shareDefault, suggest: isPlainObject(u.suggest) ? Object.fromEntries(SUGGEST_KEYS.map((k) => [k, u.suggest[k] !== false])) : undefined,
         profileLocked: u.profileLocked === true, adminGranted: u.adminGranted === true, avatar: avatars.clean(u.avatar),
         photo: isPlainObject(u.photo) ? u.photo : null // checked against the files by src/photos.js
@@ -483,7 +475,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // Feature modules add their own routes and say how to back up, restore and tidy their data, and
   // what to remove when someone deletes their account.
   const shared = {
-    route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
+    route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter, isTeacher: (u) => !!u && u.role === 'teacher',
     today, cal, bell, sameClass, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, features, fetchFn, google, secrets,
     // notify(userIds, kind, { title, body, url }): push notifications (set up by src/push.js below)
     notify: (...a) => (push ? push.notify(...a) : undefined)
@@ -518,6 +510,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }));
   route('PUT', '/api/me', { auth: 'user' }, ({ user, body }) => {
     const fields = cleanProfileFields(body);
+    if (user.role === 'teacher' && fields.grade !== undefined) fields.grade = null; // teachers aren't in a grade
     checkWords(fields.name, fields.bio, fields.pronouns, fields.interests || []);
     if (Object.keys(fields).length && user.profileLocked) throw new HttpError(403, 'An admin has locked your profile, so it can\'t be changed right now');
     for (const k of ['shareSchedule', 'searchable']) {
@@ -544,6 +537,11 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   });
   route('POST', '/api/me/agree', { auth: 'user' }, ({ user, body }) => {
     if (body.version !== TERMS_VERSION) throw bad('Reload the page to see the latest Privacy & Terms');
+    if (user.role === null) { // a new account says whether it's a student or a teacher
+      if (!ROLES.includes(body.role)) throw bad('Pick student or teacher');
+      user.role = body.role;
+      if (user.role === 'teacher') { user.searchable = false; user.suggest = { show: false, viaFriends: false, viaClasses: false }; }
+    }
     user.agreed = { version: TERMS_VERSION, at: Date.now() };
     db.save();
     return profile(user);
@@ -591,6 +589,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   route('GET', '/api/classes', { auth: 'user' }, ({ user }) => user.classes);
   route('PUT', '/api/classes', { auth: 'user' }, ({ user, body }) => {
     user.classes = cleanClasses(body);
+    if (user.role === 'teacher') for (const c of Object.values(user.classes)) { c.teacher = ''; c.room = ''; } // a teacher's own classes: just the names
     db.save();
     return user.classes;
   });
@@ -598,7 +597,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // Friends: you add someone with their private code; they must add you back.
   const findByCode = (code) => {
     const c = normalizeFriendCode(code);
-    return c ? Object.values(state.users).find((u) => u.friendCode === c) || null : null;
+    return c ? Object.values(state.users).find((u) => u.friendCode === c && u.role !== 'teacher') || null : null;
   };
   route('GET', '/api/friends', { auth: 'user' }, ({ user }) => {
     const friends = [];
@@ -639,7 +638,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (!limiter.hit(`fsearch:${user.id}`, 120, 3600e3)) throw new HttpError(429, 'Too many searches. Wait a bit and try again.');
     const results = [];
     for (const o of Object.values(state.users)) {
-      if (o.id === user.id || !o.searchable || o.archived) continue;
+      if (o.id === user.id || !o.searchable || o.archived || o.role === 'teacher') continue;
       const names = nameWords(`${o.givenName} ${o.familyName} ${o.name}`);
       if (!words.every((w) => names.some((n) => n.startsWith(w)))) continue;
       const mine = user.friends.includes(o.id), theirs = o.friends.includes(user.id);
@@ -654,7 +653,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     let other;
     if (body.id !== undefined) {
       other = getUser(body.id);
-      if (!other || other.archived || !(other.searchable || other.friends.includes(user.id) || suggestReason(user, other))) throw new HttpError(404, 'That person can\'t be found');
+      if (!other || other.archived || other.role === 'teacher' || !(other.searchable || other.friends.includes(user.id) || suggestReason(user, other))) throw new HttpError(404, 'That person can\'t be found');
       if (other.id === user.id) throw bad("That's you");
     } else {
       other = findByCode(body.code);
@@ -682,7 +681,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   // (Profile → Privacy) whether they're suggested through mutual friends and through classes; classes
   // count only when that person shares their schedule, and the reason never says which class.
   function suggestReason(user, o, myFriends = new Set(confirmedFriends(user))) {
-    if (o.id === user.id || o.archived) return null;
+    if (o.id === user.id || o.archived || o.role === 'teacher') return null;
     const mutual = o.suggest.viaFriends ? confirmedFriends(o).filter((id) => myFriends.has(id)).length : 0;
     const shared = o.suggest.viaClasses && o.shareSchedule ? bell.BLOCK_KEYS.filter((k) => sameClass(user.classes[k], o.classes[k])).length : 0;
     return mutual || shared ? { mutual, sharedClasses: shared } : null;
@@ -756,7 +755,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     .map((u) => ({
       id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u),
       verified: u.verified === true, friends: u.friends.length, fullName: `${u.givenName} ${u.familyName}`.trim(),
-      grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable,
+      grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable, role: u.role || 'student',
       owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, photo: photoUrl(u),
       pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null,
       archived: u.archived ? { at: u.archived.at, deleteAfter: u.archived.deleteAfter } : null
@@ -775,6 +774,14 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       return { ok: true };
     }
     if (body.reset !== undefined && body.reset !== true) throw bad('Invalid setting');
+    if (body.role !== undefined) { // someone who picked the wrong one at sign-up
+      if (!ROLES.includes(body.role)) throw bad('Invalid setting');
+      target.role = body.role;
+      if (body.role === 'teacher') { target.searchable = false; target.suggest = { show: false, viaFriends: false, viaClasses: false }; target.grade = null; }
+      log(`User ${target.id} is now a ${body.role} (admin ${user.id})`);
+      db.save();
+      return { ok: true, role: target.role };
+    }
     if (body.admin !== undefined) {
       if (isOwner(target)) throw bad('This person is an owner (in ADMIN_EMAILS); change that setting to remove them');
       if (target.id === user.id) throw bad("You can't change your own admin role");
@@ -828,12 +835,32 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     });
     res.end(body);
   });
-  // The audit log (owners only): newest first, 100 at a time, with a search; or the whole file.
+  // The audit log (owners only): newest first, 100 at a time, with a search and filters (kind of
+  // action, who did it, school-day dates); or the whole file.
+  const AUDIT_KINDS = {
+    signin: (a) => /^sign-in|^POST \/api\/logout/.test(a),
+    admin: (a) => /\/api\/admin|^refused|^backup|^audit log|^graduation|^archived/.test(a),
+    profile: (a) => /\/api\/(me|classes)\b/.test(a),
+    friends: (a) => /\/api\/friends/.test(a),
+    events: (a) => /\/api\/(events|study|classwork)/.test(a),
+    groups: (a) => /\/api\/groups/.test(a),
+    reports: (a) => /\/api\/(reports|feedback)/.test(a)
+  };
+  const schoolDate = (iso) => cal.schoolNow(config.tz, new Date(iso)).date;
   route('GET', '/api/admin/audit', { auth: 'admin' }, ({ user, url }) => {
     if (!isOwner(user)) throw new HttpError(403, 'Only owners can see the audit log');
+    const p = url.searchParams;
+    const kind = hasOwn(AUDIT_KINDS, p.get('kind')) ? AUDIT_KINDS[p.get('kind')] : null;
+    const who = (p.get('who') || '').trim().toLowerCase().slice(0, 100);
+    const from = cal.parseDate(p.get('from')) !== null ? p.get('from') : null;
+    const to = cal.parseDate(p.get('to')) !== null ? p.get('to') : null;
+    const keep = (e) => (!kind || kind(String(e.action))) && (!to || schoolDate(e.at) <= to)
+      && (!who || (e.actor && `${e.actor.name} ${e.actor.email}`.toLowerCase().includes(who)));
     const before = url.searchParams.has('before') ? Number(url.searchParams.get('before')) : null;
-    return auditLog.page({ before, limit: 100, q: (url.searchParams.get('q') || '').slice(0, 100) });
+    return auditLog.page({ before, limit: 100, q: (p.get('q') || '').slice(0, 100), keep, done: from ? (e) => schoolDate(e.at) < from : null });
   });
+  // People (not bots) who opened a page, per day: src/visits.js
+  route('GET', '/api/admin/visits', { auth: 'admin' }, () => ({ days: visits.recent(30, cal.addDays) }));
   route('GET', '/api/admin/audit/download', { auth: 'admin' }, ({ req, res, user, url }) => {
     if (!isOwner(user)) throw new HttpError(403, 'Only owners can download the audit log');
     audit('audit log downloaded', req, user);
@@ -910,6 +937,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     if (method !== 'GET' && user && !agreedNow(user) && !['POST /api/me/agree', 'POST /api/logout', 'DELETE /api/me'].includes(`${method} ${r.pattern}`)) {
       throw Object.assign(new HttpError(403, 'Please read and agree to the Privacy & Terms first'), { mustAgree: true });
     }
+    if (user && user.role === 'teacher' && STUDENT_ONLY.test(url.pathname)) throw new HttpError(403, 'That part of MHS Today is for students');
     const params = {};
     try { r.names.forEach((n, i) => { params[n] = decodeURIComponent(m[i + 1]); }); } catch { throw bad('Bad request'); }
     const body = method === 'POST' || method === 'PUT' ? await readJson(req, r.maxBody || 100 * 1024) : {};
@@ -1028,6 +1056,10 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       const headers = {
         'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag
       };
+      if (file.endsWith('.html') && !['404.html', 'offline.html'].includes(path.basename(file))) { // someone opened a page
+        const viewer = currentUser(req);
+        visits.hit(req, clientIp(req), viewer && viewer.id);
+      }
       if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
       const data = await fs.promises.readFile(file);
       res.writeHead(200, { ...headers, 'Content-Length': data.length });
@@ -1145,7 +1177,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (reminderTimer) clearInterval(reminderTimer);
       const force = setTimeout(() => server.closeAllConnections(), 3000);
       force.unref();
-      server.close(() => { clearTimeout(force); db.close(); auditLog.close(); resolve(); }); // also fires if it was never listening
+      server.close(() => { clearTimeout(force); db.close(); auditLog.close(); visits.close(); resolve(); }); // also fires if it was never listening
       server.closeIdleConnections();
     });
   }

@@ -11,6 +11,13 @@
     if (g.myRole === 'advisor') return h('span', { class: 'badge' }, 'Advisor');
     if (g.myRole === 'member') return h('span', { class: 'badge' }, 'Member');
     if (g.myRole === 'requested') return h('span', { class: 'small muted' }, 'Request sent');
+    if (g.myRole === 'invited') { // a teacher invited to be the advisor
+      return [
+        h('button', { class: 'btn small', type: 'button', onclick: (e) => busy(e.currentTarget, async () => { await api('POST', `/api/groups/${g.id}/advisor-invites/accept`, {}); toast(`You're the advisor of ${g.name}`); await load(); }) }, 'Be the advisor'),
+        h('button', { class: 'btn small secondary', type: 'button', onclick: (e) => busy(e.currentTarget, async () => { await api('DELETE', `/api/groups/${g.id}/advisor-invites/${me.id}`); toast('Invitation declined'); await load(); }) }, 'Decline')
+      ];
+    }
+    if (isTeacher(me)) return null;
     if (!g.approved) return null;
     return h('button', {
       class: 'btn small', type: 'button',
@@ -31,6 +38,7 @@
       h('h3', null, h('a', { href: groupLink(g) }, g.name)),
       h('div', { class: 'small muted' }, `${GROUP_KINDS[g.kind]} · ${g.memberCount} member${g.memberCount === 1 ? '' : 's'}`,
         g.approved ? null : [' · ', h('span', { class: 'badge vis' }, 'Waiting for approval')]),
+      g.myRole === 'invited' ? h('p', { class: 'small' }, h('span', { class: 'badge' }, 'Invitation'), ' Its leaders asked you to be the advisor.') : null,
       g.description ? h('p', { class: 'small' }, g.description.length > 160 ? `${g.description.slice(0, 157)}…` : g.description) : null,
       h('div', { class: 'row' }, joinButton(g),
         me.admin && !g.approved ? h('button', {
@@ -38,14 +46,15 @@
           onclick: (e) => busy(e.currentTarget, async () => { await api('PUT', `/api/admin/groups/${g.id}`, { approved: true }); toast(`${g.name} approved`); await load(); })
         }, 'Approve') : null,
         h('a', { href: groupLink(g), class: 'small' }, 'Open →'))))
-      : h('p', { class: 'muted' }, groups.length ? 'No groups match.' : 'No groups yet. Start one below!'));
+      : h('p', { class: 'muted' }, groups.length ? 'No groups match.'
+        : isTeacher(me) ? 'No groups yet. When a club\'s student leaders invite you to be its advisor, the invitation shows up here.' : 'No groups yet. Start one below!'));
   }
 
   async function load() {
     try {
       groups = await api('GET', '/api/groups');
       // pending first for admins, then mine, then the rest
-      const rank = (g) => (me.admin && !g.approved ? 0 : ['leader', 'member', 'advisor'].includes(g.myRole) ? 1 : 2);
+      const rank = (g) => (g.myRole === 'invited' || (me.admin && !g.approved) ? 0 : ['leader', 'member', 'advisor'].includes(g.myRole) ? 1 : 2);
       groups.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
       render();
     } catch (e) {

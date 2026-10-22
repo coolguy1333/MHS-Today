@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#183890" />
+  <title>Calendar · MHS Today</title>
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/app-icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MHS Today" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="nav" id="site-nav"></header>
+  <main class="container" id="main">
+    <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
+    <div class="row between cal-top">
+      <h1>Calendar</h1>
+      <button class="btn small" type="button" id="google-cal">Add to Google Calendar</button>
+    </div>
+    <p class="muted">Events, your clubs, tests and assignments in your classes, study sessions and days off, all in one place.</p>
+    <div class="card">
+      <div class="row between month-head">
+        <h2 id="cal-title">Month</h2>
+        <div class="row nowrap">
+          <button class="btn small secondary" type="button" id="cal-prev" aria-label="Previous month">←</button>
+          <button class="btn small secondary" type="button" id="cal-today">This month</button>
+          <button class="btn small secondary" type="button" id="cal-next" aria-label="Next month">→</button>
+        </div>
+      </div>
+      <div class="cal-filters" id="cal-filters" role="group" aria-label="Show"></div>
+      <div class="cal-grid" id="cal-grid" aria-describedby="cal-title"></div>
+      <div class="cal-agenda" id="cal-agenda" aria-live="polite"></div>
+    </div>
+  </main>
+  <script src="js/calendar.js"></script>
+  <script src="js/bellSchedule.js"></script>
+  <script src="js/avatars.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/calendar.js"></script>
+</body>
+</html>

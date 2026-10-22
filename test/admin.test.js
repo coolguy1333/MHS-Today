@@ -229,7 +229,7 @@ test('restore: everything in the file is sanitised like fresh input', async () =
   assert.equal(u1.email, 'one@school.test');
   assert.equal(u1.name, 'Evil name ' + 'x'.repeat(30)); // 40 characters in total
   assert.equal(u1.created, 0); assert.equal(u1.lastLogin, 0);
-  assert.deepEqual(u1.classes, { yellow: { name: '<b>x</b>', teacher: '', room: '' } }); // old-format keys are converted too
+  assert.deepEqual(u1.classes, {}, 'unknown keys are dropped');
   assert.deepEqual(u1.friends, [id(2)]);
   assert.equal(u1.shareSchedule, true);
   assert.equal(u1.admin, undefined);

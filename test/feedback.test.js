@@ -28,7 +28,11 @@ test('terms: nothing can be changed until you agree; agreeing is remembered and 
   assert.deepEqual([blocked.status, blocked.data.mustAgree], [403, true]);
   assert.equal((await kid.get('/api/events')).status, 200, 'reading is fine');
   assert.equal((await kid.post('/api/me/agree', { version: '1999-01-01' })).status, 400, 'only the current version');
-  assert.equal((await kid.post('/api/me/agree', { version: me.termsVersion })).data.mustAgree, false);
+  assert.equal(me.role, null, 'a new account picks student or teacher when it agrees');
+  assert.equal((await kid.post('/api/me/agree', { version: me.termsVersion })).status, 400);
+  assert.equal((await kid.post('/api/me/agree', { version: me.termsVersion, role: 'principal' })).status, 400);
+  const agreed = (await kid.post('/api/me/agree', { version: me.termsVersion, role: 'student' })).data;
+  assert.deepEqual([agreed.mustAgree, agreed.role], [false, 'student']);
   assert.equal((await kid.put('/api/classes', { yellow: { name: 'Math' } })).status, 200);
   // a restore keeps who agreed
   const backup = (await boss.get('/api/admin/backup')).data;

@@ -8,14 +8,14 @@ const MAX_ITEMS = 3000;
 const KEEP_DAYS = 14; // removed this long after they're due
 
 module.exports = function classEvents(app) {
-  const { route, state, db, HttpError, bad, isAdmin, getUser, cleanText, randomId, limiter, today, cal, bell, isPlainObject, hasOwn, num, checkWords, reports } = app;
+  const { route, state, db, HttpError, bad, isAdmin, getUser, cleanText, randomId, limiter, today, cal, bell, isPlainObject, hasOwn, num, checkWords, reports, isTeacher } = app;
   if (!Array.isArray(state.classEvents)) state.classEvents = [];
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   // Same block, same class name, same teacher (both must have one).
   const classMatch = (cls, item) => !!cls && norm(cls.name) === norm(item.name) && !!bell.teacherKey(cls.teacher) && bell.teacherKey(cls.teacher) === bell.teacherKey(item.teacher);
   const inClass = (user, item) => !!user && hasOwn(user.classes, item.block) && classMatch(user.classes[item.block], item);
-  const shows = (user, item) => inClass(user, item) && reports.visible('classwork', item.id, item.by, user);
+  const shows = (user, item) => !isTeacher(user) && inClass(user, item) && reports.visible('classwork', item.id, item.by, user); // students only
   const view = (user, item) => {
     const author = getUser(item.by);
     return {
@@ -80,7 +80,7 @@ module.exports = function classEvents(app) {
     // for the evening-before reminder: what's due on `date` in `user`'s classes
     classEventsDueOn: (user, date) => state.classEvents.filter((i) => i.due === date && shows(user, i)).map((i) => `${KIND_LABEL[i.kind]}: ${i.title} (${i.name})`),
     calendarItems: (user) => state.classEvents.filter((i) => i.due >= cal.addDays(today(), -14) && shows(user, i))
-      .map((i) => ({ uid: `cw-${i.id}`, date: i.due, time: null, title: `${KIND_LABEL[i.kind]}: ${i.title} (${i.name})`, description: i.notes })),
+      .map((i) => ({ uid: `cw-${i.id}`, kind: 'classwork', date: i.due, time: null, title: `${KIND_LABEL[i.kind]}: ${i.title} (${i.name})`, description: i.notes })),
     userData: (user) => ({ classEventsPosted: state.classEvents.filter((i) => i.by === user.id).map((i) => ({ kind: i.kind, title: i.title, due: i.due, class: i.name, notes: i.notes })) }),
     status: () => ({ classEvents: state.classEvents.length }),
     exportData: () => ({ classEvents: state.classEvents }),

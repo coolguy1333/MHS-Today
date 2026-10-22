@@ -20,16 +20,11 @@
   <main class="container" id="main">
     <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <div class="card" id="lunch-head"><p class="muted">Loading…</p></div>
-    <div class="grid grid-2">
-      <div class="card">
-        <h2>On the menu</h2>
-        <div id="menu"><p class="muted">Loading…</p></div>
-        <p class="small muted" id="menu-source" hidden></p>
-      </div>
-      <div class="card">
-        <h2>Your lunch</h2>
-        <div id="my-lunch"><p class="muted">Loading…</p></div>
-      </div>
+    <div class="card lunch-hero" id="my-lunch"><p class="muted">Loading…</p></div>
+    <div class="card">
+      <h2>On the menu</h2>
+      <div id="menu" class="station-grid"><p class="muted">Loading…</p></div>
+      <p class="small muted" id="menu-source" hidden></p>
     </div>
   </main>
   <script src="js/calendar.js"></script>

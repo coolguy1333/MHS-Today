@@ -127,3 +127,18 @@ test('custom schedules in the bell module: looked up by key, lunches follow Hour
   assert.equal(bell.SCHEDULES['x-late'], undefined);
   assert.equal(bell.getCurrentPeriod('x-late', 8 * 60).period.label, 'Hour 1', 'unknown keys fall back to the regular day');
 });
+
+test('Early Release and Late Arrival are out of school, and never make two people classmates', () => {
+  for (const name of ['Early Release', 'EARLY RELEASE (PM)', 'Late Arrival', 'Late Start', 'Work Release']) assert.equal(bell.outOfSchool({ name }), true, name);
+  for (const name of ['Release the Kraken 101', 'English', '']) assert.equal(bell.outOfSchool({ name }), false, name);
+  assert.equal(bell.outOfSchool(null), false);
+  assert.equal(bell.sameClass({ name: 'Early Release', teacher: 'Pat Wilson' }, { name: 'Early Release', teacher: 'Pat Wilson' }), false);
+  assert.equal(bell.sameClass({ name: 'English' }, { name: 'english' }), true);
+});
+
+test('MTV and announcements are the start of Hour 3, not a passing period', () => {
+  const p3 = bell.SCHEDULES.daily.periods.find((p) => p.hour === 3);
+  assert.deepEqual([p3.start, p3.end, p3.note.start, p3.note.end], ['09:44', '10:51', '09:44', '09:49']);
+  assert.equal(bell.getCurrentPeriod('daily', 9 * 60 + 46).status, 'in-class');
+  assert.equal(bell.getCurrentPeriod('daily', 9 * 60 + 46).period.hour, 3);
+});

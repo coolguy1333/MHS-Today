@@ -18,7 +18,7 @@
   for (const id of ['color-picker', 'emoji-picker', 'name']) $(id).addEventListener('input', preview);
   const interestsOf = (text) => text.split(',').map((s) => s.trim()).filter(Boolean);
 
-  // ---- your own photo: shrunk to a 256×256 JPEG here, then waits for an admin
+  // ---- your own photo: placed and cropped here (a 256×256 JPEG), then waits for an admin
   function showPhoto(u) {
     const img = (src, alt) => h('img', { class: 'avatar photo', src, alt, width: '56', height: '56' });
     fill($('photo-status'), u.pendingPhoto
@@ -27,21 +27,91 @@
         : h('span', { class: 'small muted' }, 'No photo: people see your avatar.'));
     $('photo-remove').hidden = !u.photo && !u.pendingPhoto;
   }
-  async function toJpeg(file) {
-    if (!/^image\//.test(file.type)) throw new Error('Pick a photo (JPG or PNG).');
-    let bmp;
-    try { bmp = await createImageBitmap(file); } catch { throw new Error("That photo couldn't be opened. Try a JPG or PNG."); }
-    const side = Math.min(bmp.width, bmp.height); // the middle square
-    const c = document.createElement('canvas');
-    c.width = c.height = 256;
-    c.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 256, 256);
-    return c.toDataURL('image/jpeg', 0.85);
+  // Crop: drag the photo to place it, zoom with the slider (or the mouse wheel / arrow keys), and see
+  // the circle people will see. Resolves to a 256×256 JPEG data URL, or null if cancelled.
+  function cropPhoto(bmp) {
+    return new Promise((resolve) => {
+      const P = 512; // canvas pixels (shown at about 280 CSS px)
+      const canvas = h('canvas', { width: String(P), height: String(P), 'aria-hidden': 'true' });
+      const ctx = canvas.getContext('2d');
+      const cover = Math.max(P / bmp.width, P / bmp.height); // smallest scale that fills the square
+      let zoom = 1, x = 0, y = 0; // the photo's top-left corner, in canvas pixels
+      const size = () => [bmp.width * cover * zoom, bmp.height * cover * zoom];
+      const clamp = () => { const [w, hh] = size(); x = Math.min(0, Math.max(P - w, x)); y = Math.min(0, Math.max(P - hh, y)); };
+      const center = () => { const [w, hh] = size(); x = (P - w) / 2; y = (P - hh) / 2; };
+      const draw = () => { clamp(); const [w, hh] = size(); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, P, P); ctx.drawImage(bmp, x, y, w, hh); };
+      // zoom around the middle of the square, so what's in the middle stays there
+      const setZoom = (z) => {
+        const before = size(), mid = P / 2;
+        const fx = (mid - x) / before[0], fy = (mid - y) / before[1];
+        zoom = Math.min(4, Math.max(1, z));
+        const after = size();
+        x = mid - fx * after[0]; y = mid - fy * after[1];
+        slider.value = String(zoom);
+        draw();
+      };
+      const slider = h('input', { type: 'range', min: '1', max: '4', step: '0.01', value: '1', 'aria-label': 'Zoom' });
+      slider.addEventListener('input', () => setZoom(Number(slider.value)));
+      const stage = h('div', { class: 'crop-stage', tabindex: '0', role: 'img', 'aria-label': 'Your photo. Drag, or use the arrow keys, to move it; + and − to zoom.' }, canvas);
+      let drag = null;
+      stage.addEventListener('pointerdown', (e) => { drag = { px: e.clientX, py: e.clientY, x, y }; stage.setPointerCapture(e.pointerId); stage.classList.add('dragging'); });
+      stage.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        const k = P / stage.getBoundingClientRect().width; // CSS px to canvas px
+        x = drag.x + (e.clientX - drag.px) * k; y = drag.y + (e.clientY - drag.py) * k;
+        draw();
+      });
+      const stop = () => { drag = null; stage.classList.remove('dragging'); };
+      stage.addEventListener('pointerup', stop);
+      stage.addEventListener('pointercancel', stop);
+      stage.addEventListener('wheel', (e) => { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08)); }, { passive: false });
+      stage.addEventListener('keydown', (e) => {
+        const step = 16;
+        const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+        if (moves[e.key]) { x += moves[e.key][0]; y += moves[e.key][1]; draw(); }
+        else if (e.key === '+' || e.key === '=') setZoom(zoom * 1.1);
+        else if (e.key === '-') setZoom(zoom / 1.1);
+        else return;
+        e.preventDefault();
+      });
+      const dlg = h('dialog', { class: 'dialog crop-dialog', 'aria-labelledby': 'crop-title' });
+      const done = (value) => { dlg.close(); dlg.remove(); resolve(value); };
+      add(dlg,
+        h('div', { class: 'dialog-head' }, h('h2', { id: 'crop-title' }, 'Place your photo'),
+          h('button', { class: 'linklike', type: 'button', 'aria-label': 'Close', onclick: () => done(null) }, '×')),
+        h('p', { class: 'small muted' }, 'Drag to move it, and zoom so your face fills the circle.'),
+        stage,
+        h('label', { class: 'crop-zoom' }, h('span', { 'aria-hidden': 'true' }, '−'), slider, h('span', { 'aria-hidden': 'true' }, '+')),
+        h('div', { class: 'row' },
+          h('button', {
+            class: 'btn', type: 'button',
+            onclick: () => {
+              const out = document.createElement('canvas');
+              out.width = out.height = 256;
+              out.getContext('2d').drawImage(canvas, 0, 0, P, P, 0, 0, 256, 256);
+              done(out.toDataURL('image/jpeg', 0.85));
+            }
+          }, 'Use this photo'),
+          h('button', { class: 'btn secondary', type: 'button', onclick: () => { center(); setZoom(1); center(); draw(); } }, 'Reset'),
+          h('button', { class: 'linklike', type: 'button', onclick: () => done(null) }, 'Cancel')));
+      dlg.addEventListener('cancel', (e) => { e.preventDefault(); done(null); });
+      document.body.append(dlg);
+      center(); draw();
+      dlg.showModal();
+      stage.focus();
+    });
   }
   $('photo-file').addEventListener('change', (e) => {
     const file = e.currentTarget.files[0];
     if (!file) return;
     busy(null, async () => {
-      const r = await api('POST', '/api/me/photo', { image: await toJpeg(file) });
+      if (!/^image\//.test(file.type)) throw new Error('Pick a photo (JPG or PNG).');
+      let bmp;
+      try { bmp = await createImageBitmap(file); } catch { throw new Error("That photo couldn't be opened. Try a JPG or PNG."); }
+      const image = await cropPhoto(bmp);
+      bmp.close();
+      if (!image) return;
+      const r = await api('POST', '/api/me/photo', { image });
       Object.assign(user, r);
       showPhoto(user);
       toast('Uploaded. An admin will take a look.');
@@ -78,7 +148,7 @@
   $('bio').addEventListener('input', countBio);
   showProfile(user);
   // one section at a time: #profile (the default), #privacy, #alerts, #account
-  const SECTIONS = ['profile', 'privacy', 'alerts', 'account'];
+  const SECTIONS = isTeacher(user) ? ['profile', 'alerts', 'account'] : ['profile', 'privacy', 'alerts', 'account']; // teachers have no friends settings
   function showSection() {
     const key = SECTIONS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'profile';
     for (const k of SECTIONS) $(`sec-${k}`).hidden = k !== key;

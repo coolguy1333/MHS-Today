@@ -91,7 +91,7 @@ class Client {
   del(p, opts) { return this.call('DELETE', p, undefined, opts); }
 
   // Runs the full sign-in dance against the mock. Returns the final callback response.
-  async signIn(mock, identity, next, { agree = true } = {}) {
+  async signIn(mock, identity, next, { agree = true, role = 'student' } = {}) {
     if (identity) mock.identity = { sub: 'sub-1', email: 'student@school.test', email_verified: true, given_name: 'Sam', family_name: 'Student', hd: 'school.test', ...identity };
     const start = await this.raw('GET', '/auth/google' + (next ? `?next=${encodeURIComponent(next)}` : ''));
     assert.equal(start.status, 302);
@@ -101,7 +101,7 @@ class Client {
     // agree to the Privacy & Terms like everyone does on first sign-in (tests about that use agree: false)
     if (agree) {
       const me = (await this.get('/api/me')).data.user;
-      if (me && me.mustAgree) await this.post('/api/me/agree', { version: me.termsVersion });
+      if (me && me.mustAgree) await this.post('/api/me/agree', { version: me.termsVersion, ...(me.role === null ? { role } : {}) });
     }
     return res;
   }

@@ -18,9 +18,12 @@
           busy(e.currentTarget, async () => { await api('POST', `/api/groups/${g.id}/leave`, {}); toast(`You left ${g.name}`); await load(); });
         }
       }, 'Leave group')
+      : g.myRole === 'invited' ? [ // a teacher invited to be the advisor
+        h('button', { class: 'btn small', type: 'button', onclick: (e) => busy(e.currentTarget, async () => { await api('POST', `/api/groups/${g.id}/advisor-invites/accept`, {}); toast(`You're the advisor of ${g.name}`); await load(); }) }, 'Be the advisor'),
+        h('button', { class: 'btn small secondary', type: 'button', onclick: (e) => busy(e.currentTarget, async () => { await api('DELETE', `/api/groups/${g.id}/advisor-invites/${me.id}`); location.href = 'groups.html'; }) }, 'Decline')]
       : g.myRole === 'requested'
         ? h('span', { class: 'small muted' }, 'Your request is waiting for a leader')
-        : g.approved ? h('button', {
+        : g.approved && !isTeacher(me) ? h('button', {
           class: 'btn small', type: 'button',
           onclick: (e) => busy(e.currentTarget, async () => {
             const r = await api('POST', `/api/groups/${g.id}/join`, {});
@@ -66,6 +69,24 @@
         h('button', { class: 'linklike danger', type: 'button', onclick: (e) => { if (confirm(`Remove ${p.name} from the group?`)) setRole(e, p, null, `${p.name} removed`); } }, 'Remove'))
         : null)));
   }
+  // ---- advisors: leaders find a teacher and invite them; invitations waiting can be taken back
+  function renderAdvisor() {
+    $('advisor-card').hidden = !g.canManage;
+    if (!g.canManage) return;
+    fill($('advisor-invites'), (g.advisorInvites || []).length ? [h('h3', null, 'Waiting for an answer'), g.advisorInvites.map((p) => h('div', { class: 'list-row' },
+      h('div', { class: 'person' }, avatarEl(p, 32), h('strong', null, p.name)),
+      h('button', { class: 'linklike danger', type: 'button', onclick: (e) => busy(e.currentTarget, async () => { await api('DELETE', `/api/groups/${g.id}/advisor-invites/${p.id}`); toast('Invitation taken back'); await load(); }) }, 'Take back')))] : null);
+  }
+  $('advisor-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      const found = await api('GET', `/api/groups/${g.id}/teachers?q=${encodeURIComponent($('advisor-q').value.trim())}`);
+      fill($('advisor-results'), found.length ? found.map((p) => h('div', { class: 'list-row' },
+        h('div', { class: 'person' }, avatarEl(p, 32), h('strong', null, p.name)),
+        h('button', { class: 'btn small', type: 'button', onclick: (ev) => busy(ev.currentTarget, async () => { await api('POST', `/api/groups/${g.id}/advisor-invites`, { id: p.id }); toast(`Invitation sent to ${p.name}`); fill($('advisor-results')); $('advisor-q').value = ''; await load(); }) }, 'Invite')))
+        : h('p', { class: 'small muted' }, 'No teacher by that name uses MHS Today yet (or they are already in the group).'));
+    });
+  });
   const setRole = (e, p, role, message) => busy(e.currentTarget, async () => {
     await api('PUT', `/api/groups/${g.id}/members/${p.id}`, { role });
     toast(message);
@@ -172,6 +193,7 @@
     $('body').hidden = false;
     renderHead();
     renderPeople();
+    renderAdvisor();
     $('add-event').hidden = !g.canManage;
     $('edit-card').hidden = !g.canManage;
     $('ev-visibility').querySelector('option[value="public"]').disabled = !g.approved;

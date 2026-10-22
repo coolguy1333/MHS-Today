@@ -51,6 +51,8 @@
       </ul>
       <h3>The record of activity</h3>
       <p>MHS Today keeps a permanent record of sign-ins and changes made on the site (who did what and when, and the network address it came from). Only the site's owners can see it, and it is kept even after an account is deleted. If Mukwonago High School or the school district needs to look into something (for example, bullying or a safety concern), the owners can let them see the relevant part of this record and of the site.</p>
+      <h3>Visitor counts</h3>
+      <p>Admins see how many people open the site each day, and how many of them were signed in. These are only totals: nothing in them says who visited.</p>
       <h3>What we don't do</h3>
       <p>No ads, no selling your information, and no tracking. Apart from letting the school look into something when needed (above), your information isn't shared with anyone. It is stored on MHS Today's own server, not the school's.</p>
       <h3>Your choices</h3>
@@ -73,6 +75,14 @@
       <p>Questions? <a href="feedback.html">Send us feedback</a>.</p>
     </div>
     <div class="card agree-card" id="agree-bottom" hidden>
+      <fieldset class="plain" id="role-pick" hidden>
+        <legend class="field-label">I'm a…</legend>
+        <div class="choice-row two">
+          <label class="choice"><input type="radio" name="role" value="student" /><b class="choice-icon" aria-hidden="true">🎒</b>Student</label>
+          <label class="choice"><input type="radio" name="role" value="teacher" /><b class="choice-icon" aria-hidden="true">🍎</b>Teacher or staff</label>
+        </div>
+        <p class="small muted">Teachers see their own schedule on Today and the clubs that invite them as advisor.</p>
+      </fieldset>
       <label class="check"><input type="checkbox" id="agree-box" /><span>I've read the Privacy &amp; Terms and agree to them.</span></label>
       <div class="row">
         <button class="btn" type="button" id="agree-btn" disabled>Agree and continue</button>

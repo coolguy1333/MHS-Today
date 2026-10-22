@@ -9,4 +9,5 @@ RUN chmod -R u+rwX,go+rX /app \
 USER node
 ENV NODE_ENV=production DATA_DIR=/data
 EXPOSE 8080
-CMD ["node", "server.js"]
+# a smaller young generation: about 10 MB less memory, no noticeable cost at school traffic
+CMD ["node", "--max-semi-space-size=2", "server.js"]

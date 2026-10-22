@@ -166,7 +166,26 @@
     fill($('queue'), rows.length ? rows : h('p', { class: 'muted small' }, 'Nothing waiting. 🎉'));
   }
   async function reloadStatus() { status = await api('GET', '/api/admin/status'); renderSetup(); }
-  loaders.overview = async () => { await reloadStatus(); await renderQueue(); };
+  // Visitors: today, the last 7 days, and a bar for each of the last 30 (src/visits.js)
+  async function renderVisits() {
+    const { days } = await api('GET', '/api/admin/visits');
+    const last = days[days.length - 1];
+    const week = days.slice(-7);
+    const avg = Math.round(week.reduce((a, d) => a + d.visitors, 0) / week.length);
+    const top = Math.max(1, ...days.map((d) => d.visitors));
+    const short = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+    fill($('visits'),
+      h('div', { class: 'visit-nums' },
+        h('div', null, h('strong', null, String(last.visitors)), h('span', null, 'today')),
+        h('div', null, h('strong', null, String(last.signedIn)), h('span', null, 'signed in today')),
+        h('div', null, h('strong', null, String(avg)), h('span', null, 'a day, last 7 days')),
+        h('div', null, h('strong', null, String(last.views)), h('span', null, 'pages opened today'))),
+      h('div', { class: 'visit-bars', role: 'img', 'aria-label': `Visitors each day for 30 days, up to ${top} a day` },
+        days.map((d) => h('div', { class: 'visit-bar' + (d.date === last.date ? ' today' : ''), title: `${fmtShortDay(d.date)}: ${d.visitors} visitors, ${d.signedIn} signed in, ${d.views} pages` },
+          h('span', { style: { height: `${Math.round((d.visitors / top) * 100)}%` } })))),
+      h('div', { class: 'visit-axis small muted' }, h('span', null, short(days[0].date)), h('span', null, 'Today')));
+  }
+  loaders.overview = async () => { await reloadStatus(); await Promise.all([renderQueue(), renderVisits()]); };
 
   // ======================================================================= Review: reports (and photos)
   const KIND_NAMES = { event: 'Event', post: 'Group post', reply: 'Group reply', poll: 'Poll', study: 'Study session', classwork: 'Class event', profile: 'Profile' };
@@ -541,12 +560,13 @@
     const shown = users.filter((u) => (!q || `${u.name} ${u.fullName} ${u.email}`.toLowerCase().includes(q))
       && (f === 'archived' ? !!u.archived : !u.archived || f === '')
       && (!f || f === 'archived' || (f === 'admin' && u.admin) || (f === 'verified' && u.verified) || (f === 'locked' && u.profileLocked)
-        || (f === 'inactive' && Date.now() - u.lastLogin > DAYS_30) || (f === 'seniors' && u.grade === 12)));
+        || (f === 'inactive' && Date.now() - u.lastLogin > DAYS_30) || (f === 'seniors' && u.grade === 12)
+        || (f === 'teachers' && u.role === 'teacher') || (f === 'students' && u.role !== 'teacher')));
     $('people-count').textContent = `${shown.length} of ${users.length} ${users.length === 1 ? 'person' : 'people'}`;
     fill($('users'), shown.length ? shown.map((u) => h('button', { class: 'person-card', type: 'button', dataset: { id: u.id }, 'aria-label': `${u.name}, ${u.email}`, onclick: () => personDialog(u) },
       avatarEl(u, 40),
       h('span', { class: 'pc-main' }, h('strong', null, u.name), h('span', { class: 'small muted pc-email' }, u.email),
-        h('span', { class: 'pc-badges' }, badge(u.owner, 'owner'), badge(u.admin && !u.owner, 'admin'), badge(u.verified, 'verified', 'vis'), badge(u.profileLocked, 'locked', 'vis'),
+        h('span', { class: 'pc-badges' }, badge(u.role === 'teacher', 'teacher', 'vis'), badge(u.owner, 'owner'), badge(u.admin && !u.owner, 'admin'), badge(u.verified, 'verified', 'vis'), badge(u.profileLocked, 'locked', 'vis'),
           badge(!!u.archived, 'archived', 'urgent'), badge(!!u.pendingPhoto, 'photo to approve', 'vis'))),
       h('span', { class: 'small muted pc-seen' }, fmtAgo(u.lastLogin)))) : h('p', { class: 'muted' }, 'No one matches.'));
   }
@@ -566,7 +586,7 @@
       `${plural(u.friends, 'friend')}`, u.searchable ? null : 'hidden from search', `joined ${fmtAgo(u.created)}`, `last signed in ${fmtAgo(u.lastLogin)}`].filter(Boolean);
     openDialog(u.name,
       h('div', { class: 'person' }, avatarEl(u, 56), h('div', null,
-        h('div', null, h('strong', null, u.name), ' ', badge(u.owner, 'owner'), ' ', badge(u.admin && !u.owner, 'admin'), ' ', badge(u.verified, 'verified', 'vis'), ' ', badge(u.profileLocked, 'locked', 'vis')),
+        h('div', null, h('strong', null, u.name), ' ', badge(u.role === 'teacher', 'teacher', 'vis'), ' ', badge(u.owner, 'owner'), ' ', badge(u.admin && !u.owner, 'admin'), ' ', badge(u.verified, 'verified', 'vis'), ' ', badge(u.profileLocked, 'locked', 'vis')),
         h('div', { class: 'small' }, u.email),
         h('div', { class: 'small muted' }, details.join(' · ')))),
       u.bio ? h('p', { class: 'small' }, u.bio) : null,
@@ -579,6 +599,13 @@
           onclick: change({ verified: !u.verified }, u.verified ? `${u.name} can no longer post events` : `${u.name} can now post events`)
         }, u.verified ? 'Unverify (stop posting events)' : 'Verify (can post events for everyone)'),
         h('button', { class: 'btn small secondary', type: 'button', onclick: () => editProfile(u) }, 'Edit profile'),
+        h('button', {
+          class: 'btn small secondary', type: 'button',
+          onclick: (e) => {
+            const to = u.role === 'teacher' ? 'student' : 'teacher';
+            if (confirm(`Make ${u.name} a ${to}? ${to === 'teacher' ? 'Teachers only use Today and the groups they advise, and students can\'t find them.' : 'Students use the whole site.'}`)) change({ role: to }, `${u.name} is now a ${to}`)(e);
+          }
+        }, u.role === 'teacher' ? 'Make a student' : 'Make a teacher'),
         u.photo || u.pendingPhoto ? h('button', {
           class: 'btn small secondary', type: 'button',
           onclick: (e) => { if (confirm(`Remove ${u.name}'s photo?`)) busy(e.currentTarget, async () => { await api('DELETE', `/api/admin/users/${u.id}/photo`); await reloadUsers(); toast('Photo removed'); personDialog(users.find((x) => x.id === u.id)); }); }
@@ -796,6 +823,8 @@
     'POST /api/tools/suggestions': 'Suggested a tool', 'POST /api/friends/:id/accept': 'Accepted a friend request', 'PUT /api/friends/:id': 'Changed what a friend sees',
     'POST /api/friends/suggestions/:id/hide': 'Hid a friend suggestion', 'POST /api/me/friend-code': 'Got a new friend code',
     'POST /api/me/calendar': 'Made a calendar link', 'DELETE /api/me/calendar': 'Turned off their calendar link',
+    'POST /api/groups/:id/advisor-invites': 'Invited a teacher to be a group\'s advisor', 'DELETE /api/groups/:id/advisor-invites/:uid': 'Took back or declined an advisor invitation',
+    'POST /api/groups/:id/advisor-invites/accept': 'Became a group\'s advisor', 'DELETE /api/friends/suggestions/hidden': 'Showed hidden suggestions again',
     'POST /api/groups/:id/join': 'Joined (or asked to join) a group', 'POST /api/groups/:id/leave': 'Left a group', 'PUT /api/groups/:id/members/:uid': 'Changed a group member',
     'POST /api/groups/:id/posts/:pid/replies': 'Replied in a group', 'DELETE /api/groups/:id/posts/:pid/replies/:rid': 'Deleted a group reply',
     'POST /api/groups/:id/polls': 'Started a poll', 'POST /api/groups/:id/polls/:pid/vote': 'Voted in a poll', 'PUT /api/groups/:id/polls/:pid': 'Closed or edited a poll',
@@ -806,8 +835,10 @@
   let auditNext = null;
   const short = (v) => { if (v == null) return ''; const s = typeof v === 'string' ? v : JSON.stringify(v); return s.length > 160 ? `${s.slice(0, 160)}…` : s; };
   async function loadAudit(more) {
-    const q = $('audit-q').value.trim();
-    const r = await api('GET', `/api/admin/audit?q=${encodeURIComponent(q)}${more && auditNext !== null ? `&before=${auditNext}` : ''}`);
+    const params = new URLSearchParams({ q: $('audit-q').value.trim(), kind: $('audit-kind').value, who: $('audit-who').value.trim(), from: $('audit-from').value, to: $('audit-to').value });
+    for (const [k, v] of [...params]) if (!v) params.delete(k);
+    if (more && auditNext !== null) params.set('before', auditNext);
+    const r = await api('GET', `/api/admin/audit?${params}`);
     auditNext = r.next;
     $('audit-more').hidden = r.next === null;
     const rows = r.entries.map((e) => h('tr', null,
@@ -819,6 +850,8 @@
   }
   $('audit-form').addEventListener('submit', (e) => { e.preventDefault(); busy(e.submitter, () => loadAudit(false)); });
   $('audit-more').addEventListener('click', (e) => busy(e.currentTarget, () => loadAudit(true)));
+  $('audit-kind').addEventListener('change', () => loadAudit(false).catch((e) => toast(e.message, 'error')));
+  $('audit-clear').addEventListener('click', (e) => { $('audit-form').reset(); busy(e.currentTarget, () => loadAudit(false)); });
   if (me.owner) { $('audit-tab').hidden = false; loaders.audit = () => loadAudit(false); }
 
   // ======================================================================= Backup
@@ -855,5 +888,6 @@
   renderCalendar();
   renderUsers();
   renderQueue().catch(() => {});
+  renderVisits().catch(() => {});
   openTab(location.hash.slice(1) || 'overview');
 })();

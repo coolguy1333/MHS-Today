@@ -33,7 +33,7 @@ const MAX_POLLS = 50;
 module.exports = function groups(app) {
   const {
     route, state, db, log, config, HttpError, bad, isAdmin, getUser, canPostEvents, cleanText, cleanUrl, randomId, limiter,
-    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, notify, reports
+    today, cal, isPlainObject, hasOwn, num, publicCard, confirmedFriends, checkWords, notify, reports, isTeacher
   } = app;
   if (!Array.isArray(state.groups)) state.groups = [];
   const isId = (v) => typeof v === 'string' && /^[0-9a-f]{16}$/.test(v);
@@ -47,8 +47,11 @@ module.exports = function groups(app) {
   const isLeader = (g, user) => MANAGERS.includes(roleIn(g, user));
   const canManage = (g, user) => isLeader(g, user) || isAdmin(user);
   const leaders = (g) => Object.keys(g.members).filter((id) => MANAGERS.includes(g.members[id]));
-  // Anyone may see an approved group; a pending one only its members and admins.
-  const canSeeGroup = (g, user) => g.approved || !!roleIn(g, user) || isAdmin(user);
+  // Teachers join only as advisors, when a group's leaders invite them (advisorInvites: teacher ids).
+  const invitedTo = (g, user) => !!user && g.advisorInvites.includes(user.id);
+  // Students see every approved group; a pending one only its members and admins. Teachers see only
+  // the groups they advise or are invited to.
+  const canSeeGroup = (g, user) => (g.approved && !isTeacher(user)) || !!roleIn(g, user) || isAdmin(user) || invitedTo(g, user);
 
   function cleanGroupFields(b, partial) {
     const out = {};
@@ -89,7 +92,7 @@ module.exports = function groups(app) {
     return {
       id: g.id, name: g.name, kind: g.kind, description: g.description, joinPolicy: g.joinPolicy, approved: g.approved, advisor: g.advisor || '',
       memberCount: Object.keys(g.members).length,
-      myRole: role || (user && g.requests.includes(user.id) ? 'requested' : null)
+      myRole: role || (user && g.requests.includes(user.id) ? 'requested' : invitedTo(g, user) ? 'invited' : null)
     };
   }
   function groupDetail(g, user) {
@@ -101,7 +104,8 @@ module.exports = function groups(app) {
         ? Object.entries(g.members).map(([id, role]) => (getUser(id) ? { ...publicCard(getUser(id)), role } : null)).filter(Boolean)
           .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || a.name.localeCompare(b.name))
         : null,
-      requests: manage ? g.requests.map(getUser).filter(Boolean).map(publicCard) : null
+      requests: manage ? g.requests.map(getUser).filter(Boolean).map(publicCard) : null,
+      advisorInvites: manage ? g.advisorInvites.map(getUser).filter(Boolean).map(publicCard) : null
     };
   }
   const groupOr404 = (id, user) => {
@@ -122,12 +126,13 @@ module.exports = function groups(app) {
   route('GET', '/api/groups/:id', { auth: 'user' }, ({ user, params }) => groupDetail(groupOr404(params.id, user), user));
 
   route('POST', '/api/groups', { auth: 'user' }, ({ user, body }) => {
+    if (isTeacher(user)) throw new HttpError(403, 'Students start groups; their leaders can invite you as the advisor');
     const f = cleanGroupFields(body, false);
     checkWords(f.name, f.description, f.links.map((l) => l.title));
     if (nameTaken(f.name)) throw new HttpError(409, 'There is already a group with that name');
     if (state.groups.length >= MAX_GROUPS) throw bad('There are too many groups');
     if (!isAdmin(user) && !limiter.hit(`group:${user.id}`, 3, 86400e3)) throw new HttpError(429, 'You can start up to 3 groups a day');
-    const g = { id: randomId(), ...f, approved: isAdmin(user), members: { [user.id]: 'leader' }, requests: [], posts: [], polls: [], by: user.id, created: Date.now() };
+    const g = { id: randomId(), ...f, approved: isAdmin(user), members: { [user.id]: 'leader' }, requests: [], advisorInvites: [], posts: [], polls: [], by: user.id, created: Date.now() };
     state.groups.push(g);
     log(`Group ${g.id} created by ${user.id}${g.approved ? '' : ' (waiting for approval)'}`);
     db.save();
@@ -160,6 +165,7 @@ module.exports = function groups(app) {
 
   route('POST', '/api/groups/:id/join', { auth: 'user' }, ({ user, params }) => {
     const g = groupOr404(params.id, user);
+    if (isTeacher(user)) throw new HttpError(403, 'Teachers join a group when its leaders invite them as the advisor');
     if (!g.approved) throw bad('This group is waiting for an admin to approve it');
     if (!roleIn(g, user) && !g.requests.includes(user.id)) {
       if (Object.keys(g.members).length >= MAX_MEMBERS) throw bad('This group is full');
@@ -201,6 +207,52 @@ module.exports = function groups(app) {
       if (!hasOwn(g.members, target.id) && Object.keys(g.members).length >= MAX_MEMBERS) throw bad('This group is full');
       g.members[target.id] = body.role;
     }
+    db.save();
+    return groupDetail(g, user);
+  });
+
+  // ---------- advisors: leaders invite a teacher; the teacher accepts (or declines) ----------
+  // Teachers to invite, by name (leaders only; teachers are staff, so leaders may find them).
+  route('GET', '/api/groups/:id/teachers', { auth: 'user' }, ({ user, params, url }) => {
+    const g = groupOr404(params.id, user);
+    if (!canManage(g, user)) throw new HttpError(403, 'Only leaders can invite an advisor');
+    const q = cleanText(url.searchParams.get('q'), 60).toLowerCase();
+    if (q.length < 2) return [];
+    return Object.values(state.users)
+      .filter((u) => isTeacher(u) && !u.archived && !hasOwn(g.members, u.id) && !g.advisorInvites.includes(u.id)
+        && `${u.name} ${u.givenName} ${u.familyName}`.toLowerCase().includes(q))
+      .slice(0, 10).map(publicCard);
+  });
+  route('POST', '/api/groups/:id/advisor-invites', { auth: 'user' }, ({ user, params, body }) => {
+    const g = groupOr404(params.id, user);
+    if (!canManage(g, user)) throw new HttpError(403, 'Only leaders can invite an advisor');
+    const t = getUser(body.id);
+    if (!t || !isTeacher(t) || t.archived) throw new HttpError(404, 'That teacher isn\'t on MHS Today');
+    if (hasOwn(g.members, t.id)) throw bad(`${t.name} is already in the group`);
+    if (!g.advisorInvites.includes(t.id)) {
+      if (g.advisorInvites.length >= 20) throw bad('Too many invitations are waiting');
+      g.advisorInvites.push(t.id);
+      notify([t.id], 'groups', { title: `${g.name} invited you`, body: 'Be the group\'s advisor on MHS Today.', url: '/groups.html' });
+      db.save();
+    }
+    return groupDetail(g, user);
+  });
+  // Leaders take an invitation back; the teacher declines it.
+  route('DELETE', '/api/groups/:id/advisor-invites/:uid', { auth: 'user' }, ({ user, params }) => {
+    const g = groupOr404(params.id, user);
+    if (!canManage(g, user) && user.id !== params.uid) throw new HttpError(403, 'Only leaders can take back an invitation');
+    g.advisorInvites = g.advisorInvites.filter((id) => id !== params.uid);
+    db.save();
+    return { ok: true };
+  });
+  route('POST', '/api/groups/:id/advisor-invites/accept', { auth: 'user' }, ({ user, params }) => {
+    const g = groupOr404(params.id, user);
+    if (!invitedTo(g, user)) throw new HttpError(404, 'That invitation is gone');
+    if (Object.keys(g.members).length >= MAX_MEMBERS) throw bad('This group is full');
+    g.advisorInvites = g.advisorInvites.filter((id) => id !== user.id);
+    g.requests = g.requests.filter((id) => id !== user.id);
+    g.members[user.id] = 'advisor';
+    log(`${user.id} is now an advisor of group ${g.id}`);
     db.save();
     return groupDetail(g, user);
   });
@@ -445,7 +497,8 @@ module.exports = function groups(app) {
   route('GET', '/api/events', { auth: 'none' }, ({ user, url }) => {
     const only = url.searchParams.get('group');
     return state.events
-      .filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && (!only || e.groupId === only))
+      .filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && (!only || e.groupId === only)
+        && (!isTeacher(user) || (e.groupId && findGroup(e.groupId) && roleIn(findGroup(e.groupId), user)))) // teachers: their groups' events
       .sort(byDateTime).map((e) => eventView(e, user));
   });
 
@@ -460,6 +513,7 @@ module.exports = function groups(app) {
       groupId = g.id;
     }
     if (visibility === 'group' && !groupId) throw bad('Pick a group');
+    if (isTeacher(user) && !groupId) throw new HttpError(403, 'Teachers add events for the groups they advise');
     if (visibility === 'public' && !groupId && !canPostEvents(user)) {
       throw new HttpError(403, config.eventPosting === 'admins' ? 'Only admins can add events' : 'Only verified people can add events. Ask an admin to verify you.');
     }
@@ -560,10 +614,12 @@ module.exports = function groups(app) {
       id: e.repeat ? `${e.id}-${d}` : e.id, date: d, time: e.time, title: e.title,
       people: [...new Set([e.by, ...e.invitees, ...(e.signup ? e.signup.people : [])].filter(Boolean))]
     }))),
-    calendarItems: (user) => state.events.filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && mineForCalendar(e, user)).flatMap((e) => {
+    // the calendar feed: your events (made, invited, signed up, your groups'); `all`: every event you can see
+    calendarItems: (user, { all = false } = {}) => state.events.filter((e) => canSee(e, user) && reports.visible('event', e.id, e.by, user) && (all ? !isTeacher(user) || (e.groupId && findGroup(e.groupId) && roleIn(findGroup(e.groupId), user)) : mineForCalendar(e, user))).flatMap((e) => {
       const g = e.groupId ? findGroup(e.groupId) : null;
       const item = (date, uid) => ({
-        uid, date, time: e.time || null, endDate: e.endDate, endTime: e.endTime, title: e.title, location: e.location,
+        uid, kind: g ? 'group' : 'event', category: e.category, group: g ? g.name : null, mine: !!mineForCalendar(e, user), details: e.description,
+        date, time: e.time || null, endDate: e.endDate, endTime: e.endTime, title: e.title, location: e.location,
         description: [g ? g.name : '', e.description].filter(Boolean).join(': ')
       });
       // each meeting of a repeating event is its own calendar entry (two weeks back, six months ahead)
@@ -600,6 +656,7 @@ module.exports = function groups(app) {
           out.push({
             id: g.id, ...f, approved: g.approved === true, members,
             requests: Array.isArray(g.requests) ? [...new Set(g.requests.filter((id) => hasOwn(users, id) && !hasOwn(members, id)))] : [],
+            advisorInvites: Array.isArray(g.advisorInvites) ? [...new Set(g.advisorInvites.filter((id) => hasOwn(users, id) && users[id].role === 'teacher' && !hasOwn(members, id)))].slice(0, 20) : [],
             posts, polls, by: hasOwn(users, g.by) ? g.by : null, created: num(g.created)
           });
         } catch { /* skip invalid groups */ }
@@ -640,6 +697,7 @@ module.exports = function groups(app) {
       }
       for (const g of [...state.groups]) {
         g.requests = g.requests.filter((x) => x !== id);
+        g.advisorInvites = g.advisorInvites.filter((x) => x !== id);
         g.posts = g.posts.filter((p) => p.by !== id);
         for (const p of g.posts) p.replies = p.replies.filter((r) => r.by !== id);
         for (const p of g.polls) delete p.votes[id];
@@ -655,6 +713,7 @@ module.exports = function groups(app) {
       for (const g of state.groups) {
         if (!Array.isArray(g.posts)) g.posts = [];
         if (!Array.isArray(g.polls)) g.polls = [];
+        if (!Array.isArray(g.advisorInvites)) g.advisorInvites = [];
       }
       for (const e of state.events) {
         if (!VISIBILITY.includes(e.visibility)) e.visibility = 'public';

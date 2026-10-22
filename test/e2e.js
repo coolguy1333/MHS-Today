@@ -40,7 +40,7 @@ const step = (m) => console.log('•', m);
     page.on('dialog', (d) => d.accept());
     return { name, context, page, identity };
   }
-  async function signIn(u, next) {
+  async function signIn(u, next, role = 'student') {
     mock.identity = { email_verified: true, hd: 'school.test', ...u.identity };
     await u.page.goto(base + '/login.html' + (next ? `?next=${encodeURIComponent(next)}` : ''));
     await u.page.click('#google-btn');
@@ -48,6 +48,7 @@ const step = (m) => console.log('•', m);
     // first sign-in: read and agree to the Privacy & Terms, then on to where they were going
     await u.page.waitForLoadState('networkidle');
     if (/terms\.html/.test(u.page.url())) {
+      if (await u.page.locator('#role-pick').isVisible()) await u.page.click(`#role-pick .choice:has(input[value="${role}"])`); // a new account: student or teacher
       await u.page.check('#agree-box');
       await u.page.click('#agree-btn');
       await u.page.waitForURL((url) => !/terms\.html/.test(url.pathname), { timeout: 10000 });
@@ -69,7 +70,7 @@ const step = (m) => console.log('•', m);
   // signed out, Today is the only page: the nav has just Today and Sign in, the rest ask you to sign in
   await anon.page.waitForSelector('.nav-auth a[href="login.html"]');
   assert.deepEqual(await anon.page.locator('.nav-wide a').allInnerTexts(), ['Today']);
-  for (const pg of ['events', 'lunch', 'links', 'groups']) {
+  for (const pg of ['events', 'lunch', 'links', 'groups', 'calendar']) {
     await anon.page.goto(`${base}/${pg}.html`);
     await anon.page.waitForURL(new RegExp(`login\\.html\\?next=${pg}\\.html`));
   }
@@ -223,8 +224,7 @@ const step = (m) => console.log('•', m);
   assert.match(status, /Chemistry \(Rm 305\)/);
   assert.match(status, /Next: Hour 4 \(\+ Lunch\) – Spanish 2 \(Rm 118\) at 10:56 AM/);
   assert.match(await text(sp, '#day-head'), /Thursday, October 1[\s\S]*Day A/);
-  assert.match(await text(sp, '#schedule-body tr.current'), /Hour 3[\s\S]*9:49 AM – 10:51 AM[\s\S]*Chemistry/);
-  assert.match(await text(sp, '#schedule-body'), /9:44 AM – 9:49 AM · MTV & Announcements/);
+  assert.match(await text(sp, '#schedule-body tr.current'), /Hour 3[\s\S]*9:44 AM – 10:51 AM[\s\S]*Starts with MTV & Announcements \(9:44 AM – 9:49 AM\)[\s\S]*Chemistry/);
   // Hour 4 on Day A is Green, so it shows Green's B Lunch time
   assert.match(await text(sp, '#schedule-body tr[data-hour="4"]'), /Spanish 2[\s\S]*Green[\s\S]*B Lunch 11:31 AM – 11:56 AM/);
   assert.equal(await sp.evaluate(() => window.__xss), undefined);
@@ -308,7 +308,8 @@ const step = (m) => console.log('•', m);
   assert.match(await text(bp, '#schedule-body'), /Algebra/i);
   assert.match(await text(bp, '#schedule-body tr[data-hour="2"]'), /With Ann L\./);
   assert.doesNotMatch(await text(bp, '#schedule-body tr[data-hour="3"]'), /With/);
-  assert.match(await text(bp, '#schedule-body tr[data-hour="4"]'), /Art[\s\S]*B Lunch 11:31 AM – 11:56 AM[\s\S]*Lunch with Ann L\./);
+  assert.match(await text(bp, '#schedule-body tr[data-hour="4"]'), /Art[\s\S]*B Lunch 11:31 AM – 11:56 AM/);
+  assert.doesNotMatch(await text(bp, '#schedule-body tr[data-hour="4"]'), /Lunch with/, 'no lunch-buddy list on Today');
   await bp.screenshot({ path: path.join(SHOTS, 'dashboard-ben-mobile.png'), fullPage: true });
   step('friends: accepted; friend shown in current class; shared-class and shared-lunch hints on matching hours only');
 
@@ -373,6 +374,13 @@ const step = (m) => console.log('•', m);
   // ---------------------------------------------------------------- a profile photo: shrunk in the page, approved by an admin
   await sp.goto(base + '/account.html'); await sp.waitForSelector('#photo-status');
   await sp.setInputFiles('#photo-file', path.join(R, 'public', 'app-icon-512.png'));
+  // place it: zoom in, drag it a little, then use it
+  await sp.waitForSelector('.crop-dialog[open] .crop-stage');
+  await sp.locator('.crop-dialog input[type=range]').fill('1.5');
+  const stage = await sp.locator('.crop-stage').boundingBox();
+  await sp.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2); await sp.mouse.down();
+  await sp.mouse.move(stage.x + stage.width / 2 + 30, stage.y + stage.height / 2 + 20, { steps: 4 }); await sp.mouse.up();
+  await sp.click('.crop-dialog button:has-text("Use this photo")');
   await sp.waitForSelector('#photo-status:has-text("Waiting for an admin")');
   const pendingSrc = await sp.locator('#photo-status img').getAttribute('src');
   assert.match(pendingSrc, /^\/photos\/[0-9a-f]{32}\.jpg$/);
@@ -382,7 +390,7 @@ const step = (m) => console.log('•', m);
   await ap.click('#photo-queue button[aria-label="Approve Annie\'s photo"]');
   await ap.waitForSelector('.toast:has-text("Approved")');
   await bp.goto(base + '/friends.html'); await bp.waitForSelector('#friends img.avatar.photo');
-  step('profile photo: uploaded (shrunk to 256×256), approved in Admin → Review, friends see it');
+  step('profile photo: placed and zoomed, uploaded (256×256), approved in Admin → Review, friends see it');
 
   // ---------------------------------------------------------------- feedback, answered in the app; the audit log
   await sp.goto(base + '/feedback.html'); await sp.waitForSelector('#feedback-form');
@@ -437,7 +445,7 @@ const step = (m) => console.log('•', m);
   // ---------------------------------------------------------------- phones: no sideways scrolling anywhere
   const phone = await newUser('phone', { sub: 'a1', email: 'admin@school.test', given_name: 'Ada', family_name: 'Min' }, { viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
   await signIn(phone);
-  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'groups', 'friends', 'links', 'account', 'admin', 'login', 'feedback', 'terms', 'about']) {
+  for (const pg of ['index', 'schedule', 'classwork', 'lunch', 'events', 'calendar', 'groups', 'friends', 'links', 'account', 'admin', 'login', 'feedback', 'terms', 'about']) {
     await phone.page.goto(`${base}/${pg}.html`);
     await phone.page.waitForLoadState('networkidle');
     await phone.page.waitForTimeout(250);
@@ -457,7 +465,7 @@ const step = (m) => console.log('•', m);
   assert.equal(await pp.locator('.tabbar a.active').innerText(), 'Today');
   await pp.click('.tabbar button.tab');
   assert.equal(await pp.locator('.tabbar button.tab').getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Groups', 'Lunch', 'Links', 'Profile & my classes', 'Feedback', 'Admin', 'Sign out']);
+  assert.deepEqual(await pp.locator('#more-sheet a, #more-sheet button').allInnerTexts(), ['Calendar', 'Groups', 'Lunch', 'Links', 'Profile & my classes', 'Feedback', 'Admin', 'Sign out']);
   await pp.keyboard.press('Escape');
   assert.equal(await pp.locator('#more-sheet').isHidden(), true);
   await pp.click('.tabbar button.tab'); await pp.click('#more-sheet a:has-text("Groups")');

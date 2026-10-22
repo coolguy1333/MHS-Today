@@ -20,16 +20,17 @@
   <main class="container" id="main">
     <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <h1>Groups</h1>
-    <p class="muted">Clubs, sports and student groups. Find people into the same things, see each group's events, and join.</p>
+    <p class="muted student-only">Clubs, sports and student groups. Find people into the same things, see each group's events, and join.</p>
+    <p class="muted teacher-only">The clubs and groups you advise. Student leaders invite you; accept to run the group with them.</p>
     <div class="card">
-      <div class="filters">
+      <div class="filters student-only">
         <input type="search" id="q" placeholder="Search groups" aria-label="Search groups" />
         <select id="kind" aria-label="Kind of group"><option value="">All kinds</option><option value="club">Clubs</option><option value="sport">Sports</option><option value="group">Student groups</option></select>
         <label class="check"><input type="checkbox" id="mine" /><span>Only mine</span></label>
       </div>
       <div id="groups" class="group-grid"><p class="muted">Loading…</p></div>
     </div>
-    <details class="card" id="create-card">
+    <details class="card student-only" id="create-card">
       <summary>Start a group</summary>
       <p class="small muted">New groups show up after an admin approves them. You'll be the group's leader.</p>
       <form id="create-form" class="form-grid">
