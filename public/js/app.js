@@ -109,7 +109,7 @@ function getMe() { // { user | null, config }
 }
 // Teachers use Today (their own classes), the groups they advise, and their profile.
 const isTeacher = (user) => !!user && user.role === 'teacher';
-const TEACHER_PAGES = ['index', 'groups', 'group', 'account', 'schedule', 'feedback', 'terms', 'about', 'admin', 'login'];
+const TEACHER_PAGES = ['index', 'plans', 'groups', 'group', 'account', 'schedule', 'feedback', 'terms', 'about', 'admin', 'login'];
 const pageName = () => (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '') || 'index';
 async function requireLogin() {
   const me = await getMe();
@@ -126,6 +126,7 @@ const ICONS = {
   classwork: 'M9 11l3 3 8-8 M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11',
   friends: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7 M22 21v-1a6 6 0 0 0-4-5.6',
   groups: 'M5 21V4 M5 4h12l-2 4 2 4H5',
+  plans: 'M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6z M9 8h6 M9 12h6 M9 16h4',
   more: 'M4 6h16 M4 12h16 M4 18h16',
   login: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4 M10 17l5-5-5-5 M15 12H3'
 };
@@ -175,8 +176,9 @@ function renderNav(active) {
     document.body.classList.toggle('teacher', isTeacher(user)); // pages hide .student-only parts
     renderFooter(user);
     // teachers: Today and Groups (the groups they advise); signed out: Today
-    const links = isTeacher(user) ? ALL.filter(([, , key]) => ['dashboard', 'groups'].includes(key)) : user ? ALL : ALL.filter(([, , key]) => key === 'dashboard');
-    if (isTeacher(user)) TABS = ['dashboard', 'groups'];
+    const TEACHER_LINKS = [ALL[0], ['plans.html', 'Lesson plans', 'plans'], ALL.find(([, , key]) => key === 'groups')];
+    const links = isTeacher(user) ? TEACHER_LINKS : user ? ALL : ALL.filter(([, , key]) => key === 'dashboard');
+    if (isTeacher(user)) TABS = ['dashboard', 'plans', 'groups'];
     add(wide, links.map(([href, label, key]) => h('a', { href, ...current(key) }, label)));
     if (user) {
       add(auth,
@@ -373,6 +375,25 @@ function friendNowText(friend, live) {
 }
 // One event in a list: when, who can see it, its group, the sign-up list, and delete for organizers.
 // `reload` runs after a change.
+// ---- calendar links: everything in one, or school days / classes / events as separate calendars ----
+const CAL_PARTS = [['', 'Everything in one calendar', 'School days, tests and assignments, events and clubs together'],
+  ['school', 'School days', 'Each day\'s letter and hours, and days off'],
+  ['classes', 'Classes & assignments', 'Tests, quizzes, assignments, lesson plans and study sessions'],
+  ['events', 'Events & clubs', 'School events and your groups\' events']];
+// Google gets the https link: given webcal:// it fetches over plain http, sending the private link unencrypted.
+const googleCalUrl = (url) => `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(url)}`;
+function calendarLinksEl(feeds) {
+  return h('div', { class: 'cal-links' }, CAL_PARTS.map(([key, name, what]) => {
+    const url = key ? feeds.parts[key].url : feeds.url;
+    return h('div', { class: 'cal-link-row' + (key ? '' : ' all') },
+      h('div', null, h('strong', null, name), h('div', { class: 'small muted' }, what)),
+      h('div', { class: 'row nowrap' },
+        h('a', { class: 'btn small', href: googleCalUrl(url), target: '_blank', rel: 'noopener noreferrer' }, 'Google'),
+        h('a', { class: 'btn small secondary', href: url.replace(/^https?:/, 'webcal:') }, 'iPhone / Mac'),
+        h('button', { class: 'btn small secondary', type: 'button', 'aria-label': `Copy the ${name} link`, onclick: () => copyText(url) }, 'Copy link')));
+  }));
+}
+
 // ---- reporting something someone else posted ----
 const REPORT_REASONS = [['mean', 'Mean or bullying'], ['inappropriate', 'Inappropriate'], ['spam', 'Spam or nonsense'], ['private', "Shares someone's private info"], ['other', 'Something else']];
 // A small "Report" button; `what` names it for screen readers ("Pep rally", "Sam's post").

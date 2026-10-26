@@ -57,32 +57,31 @@
     );
   }
 
-  // ---- Simple mode: the clock, the block you're in, time left and what's next, big (a classroom
-  // screen, a Chromebook on the desk). It sits over the Today page, which stays as it is.
+  // ---- Simple mode: the clock, the block you're in and the time left, big (a classroom screen, a
+  // Chromebook on the desk). It sits over the Today page, which stays as it is.
   let simple = null; // { el, timer, wake }
   const countdown = (mins) => {
-    const s = Math.max(0, Math.ceil(mins * 60));
+    const s = Math.max(0, Math.round(mins * 60)); // whole seconds (the clock has no fractions; this undoes float noise)
     const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, '0');
     return hh ? `${hh}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
   };
   function simpleState() {
     const now = schoolClock(S.info);
     const day = dayInfo(S.info.calendar, now.date);
-    const out = { now, day, title: '', left: null, leftLabel: 'left', next: '' };
+    const out = { now, day, title: '', left: null, leftLabel: 'left' };
     if (!day.schoolDay) { out.title = noSchoolText(day); return out; }
     const name = (p) => {
       const c = classAt(S.classes, day.dayLetter, p.hour);
       if (MHSBell.outOfSchool(c)) return `${p.label} – out of school`;
       return c && !(p.hour === 'advisory' && c.name === 'Advisory') ? `${p.label} – ${c.name}` : p.label;
     };
-    const nextLine = (p) => (p ? `Next: ${name(p)} at ${formatTime(p.start)}` : 'Last block of the day');
     const cur = getCurrentPeriod(day.scheduleType, now.minutes);
     const lunch = cur.status === 'in-class' && cur.period.hour === LUNCH_HOUR ? lunchFor(S.classes, day.dayLetter) : null;
     const eating = lunch && atLunch(day.scheduleType, lunch, now.minutes);
-    if (eating) Object.assign(out, { title: `${lunch} Lunch`, left: eating.minutesLeft, next: eating.minutesLeft < cur.minutesLeft ? `Then ${name(cur.period)} until ${formatTime(cur.period.end)}` : nextLine(cur.next) });
-    else if (cur.status === 'in-class') Object.assign(out, { title: name(cur.period), left: cur.minutesLeft, next: nextLine(cur.next) });
-    else if (cur.status === 'passing') Object.assign(out, { title: 'Passing period', left: cur.minutesUntil, leftLabel: 'until the bell', next: nextLine(cur.next) });
-    else if (cur.status === 'before-school') Object.assign(out, { title: 'Before school', left: cur.minutesUntil, leftLabel: 'until school starts', next: `First: ${name(cur.next)} at ${formatTime(cur.next.start)}` });
+    if (eating) Object.assign(out, { title: `${lunch} Lunch`, left: eating.minutesLeft });
+    else if (cur.status === 'in-class') Object.assign(out, { title: name(cur.period), left: cur.minutesLeft });
+    else if (cur.status === 'passing') Object.assign(out, { title: 'Passing period', left: cur.minutesUntil, leftLabel: 'until the bell' });
+    else if (cur.status === 'before-school') Object.assign(out, { title: 'Before school', left: cur.minutesUntil, leftLabel: 'until school starts' });
     else out.title = "School's out";
     return out;
   }
@@ -97,7 +96,14 @@
     q('.sm-left').hidden = st.left === null;
     q('.sm-left strong').textContent = st.left === null ? '' : countdown(st.left);
     q('.sm-left span').textContent = st.leftLabel;
-    q('.sm-next').textContent = st.next;
+  }
+  // Tick just after each second starts on the (server-corrected) clock, so the countdown goes down
+  // by exactly one every second: a plain 1-second timer drifts, then skips or repeats a number.
+  function tickSimple() {
+    if (!simple) return;
+    if (!document.hidden) paintSimple();
+    const ms = Date.now() + S.info.offset;
+    simple.timer = setTimeout(tickSimple, 1000 - (ms % 1000) + 15);
   }
   function openSimple() {
     if (simple || !S.info) return;
@@ -107,22 +113,21 @@
       h('div', { class: 'sm-date' }),
       h('div', { class: 'sm-clock', 'aria-live': 'off' }, '', h('span', { class: 'sm-ampm' })),
       h('div', { class: 'sm-title' }),
-      h('div', { class: 'sm-left' }, h('strong', null), h('span', null)),
-      h('div', { class: 'sm-next' }));
+      h('div', { class: 'sm-left' }, h('strong', null), h('span', null)));
     full.addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen()).catch(() => {}));
     el.addEventListener('fullscreenchange', () => { full.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; });
     el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.fullscreenElement) closeSimple(); });
     document.body.append(el);
     document.body.classList.add('simple-open');
-    simple = { el, timer: setInterval(() => { if (!document.hidden) paintSimple(); }, 1000), wake: null };
-    paintSimple();
+    simple = { el, timer: null, wake: null };
+    tickSimple();
     el.querySelector('.sm-btn:not([hidden])').focus();
     // keep the screen on while it's showing, where the browser allows it
     if (navigator.wakeLock) navigator.wakeLock.request('screen').then((w) => { if (simple) simple.wake = w; else w.release(); }).catch(() => {});
   }
   function closeSimple() {
     if (!simple) return;
-    clearInterval(simple.timer);
+    clearTimeout(simple.timer);
     if (simple.wake) simple.wake.release().catch(() => {});
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     simple.el.remove();
@@ -146,6 +151,13 @@
     return S.classItems.filter((i) => i.block === blockKey && i.due >= m.viewDate && i.due <= last)
       .map((i) => h('div', { class: 'due-line' }, h('span', { class: `badge kind-${i.kind}` }, KIND_LABEL[i.kind]), ` ${i.title} · ${fmtRelativeDay(i.due, m.now.date).replace(/^(Today|Tomorrow)$/, (w) => w.toLowerCase())}`));
   }
+  // the teacher's lesson plan for this class on the day shown (students: their teacher's; teachers: their own)
+  function planLine(blockKey, m) {
+    const plan = (S.plans || []).find((x) => x.block === blockKey && x.date === m.viewDate);
+    if (!plan) return isTeacher(S.me) && m.view && m.view.schoolDay ? h('div', { class: 'small' }, h('a', { href: `plans.html?date=${m.viewDate}` }, '+ Add a lesson plan')) : null;
+    return h('div', { class: 'plan-line' }, h('strong', null, isTeacher(S.me) ? 'Your plan: ' : 'In class: '), plan.text,
+      isTeacher(S.me) ? [' ', h('a', { class: 'small', href: `plans.html?date=${m.viewDate}` }, 'Edit')] : null);
+  }
   function classCell(p, cls, m, hasAny) {
     if (p.hour === null) return p.info ? h('span', { class: 'muted small' }, p.info) : null; // not a class (a custom day's assembly…)
     if (p.hour === 'advisory') {
@@ -166,6 +178,7 @@
         h('div', null, colorDot(block.color), h('strong', null, cls.name), cls.room ? ` · Rm ${cls.room}` : null),
         h('div', { class: 'small muted' }, [block.label, cls.teacher].filter(Boolean).join(' · ')),
         buddies.length ? h('div', { class: 'with' }, `With ${listNames(buddies)}`) : null,
+        planLine(block.key, m),
         dueLines(block.key, m),
         p.hour === LUNCH_HOUR ? lunchLine(m) : null
       ];
@@ -427,21 +440,23 @@
   async function load() {
     try {
       const [info, me, events, notices] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events'), api('GET', '/api/notices')]);
-      let classes = {}, friends = [], tasks = null, classItems = [];
-      if (isTeacher(me.user)) classes = await api('GET', '/api/classes'); // teachers: their own classes; no friends, events or assignments
+      let classes = {}, friends = [], tasks = null, classItems = [], plans = [];
+      const now = schoolClock(info).date;
+      const planRange = `/api/plans?from=${MHSCalendar.addDays(now, -3)}&to=${MHSCalendar.addDays(now, 21)}`; // teachers' lesson plans
+      if (isTeacher(me.user)) [classes, plans] = await Promise.all([api('GET', '/api/classes'), api('GET', planRange)]); // teachers: their own classes and plans; no friends, events or assignments
       else if (me.user) {
         // Google Tasks can be slow or unreachable; the rest of the page doesn't wait on it failing
-        const [c, f, t, ci] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
+        const [c, f, t, ci, pl] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
           api('GET', '/api/tasks').catch((e) => (e.status === 409 ? { available: true, connected: false } : { connected: true, error: e.message, tasks: [] })),
-          api('GET', '/api/classwork').catch(() => [])]);
-        classes = c; friends = f.friends; tasks = t; classItems = ci;
+          api('GET', '/api/classwork').catch(() => []), api('GET', planRange).catch(() => [])]);
+        classes = c; friends = f.friends; tasks = t; classItems = ci; plans = pl;
       }
       S.info = info; // always keep the newest clock offset
-      const key = JSON.stringify([info.calendar, events, classes, friends, tasks, classItems, notices, me.user && me.user.admin]);
+      const key = JSON.stringify([info.calendar, events, classes, friends, tasks, classItems, plans, notices, me.user && me.user.admin]);
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events: isTeacher(me.user) ? [] : events, tasks, classItems, notices });
+      Object.assign(S, { me: me.user, classes, friends, events: isTeacher(me.user) ? [] : events, tasks, classItems, plans, notices });
       document.body.classList.toggle('teacher', isTeacher(me.user));
       S.lastDate = schoolClock(info).date;
       renderAll();

@@ -152,3 +152,31 @@ test('calendar page items: every event you can see, your classes\' tests, your s
   assert.deepEqual((await t.get('/api/me/calendar/items')).data.items.map((i) => i.title), ['Build night'], 'teachers: their groups only');
   assert.ok(lead.id);
 });
+
+test('lesson plans: a teacher writes what each class is doing; their students (same block, class and teacher) see it', async () => {
+  const ctx = await startApp({ mock });
+  const t = await teacher(ctx, 5); // Jason Wienke
+  const kim = await as(ctx, 1, { given_name: 'Kim' });
+  const lee = await as(ctx, 2, { given_name: 'Lee' });
+  const max = await as(ctx, 3, { given_name: 'Max' });
+  await t.put('/api/classes', { red: { name: 'Machine Tool I' }, pink: { name: 'Engineering' } });
+  await kim.put('/api/classes', { red: { name: 'Machine Tool I', teacher: 'Mr. Wienke' } });
+  await lee.put('/api/classes', { red: { name: 'Machine Tool I', teacher: 'Smith' } });      // another teacher
+  await max.put('/api/classes', { blue: { name: 'Machine Tool I', teacher: 'Wienke' } });    // another section (block)
+  const day = cal.addDays(cal.schoolNow('America/Chicago').date, 1);
+  assert.equal((await kim.put('/api/plans', { block: 'red', date: day, text: 'x' })).status, 403, 'only teachers');
+  assert.equal((await t.put('/api/plans', { block: 'blue', date: day, text: 'x' })).status, 400, 'one of their classes');
+  assert.equal((await t.put('/api/plans', { block: 'red', date: '2020-01-01', text: 'x' })).status, 400);
+  const p = (await t.put('/api/plans', { block: 'red', date: day, text: '  Lathe safety quiz\nThen: facing cuts  ' })).data;
+  assert.deepEqual([p.className, p.text, p.teacher], ['Machine Tool I', 'Lathe safety quiz\nThen: facing cuts', 'Jason W.']);
+  await t.put('/api/plans', { block: 'red', date: day, text: 'Lathe safety quiz' }); // edit: still one plan
+  await t.put('/api/plans', { block: 'pink', date: day, text: 'Sketching' });
+  assert.deepEqual((await t.get('/api/plans')).data.map((x) => x.text), ['Lathe safety quiz', 'Sketching']);
+  assert.deepEqual((await kim.get('/api/plans')).data.map((x) => [x.className, x.text, x.block]), [['Machine Tool I', 'Lathe safety quiz', 'red']]);
+  assert.deepEqual((await lee.get('/api/plans')).data, []);
+  assert.deepEqual((await max.get('/api/plans')).data, []);
+  assert.ok((await kim.get('/api/me/calendar/items')).data.items.some((i) => i.kind === 'plan' && i.title === 'Machine Tool I: Lathe safety quiz'));
+  // empty text removes it
+  await t.put('/api/plans', { block: 'red', date: day, text: '   ' });
+  assert.deepEqual((await kim.get('/api/plans')).data, []);
+});

@@ -302,42 +302,36 @@
   renderNotify().catch((e) => fill($('notify-body'), h('p', { class: 'notice error' }, e.message)));
 
   // ---- calendar sync
-  async function renderCalendar(url) {
+  async function renderCalendar(feeds) {
     const box = $('cal-body');
-    if (!url) {
+    if (!feeds.url) {
       fill(box, h('button', {
         class: 'btn small', type: 'button',
-        onclick: (e) => busy(e.currentTarget, async () => renderCalendar((await api('POST', '/api/me/calendar', {})).url))
-      }, 'Get my calendar link'));
+        onclick: (e) => busy(e.currentTarget, async () => renderCalendar(await api('POST', '/api/me/calendar', {})))
+      }, 'Get my calendar links'));
       return;
     }
-    const webcal = url.replace(/^https?:/, 'webcal:');
-    const field = h('input', { type: 'text', readonly: true, value: url, 'aria-label': 'Your private calendar link' });
     fill(box,
-      h('div', { class: 'row' },
-        h('a', { class: 'btn small', href: webcal }, 'Add to iPhone / Mac calendar'),
-        // Google gets the https link: given webcal:// it fetches over plain http, sending the private link unencrypted.
-        h('a', { class: 'btn small secondary', href: `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(url)}`, target: '_blank', rel: 'noopener noreferrer' }, 'Add to Google Calendar')),
+      h('p', { class: 'small muted' }, 'Add everything as one calendar, or each part as its own (its own color, and you can turn each one on or off).'),
+      calendarLinksEl(feeds),
       h('details', { class: 'small' }, h('summary', null, 'Using Google Calendar?'),
         h('ul', null,
-          h('li', null, 'Add it on a computer: the Google Calendar phone app can\'t add calendars from a link. Use the button above, or on ',
+          h('li', null, 'Add it on a computer: the Google Calendar phone app can\'t add calendars from a link. Use a Google button above, or on ',
             h('a', { href: 'https://calendar.google.com/calendar/r/settings/addbyurl', target: '_blank', rel: 'noopener noreferrer' }, 'calendar.google.com'),
-            ' choose ', h('em', null, 'Other calendars → + → From URL'), ' and paste the link below.'),
+            ' choose ', h('em', null, 'Other calendars → + → From URL'), ' and paste a copied link.'),
           h('li', null, 'It then shows up in the Google Calendar app on your phone (if not, open the app\'s settings and turn on sync for "MHS Today").'),
           h('li', null, 'Google checks for changes every few hours, so new classwork or events can take a while to appear. Apple Calendar updates more often.'))),
-      h('label', { class: 'stack small' }, h('span', null, 'Or copy the link into any calendar app ("subscribe" or "add from URL"):'),
-        h('span', { class: 'inline-field' }, field, h('button', { class: 'btn small secondary', type: 'button', onclick: () => copyText(url) }, 'Copy'))),
-      h('p', { class: 'small muted' }, 'Keep this link private: anyone with it can see what is in it. ',
+      h('p', { class: 'small muted' }, 'Keep these links private: anyone with one can see what is in it. Any other calendar app works too: "subscribe" or "add from URL" with a copied link. ',
         h('button', {
           class: 'linklike', type: 'button',
-          onclick: (e) => { if (confirm('Make a new link? The old one stops working, so calendars using it stop updating.')) busy(e.currentTarget, async () => renderCalendar((await api('POST', '/api/me/calendar', {})).url)); }
-        }, 'Make a new link'), ' · ',
+          onclick: (e) => { if (confirm('Make new links? The old ones stop working, so calendars using them stop updating.')) busy(e.currentTarget, async () => renderCalendar(await api('POST', '/api/me/calendar', {}))); }
+        }, 'Make new links'), ' · ',
         h('button', {
           class: 'linklike danger', type: 'button',
-          onclick: (e) => busy(e.currentTarget, async () => { await api('DELETE', '/api/me/calendar'); toast('Calendar link turned off'); renderCalendar(null); })
+          onclick: (e) => busy(e.currentTarget, async () => { await api('DELETE', '/api/me/calendar'); toast('Calendar links turned off'); renderCalendar({ url: null }); })
         }, 'Turn off')));
   }
-  api('GET', '/api/me/calendar').then((r) => renderCalendar(r.url)).catch((e) => fill($('cal-body'), h('p', { class: 'notice error' }, e.message)));
+  api('GET', '/api/me/calendar').then(renderCalendar).catch((e) => fill($('cal-body'), h('p', { class: 'notice error' }, e.message)));
 
   const confirmBox = $('confirm-delete');
   confirmBox.addEventListener('input', () => { $('delete-btn').disabled = confirmBox.value.trim().toUpperCase() !== 'DELETE'; });

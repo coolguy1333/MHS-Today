@@ -9,15 +9,23 @@ const crypto = require('node:crypto');
 module.exports = function icalendar(app) {
   const { route, state, db, config, HttpError, limiter, today, cal, bell, features } = app;
 
-  const feedUrl = (u) => (u.calendarToken ? `${config.publicUrl}/cal/${u.calendarToken}.ics` : null);
+  // One link with everything, and one per part, so each can be its own calendar in Google
+  // Calendar (its own name, color and on/off switch): /cal/<token>.ics, /cal/<token>-school.ics …
+  const PARTS = {
+    school: { name: 'MHS Today · School days', kinds: ['school'] },
+    classes: { name: 'MHS Today · Classes & assignments', kinds: ['classwork', 'study', 'plan'] },
+    events: { name: 'MHS Today · Events & clubs', kinds: ['event', 'group'] }
+  };
+  const feedUrl = (u, part) => (u.calendarToken ? `${config.publicUrl}/cal/${u.calendarToken}${part ? `-${part}` : ''}.ics` : null);
+  const feeds = (u) => (u.calendarToken ? { url: feedUrl(u), parts: Object.fromEntries(Object.entries(PARTS).map(([k, p]) => [k, { url: feedUrl(u, k), name: p.name }])) } : { url: null, parts: null });
   const userByToken = (t) => (/^[0-9a-f]{48}$/.test(t) ? Object.values(state.users).find((u) => u.calendarToken === t) || null : null);
 
-  route('GET', '/api/me/calendar', { auth: 'user' }, ({ user }) => ({ url: feedUrl(user) }));
+  route('GET', '/api/me/calendar', { auth: 'user' }, ({ user }) => feeds(user));
   // Make a link, or replace the old one (the old link stops working).
   route('POST', '/api/me/calendar', { auth: 'user' }, ({ user }) => {
     user.calendarToken = crypto.randomBytes(24).toString('hex');
     db.save();
-    return { url: feedUrl(user) };
+    return feeds(user);
   });
   // Everything for the Calendar page: every event you can see (not only yours), tests and assignments
   // for your classes, and your study sessions; school days and days off come from /api/calendar.
@@ -27,7 +35,7 @@ module.exports = function icalendar(app) {
   route('DELETE', '/api/me/calendar', { auth: 'user' }, ({ user }) => {
     delete user.calendarToken;
     db.save();
-    return { url: null };
+    return { url: null, parts: null };
   });
 
   // ---------- iCalendar text ----------
@@ -77,24 +85,25 @@ module.exports = function icalendar(app) {
       const custom = c.customTypes[info.scheduleType];
       const title = [info.dayLetter ? `Day ${info.dayLetter}` : 'School day', custom ? custom.label : TYPE_NOTES[info.scheduleType]].filter(Boolean).join(' · ');
       out.push({
-        uid: `day-${d}`, date: d, time: DAY_START, minutes: bell.timeToMinutes(end) - bell.timeToMinutes(DAY_START), title,
+        uid: `day-${d}`, kind: 'school', date: d, time: DAY_START, minutes: bell.timeToMinutes(end) - bell.timeToMinutes(DAY_START), title,
         description: `School day until ${bell.formatTime(end)}${info.dayLetter ? ` (Day ${info.dayLetter})` : ''}`
       });
     }
     return out;
   }
 
-  function build(user) {
+  // `part`: null for everything, or a key of PARTS
+  function build(user, part = null) {
     const now = Date.now();
     const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MHS Today//Calendar//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
-      'X-WR-CALNAME:MHS Today', `X-WR-TIMEZONE:${config.tz}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
+      `X-WR-CALNAME:${part ? PARTS[part].name : 'MHS Today'}`, `X-WR-TIMEZONE:${config.tz}`, 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
     const items = features.flatMap((f) => (f.calendarItems ? f.calendarItems(user) : []));
     const t = today();
     items.push(...schoolDays(t));
     for (const [date, label] of Object.entries(state.calendar.noSchool)) {
-      if (date >= cal.addDays(t, -30)) items.push({ uid: `noschool-${date}`, date, title: label ? `No school: ${label}` : 'No school' });
+      if (date >= cal.addDays(t, -30)) items.push({ uid: `noschool-${date}`, kind: 'school', date, title: label ? `No school: ${label}` : 'No school' });
     }
-    for (const it of items) {
+    for (const it of part ? items.filter((i) => PARTS[part].kinds.includes(i.kind)) : items) {
       lines.push('BEGIN:VEVENT', `UID:${it.uid}@mhs-hub` /* kept after the rename so subscribed calendars update instead of duplicating */, `DTSTAMP:${stamp(now)}`);
       const last = it.endDate || it.date; // events can end on a later day
       if (it.time) {
@@ -116,11 +125,11 @@ module.exports = function icalendar(app) {
   // GET /cal/<token>.ics (served outside /api: calendar apps send no cookies or custom headers)
   function feed(req, res, url) {
     if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
-    const m = /^\/cal\/([0-9a-f]{48})\.ics$/.exec(url.pathname);
+    const m = /^\/cal\/([0-9a-f]{48})(?:-(school|classes|events))?\.ics$/.exec(url.pathname);
     const user = m ? userByToken(m[1]) : null;
     if (!user) throw new HttpError(404, 'Not found');
-    if (!limiter.hit(`cal:${user.id}`, 120, 3600e3)) throw new HttpError(429, 'Too many requests');
-    const body = build(user);
+    if (!limiter.hit(`cal:${user.id}`, 240, 3600e3)) throw new HttpError(429, 'Too many requests');
+    const body = build(user, m[2] || null);
     res.writeHead(200, {
       'Content-Type': 'text/calendar; charset=utf-8', 'Content-Length': Buffer.byteLength(body),
       'Cache-Control': 'private, max-age=300', 'Content-Disposition': 'inline; filename="mhs-today.ics"'

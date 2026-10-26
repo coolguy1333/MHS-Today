@@ -680,7 +680,6 @@ body.simple-open { overflow: hidden; }
 .simple-mode .sm-left[hidden] { display: none; }
 .simple-mode .sm-left strong { font-size: clamp(3.4rem, 13vw, 7.5rem); font-variant-numeric: tabular-nums; line-height: 1; }
 .simple-mode .sm-left span { font-size: clamp(1rem, 2.6vw, 1.8rem); opacity: 0.8; }
-.simple-mode .sm-next { font-size: clamp(1rem, 2.6vw, 1.8rem); opacity: 0.9; max-width: 90vw; }
 .choice-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px; }
 body.teacher .student-only { display: none !important; }
 .names-only .slot { grid-template-columns: 110px 1fr 7.5rem; }
@@ -702,7 +701,7 @@ body:not(.teacher) .teacher-only { display: none !important; }
 .cal-filter.on { color: var(--text); border-color: var(--text); }
 .cal-filter:not(.on) .cal-dot { opacity: 0.3; }
 .cal-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--k); }
-.kind-event { --k: #2f6fbf; } .kind-group { --k: #16a34a; } .kind-classwork { --k: #e0731d; } .kind-study { --k: #9b5de5; } .kind-off { --k: #8a8f98; }
+.kind-event { --k: #2f6fbf; } .kind-group { --k: #16a34a; } .kind-classwork { --k: #e0731d; } .kind-study { --k: #9b5de5; } .kind-plan { --k: #0e9aa7; } .kind-off { --k: #8a8f98; }
 .cal-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 0.7fr)); gap: 4px; }
 .cal-head { text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; padding: 2px 0; }
 .cal-cell { display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-height: 96px; padding: 5px; text-align: left; font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; overflow: hidden; }
@@ -712,7 +711,7 @@ body:not(.teacher) .teacher-only { display: none !important; }
 .cal-cell.today { border: 2px solid var(--gold-edge); }
 .cal-cell.picked { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary) inset; }
 .cal-num { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
-.cal-letter { font-size: 0.7rem; padding: 0 6px; border-radius: 999px; background: var(--primary); color: #fff; }
+.cal-letter { font-size: 0.7rem; padding: 0 6px; border-radius: 999px; background: var(--primary); color: var(--on-primary); }
 .cal-off { font-size: 0.72rem; color: var(--muted); font-style: italic; }
 .cal-chip { font-size: 0.72rem; line-height: 1.25; padding: 2px 5px; border-radius: 4px; border-left: 3px solid var(--k); background: color-mix(in srgb, var(--k) 14%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-time { font-weight: 700; margin-right: 3px; }
@@ -729,3 +728,23 @@ body:not(.teacher) .teacher-only { display: none !important; }
 }
 .nav-me .avatar { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55); }
 body.agreeing .tabbar, body.agreeing .nav-wide { display: none !important; } body.agreeing.has-tabbar { padding-bottom: 0; }
+/* calendar links (Profile → Notifications & calendar, Calendar page) */
+.cal-links { display: grid; gap: 8px; margin: 8px 0 12px; }
+.cal-link-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.cal-link-row.all { border-color: var(--primary); }
+/* ---- lesson plans (teachers) ---- */
+.plan-week { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.plan-day { display: grid; align-content: start; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-width: 0; }
+.plan-day.today { border: 2px solid var(--gold-edge); }
+.plan-day.off { background: var(--bg); }
+.pd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.pd-class { display: grid; gap: 4px; }
+.pd-class textarea { width: 100%; font: inherit; font-size: 0.9rem; resize: vertical; }
+.plan-state { min-height: 1em; }
+@media (max-width: 1000px) { .plan-week { grid-template-columns: 1fr; } }
+/* a teacher's plan next to the class (Today) */
+.plan-line { margin-top: 4px; padding: 4px 8px; border-left: 3px solid var(--primary); background: var(--bg); border-radius: 4px; font-size: 0.85rem; white-space: pre-line; }
+.about-lead p:first-child { font-size: 1.08rem; }
+.emoji-more { margin: 4px 0 8px; }
+.emoji-more summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; color: var(--link); padding: 4px 0; }
+.plan-day { scroll-margin-top: 12px; }

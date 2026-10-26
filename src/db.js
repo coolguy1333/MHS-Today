@@ -24,6 +24,7 @@ function emptyState() {
     feedback: [],      // see src/feedback.js
     reports: [],       // see src/reports.js
     classEvents: [],   // see src/classevents.js
+    plans: [],         // teachers' lesson plans: src/plans.js
     school: { graduation: null, graduated: null }, // graduation day (src/app.js: graduate())
     vapid: null,       // push notification keys (src/push.js); made on first start
     sentReminders: {}  // reminder key -> expiry, so each reminder goes out once
@@ -48,7 +49,7 @@ function openDb(dataDir, log = () => {}) {
     if (!isObj(parsed)) throw new Error(`${file} has an unexpected format.`);
     if (parsed.version === VERSION) {
       for (const k of ['users', 'sessions', 'calendar', 'vapid', 'sentReminders', 'school']) if (isObj(parsed[k])) state[k] = parsed[k];
-      for (const k of ['events', 'links', 'groups', 'tools', 'toolSuggestions', 'announcements', 'countdowns', 'blockedWords', 'studySessions', 'feedback', 'reports', 'classEvents']) {
+      for (const k of ['events', 'links', 'groups', 'tools', 'toolSuggestions', 'announcements', 'countdowns', 'blockedWords', 'studySessions', 'feedback', 'reports', 'classEvents', 'plans']) {
         if (Array.isArray(parsed[k])) state[k] = parsed[k];
       }
     } else if (parsed.version > VERSION) {

@@ -497,7 +497,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const tasks = require('./tasks')(shared);
   feedbackFeature = require('./feedback')(shared);
   photosFeature = require('./photos')(shared);
-  features.push(reports, require('./study')(shared), require('./classevents')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, photosFeature, calendarFeed);
+  features.push(reports, require('./study')(shared), require('./classevents')(shared), require('./plans')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, photosFeature, calendarFeed);
   push = require('./push')(shared);
   features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();

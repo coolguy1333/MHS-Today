@@ -84,8 +84,8 @@ test('calendar: a private feed link with my events, study sessions and no-school
   await ann.post('/api/study', { block: 'yellow', title: 'Quiz prep; ch. 1, 2', date: day(1), time: '15:00', place: 'Library' });
   await boss.put('/api/admin/calendar', { noSchool: { [day(5)]: 'Fall break' } });
 
-  assert.deepEqual((await ann.get('/api/me/calendar')).data, { url: null });
-  const { url } = (await ann.post('/api/me/calendar')).data;
+  assert.deepEqual((await ann.get('/api/me/calendar')).data, { url: null, parts: null });
+  const { url, parts } = (await ann.post('/api/me/calendar')).data;
   assert.match(url, /\/cal\/[0-9a-f]{48}\.ics$/);
   const path = new URL(url).pathname;
   const res = await ctx.client().raw('GET', path, { xhr: false });
@@ -103,6 +103,18 @@ test('calendar: a private feed link with my events, study sessions and no-school
   const start = /SUMMARY:Car wash/.test(ics) && ics.split('BEGIN:VEVENT').find((v) => v.includes('Car wash')).match(/DTSTART:(\d{8}T\d{6}Z)/)[1];
   const local = cal.schoolNow('America/Chicago', new Date(start.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/, '$1-$2-$3T$4:$5:$6Z')));
   assert.deepEqual([local.date, local.minutes], [day(4), 9 * 60 + 30]);
+
+  // each part on its own: its own calendar name and only its kind of item
+  const partIcs = async (k) => (await ctx.client().raw('GET', new URL(parts[k].url).pathname, { xhr: false })).text();
+  assert.deepEqual(Object.keys(parts), ['school', 'classes', 'events']);
+  const school = await partIcs('school'), classes = await partIcs('classes'), events = await partIcs('events');
+  assert.match(school, /X-WR-CALNAME:MHS Today · School days/);
+  assert.match(school, /No school: Fall break/); assert.doesNotMatch(school, /Car wash|Study:/);
+  assert.match(classes, /X-WR-CALNAME:MHS Today · Classes & assignments/);
+  assert.match(classes, /Study: Quiz prep/); assert.doesNotMatch(classes, /Car wash|No school/);
+  assert.match(events, /X-WR-CALNAME:MHS Today · Events & clubs/);
+  assert.match(events, /Car wash/); assert.doesNotMatch(events, /Study:|No school/);
+  assert.equal((await ctx.client().raw('GET', path.replace('.ics', '-homework.ics'), { xhr: false })).status, 404);
 
   // replacing the link kills the old one; turning it off too
   const { url: url2 } = (await ann.post('/api/me/calendar')).data;
