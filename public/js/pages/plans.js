@@ -12,6 +12,8 @@
   const today = () => schoolClock(info).date;
   const mondayOf = (d) => { const wd = utcDate(d).getUTCDay(); return addDays(d, wd === 0 ? 1 : wd === 6 ? 2 : 1 - wd); };
   const key = (d, b) => `${d}|${b}`;
+  // a prep or duty period: nothing for students to see, so no plan box
+  const free = (name) => /\b(prep|planning|plan period|duty|office hours?)\b/i.test(name || '');
   // the classes this teacher has that meet on a day letter, in hour order
   const meeting = (letter) => (ROTATION[letter] || []).map((b, i) => ({ block: b, hour: i + 1 })).filter((x) => classes[x.block]);
 
@@ -65,6 +67,7 @@
         body = list.length ? list.map(({ block, hour }) => {
           const b = MHSBell.blockInfo(block);
           const label = `Hour ${hour} · ${classes[block].name}`;
+          if (free(classes[block].name)) return h('div', { class: 'pd-class small muted' }, colorDot(b.color), label);
           return h('div', { class: 'pd-class' }, h('div', { class: 'small' }, colorDot(b.color), h('strong', null, label)), planBox(d, block, label));
         }) : h('p', { class: 'small muted' }, 'None of your classes meet today.');
       }
@@ -72,7 +75,15 @@
     }));
   }
 
-  const go = (d) => { monday = d; fill($('week'), h('p', { class: 'muted' }, 'Loading…')); load().catch((e) => fill($('week'), h('p', { class: 'notice error' }, e.message))); };
+  const go = (d, jump) => {
+    monday = d;
+    fill($('week'), h('p', { class: 'muted' }, 'Loading…'));
+    load().then(() => {
+      // on a phone the days are stacked: start at today's
+      const t = document.querySelector('.plan-day.today');
+      if (jump && t && window.matchMedia('(max-width: 1000px)').matches) t.scrollIntoView({ block: 'start' });
+    }).catch((e) => fill($('week'), h('p', { class: 'notice error' }, e.message)));
+  };
   $('week-prev').addEventListener('click', () => go(addDays(monday, -7)));
   $('week-next').addEventListener('click', () => go(addDays(monday, 7)));
   $('week-today').addEventListener('click', () => go(mondayOf(today())));
@@ -80,5 +91,5 @@
     [info, classes] = await Promise.all([loadCalendar(), api('GET', '/api/classes')]);
   } catch (e) { fill($('week'), h('p', { class: 'notice error' }, e.message)); return; }
   const asked = new URLSearchParams(location.search).get('date');
-  go(mondayOf(MHSCalendar.parseDate(asked) !== null ? asked : today()));
+  go(mondayOf(MHSCalendar.parseDate(asked) !== null ? asked : today()), true);
 })();
