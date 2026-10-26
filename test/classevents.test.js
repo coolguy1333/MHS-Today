@@ -1,5 +1,5 @@
 'use strict';
-// Classmates' tests, quizzes and assignments: same block, class and teacher only.
+// Classmates' tests, quizzes and assignments: same class and teacher (any block) only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const cal = require('../public/js/calendar.js');
@@ -19,7 +19,7 @@ async function as(ctx, n, extra) {
 const owner = (ctx) => as(ctx, 99, { email: 'admin@school.test', given_name: 'Ada' });
 const soon = (n) => cal.addDays(cal.schoolNow('America/Chicago').date, n);
 
-test('class events: posted to your own class, seen only by the same block, class and teacher', async () => {
+test('class events: posted to your own class, seen by the same class and teacher in any block', async () => {
   const ctx = await startApp({ mock });
   const boss = await owner(ctx);
   const ann = await as(ctx, 1, { given_name: 'Ann' });
@@ -29,7 +29,7 @@ test('class events: posted to your own class, seen only by the same block, class
   const eli = await as(ctx, 5, { given_name: 'Eli' });
   await ann.put('/api/classes', { yellow: { name: 'Algebra II', teacher: 'Mr. Smith' }, red: { name: 'English' } });
   await ben.put('/api/classes', { yellow: { name: 'algebra  ii', teacher: 'John Smith' } }); // same class, written differently
-  await cy.put('/api/classes', { green: { name: 'Algebra II', teacher: 'Smith' } });          // same teacher, other block (other section)
+  await cy.put('/api/classes', { green: { name: 'Algebra II', teacher: 'Smith' } });          // same class and teacher, another hour
   await dee.put('/api/classes', { yellow: { name: 'Algebra II', teacher: 'Jones' } });         // other teacher
   await eli.put('/api/classes', { yellow: { name: 'Algebra II' } });                           // no teacher: can't tell
 
@@ -49,7 +49,8 @@ test('class events: posted to your own class, seen only by the same block, class
   const titles = async (c) => (await c.get('/api/classwork')).data.map((i) => i.title);
   assert.deepEqual(await titles(ann), ['Unit 3 quiz', 'Chapter 3 test'], 'soonest first');
   assert.deepEqual(await titles(ben), ['Unit 3 quiz', 'Chapter 3 test']);
-  assert.deepEqual(await titles(cy), [], 'another block is another section');
+  assert.deepEqual(await titles(cy), ['Unit 3 quiz', 'Chapter 3 test'], 'the same class in another block sees it too');
+  assert.ok((await cy.get('/api/classwork')).data.every((i) => i.block === 'green'), 'shown under Cy\'s own block');
   assert.deepEqual(await titles(dee), [], 'another teacher');
   assert.deepEqual(await titles(eli), [], 'no teacher, no match');
 
@@ -72,4 +73,17 @@ test('class events: posted to your own class, seen only by the same block, class
   // backups keep them
   const backup = (await boss.get('/api/admin/backup')).data;
   assert.deepEqual(backup.classEvents.map((i) => i.title), ['Chapter 3 test']);
+});
+
+test('study sessions: everyone in the same class sees them, whatever block they have it in', async () => {
+  const ctx = await startApp({ mock });
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  const ben = await as(ctx, 2, { given_name: 'Ben' });
+  const cy = await as(ctx, 3, { given_name: 'Cy' });
+  await ann.put('/api/classes', { orange: { name: 'AP Calculus AB', teacher: 'Simmonds' } });
+  await ben.put('/api/classes', { red: { name: 'AP Calculus AB', teacher: 'Jacob Simmonds' } }); // another hour
+  await cy.put('/api/classes', { orange: { name: 'Chemistry', teacher: 'Mole' } });            // same block, other class
+  assert.equal((await ann.post('/api/study', { block: 'orange', title: 'Unit 3 review', date: soon(2) })).status, 200);
+  assert.deepEqual((await ben.get('/api/study')).data.map((s) => [s.title, s.block]), [['Unit 3 review', 'red']]);
+  assert.deepEqual((await cy.get('/api/study')).data, []);
 });

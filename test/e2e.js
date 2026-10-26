@@ -480,7 +480,7 @@ const step = (m) => console.log('•', m);
   // ---------------------------------------------------------------- a teacher
   const tea = await newUser('teacher', { sub: 'teach-1', email: 'wienke@school.test', given_name: 'Jason', family_name: 'Wienke' });
   await signIn(tea, null, 'teacher');
-  assert.deepEqual(await tea.page.locator('.nav-wide a').allInnerTexts(), ['Today', 'Groups']);
+  assert.deepEqual(await tea.page.locator('.nav-wide a').allInnerTexts(), ['Today', 'Lesson plans', 'Groups']);
   await tea.page.goto(base + '/friends.html'); await tea.page.waitForURL(/index\.html/);
   await tea.page.goto(base + '/schedule.html'); await tea.page.waitForSelector('[data-block="red"][data-field="name"]');
   assert.equal(await tea.page.locator('[data-field="teacher"], [data-field="room"], #import-card').count(), 0, 'class names only');
@@ -489,7 +489,12 @@ const step = (m) => console.log('•', m);
   await tea.page.goto(base + '/index.html'); await tea.page.waitForSelector('#schedule-body tr');
   assert.match(await text(tea.page, '#schedule-body'), /Machine Tool I/);
   assert.equal(await tea.page.locator('#friends-card').isVisible(), false);
-  step('teacher: picked at sign-up; Today and Groups only; classes saved without room or teacher');
+  // a lesson plan for the first class that meets this week
+  await tea.page.goto(base + '/plans.html'); await tea.page.waitForSelector('.plan-day textarea');
+  await tea.page.locator('.plan-day textarea').first().fill('Lathe safety quiz');
+  await tea.page.waitForSelector('.plan-state:has-text("Saved")');
+  assert.equal((await tea.page.evaluate(() => fetch('/api/plans').then((r) => r.json()))).length, 1);
+  step('teacher: picked at sign-up; Today, Lesson plans and Groups only; classes without room or teacher; a lesson plan saved as they type');
 
   // ---------------------------------------------------------------- look & feel: dark mode + keyboard
   const dark = await newUser('dark', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' }, { colorScheme: 'dark' });

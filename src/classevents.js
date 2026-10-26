@@ -1,7 +1,7 @@
 'use strict';
 // Class events: classmates post tests, quizzes, assignments and projects for a class. Only people in
-// the same class see them: the same color block, the same class name and the same teacher (by last
-// name; posting needs a teacher on your class). They show on the Assignments page, next to the class
+// the same class see them: the same class name and the same teacher (by last name; posting needs a
+// teacher on your class), in whichever block each person has it (other hours of it too). They show on the Assignments page, next to the class
 // on Today, in calendar feeds, and in the evening-before reminder. Reportable like everything else.
 const KINDS = ['test', 'quiz', 'assignment', 'project'];
 const MAX_ITEMS = 3000;
@@ -12,14 +12,16 @@ module.exports = function classEvents(app) {
   if (!Array.isArray(state.classEvents)) state.classEvents = [];
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  // Same block, same class name, same teacher (both must have one).
+  // Same class name, same teacher (both must have one); the block doesn't matter.
   const classMatch = (cls, item) => !!cls && norm(cls.name) === norm(item.name) && !!bell.teacherKey(cls.teacher) && bell.teacherKey(cls.teacher) === bell.teacherKey(item.teacher);
-  const inClass = (user, item) => !!user && hasOwn(user.classes, item.block) && classMatch(user.classes[item.block], item);
+  // the block where `user` has that class (theirs, which may not be the poster's), or null
+  const blockIn = (user, item) => (user ? bell.BLOCK_KEYS.find((k) => hasOwn(user.classes, k) && classMatch(user.classes[k], item)) || null : null);
+  const inClass = (user, item) => !!blockIn(user, item);
   const shows = (user, item) => !isTeacher(user) && inClass(user, item) && reports.visible('classwork', item.id, item.by, user); // students only
   const view = (user, item) => {
     const author = getUser(item.by);
     return {
-      id: item.id, kind: item.kind, title: item.title, due: item.due, notes: item.notes, block: item.block, className: item.name, teacher: item.teacher,
+      id: item.id, kind: item.kind, title: item.title, due: item.due, notes: item.notes, block: blockIn(user, item) || item.block, className: item.name, teacher: item.teacher,
       by: author ? author.name : 'Former student', mine: item.by === user.id, canDelete: item.by === user.id || isAdmin(user), hidden: reports.hidden('classwork', item.id)
     };
   };
@@ -48,7 +50,7 @@ module.exports = function classEvents(app) {
     if (!bell.teacherKey(cls.teacher)) throw bad(`Add the teacher for ${cls.name} on My Schedule first, so it goes to the right class`);
     const f = cleanItem(body);
     checkWords(f.title, f.notes);
-    const twin = state.classEvents.find((i) => i.block === block && classMatch(cls, i) && i.kind === f.kind && i.due === f.due && norm(i.title) === norm(f.title));
+    const twin = state.classEvents.find((i) => classMatch(cls, i) && i.kind === f.kind && i.due === f.due && norm(i.title) === norm(f.title));
     if (twin) throw new HttpError(409, 'A classmate already added that');
     if (state.classEvents.length >= MAX_ITEMS) throw bad('There are too many class events right now');
     if (!isAdmin(user) && !limiter.hit(`classwork:${user.id}`, 15, 86400e3)) throw new HttpError(429, 'You can add up to 15 a day');

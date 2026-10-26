@@ -6,7 +6,7 @@
   renderNav('calendar');
   await requireLogin();
   const { addDays, dayInfo } = MHSCalendar;
-  const KINDS = [['event', 'Events'], ['group', 'My groups'], ['classwork', 'Tests & assignments'], ['study', 'Study'], ['off', 'Days off']];
+  const KINDS = [['event', 'Events'], ['group', 'My groups'], ['classwork', 'Tests & assignments'], ['plan', 'Lesson plans'], ['study', 'Study'], ['off', 'Days off']];
   const shown = new Set(KINDS.map(([k]) => k));
   let info, items = [], month = null, picked = null;
 
@@ -80,19 +80,21 @@
   $('cal-prev').addEventListener('click', () => { month = shiftMonth(month, -1); picked = null; render(); });
   $('cal-next').addEventListener('click', () => { month = shiftMonth(month, 1); picked = null; render(); });
   $('cal-today').addEventListener('click', () => { month = monthOf(today()); picked = null; render(); });
-  // Google Calendar subscribes to the private link (made now if there isn't one yet)
-  $('google-cal').addEventListener('click', (e) => {
-    const tab = window.open('', '_blank'); // opened now, while it's a click (pop-up blockers), pointed at Google below
-    busy(e.currentTarget, async () => {
-      try {
-        let { url } = await api('GET', '/api/me/calendar');
-        if (!url) url = (await api('POST', '/api/me/calendar', {})).url;
-        const google = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(url.replace(/^https?:/, 'webcal:'))}`;
-        if (tab) { tab.opener = null; tab.location.href = google; } else location.href = google;
-        toast('In Google Calendar, click Add. Other calendar apps: Profile → Notifications & calendar.');
-      } catch (err) { if (tab) tab.close(); throw err; }
-    });
-  });
+  // Add to Google Calendar: everything in one, or school days / classes / events as their own calendars
+  // (the private links are made the first time)
+  $('google-cal').addEventListener('click', (e) => busy(e.currentTarget, async () => {
+    let feeds = await api('GET', '/api/me/calendar');
+    if (!feeds.url) feeds = await api('POST', '/api/me/calendar', {});
+    const dlg = h('dialog', { class: 'dialog', 'aria-labelledby': 'gc-title' },
+      h('div', { class: 'dialog-head' }, h('h2', { id: 'gc-title' }, 'Add to your calendar'),
+        h('button', { class: 'linklike', type: 'button', 'aria-label': 'Close', onclick: () => dlg.close() }, '×')),
+      h('p', { class: 'small muted' }, 'Pick everything as one calendar, or add each part as its own, with its own color, that you can turn on or off. Google opens in a new tab: click Add there. It checks for changes every few hours.'),
+      calendarLinksEl(feeds),
+      h('p', { class: 'small muted' }, 'Manage or turn off these links in ', h('a', { href: 'account.html#alerts' }, 'Profile → Notifications & calendar'), '.'));
+    dlg.addEventListener('close', () => dlg.remove());
+    document.body.append(dlg);
+    dlg.showModal();
+  }));
 
   try {
     [info, { items }] = await Promise.all([loadCalendar(), api('GET', '/api/me/calendar/items')]);
