@@ -280,3 +280,21 @@ test('tools: admins manage the list; students suggest, admins accept or dismiss'
   const saved = (await boss.put('/api/admin/tools', { tools: [list[1], { name: 'Bell timer', url: '' }] })).data;
   assert.deepEqual(saved.map((t) => [t.name, t.id === list[1].id]), [['GPA calculator', true], ['Bell timer', false]]);
 });
+
+test('editing an event: organizers change it without losing sign-ups; others can not', async () => {
+  const ctx = await startApp({ mock });
+  const boss = await owner(ctx);
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  const ben = await as(ctx, 2, { given_name: 'Ben' });
+  await boss.put(`/api/admin/users/${(await ann.me()).id}`, { verified: true });
+  const { id } = (await ann.post('/api/events', { title: 'Car wash', date: soon(3), time: '09:00', signup: { limit: 5 } })).data;
+  await ben.post(`/api/events/${id}/signup`, { on: true });
+  const base = { title: 'Car wash', date: soon(3), time: '09:00' };
+  assert.equal((await ben.put(`/api/events/${id}`, { ...base, title: 'Mine now' })).status, 403);
+  assert.equal((await ann.put(`/api/events/${id}`, { ...base, title: '' })).status, 400);
+  const e = (await ann.put(`/api/events/${id}`, { ...base, title: 'Car wash (moved)', date: soon(4), time: '10:00', endTime: '13:00', location: 'Main lot', signup: { limit: 8 } })).data;
+  assert.deepEqual([e.title, e.date, e.time, e.endTime, e.location, e.signup.limit, e.signup.count, e.visibility], ['Car wash (moved)', soon(4), '10:00', '13:00', 'Main lot', 8, 1, 'public']);
+  assert.equal((await ben.get('/api/events')).data.find((x) => x.id === id).signup.me, true, 'Ben is still signed up');
+  // admins can fix anyone's event
+  assert.equal((await boss.put(`/api/events/${id}`, { ...base, title: 'Car wash!' })).data.title, 'Car wash!');
+});

@@ -257,3 +257,23 @@ test('restore: size limit and admin-only', async () => {
   assert.equal((await boss.post('/api/admin/restore', pad)).status, 200);
   assert.equal((await boss.get('/api/health')).status, 200);
 });
+
+test('last seen: any use of the site counts, not only signing in; kept across restarts', async () => {
+  const ctx = await startApp({ mock });
+  const boss = await admin(ctx);
+  const kid = await as(ctx, 1);
+  const id = (await kid.me()).id;
+  const u = ctx.app.state.users[id];
+  u.lastLogin = u.lastSeen = Date.now() - 40 * 86400e3; // signed in 40 days ago, session still open
+  const row = async () => (await boss.get('/api/admin/users')).data.find((x) => x.id === id);
+  assert.ok(Date.now() - (await row()).lastSeen > 39 * 86400e3);
+  await kid.get('/api/classes'); // they use the site today
+  const r = await row();
+  assert.ok(Date.now() - r.lastSeen < 60e3, 'seen just now');
+  assert.ok(Date.now() - r.lastLogin > 39 * 86400e3, 'last sign-in unchanged');
+  const seen = u.lastSeen;
+  await kid.get('/api/classes');
+  assert.equal(u.lastSeen, seen, 'noted at most every few minutes');
+  const backup = (await boss.get('/api/admin/backup')).data;
+  assert.equal(backup.users.find((x) => x.id === id).lastSeen, seen);
+});

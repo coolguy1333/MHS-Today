@@ -560,7 +560,7 @@
     const shown = users.filter((u) => (!q || `${u.name} ${u.fullName} ${u.email}`.toLowerCase().includes(q))
       && (f === 'archived' ? !!u.archived : !u.archived || f === '')
       && (!f || f === 'archived' || (f === 'admin' && u.admin) || (f === 'verified' && u.verified) || (f === 'locked' && u.profileLocked)
-        || (f === 'inactive' && Date.now() - u.lastLogin > DAYS_30) || (f === 'seniors' && u.grade === 12)
+        || (f === 'inactive' && Date.now() - u.lastSeen > DAYS_30) || (f === 'seniors' && u.grade === 12)
         || (f === 'teachers' && u.role === 'teacher') || (f === 'students' && u.role !== 'teacher')));
     $('people-count').textContent = `${shown.length} of ${users.length} ${users.length === 1 ? 'person' : 'people'}`;
     fill($('users'), shown.length ? shown.map((u) => h('button', { class: 'person-card', type: 'button', dataset: { id: u.id }, 'aria-label': `${u.name}, ${u.email}`, onclick: () => personDialog(u) },
@@ -568,7 +568,7 @@
       h('span', { class: 'pc-main' }, h('strong', null, u.name), h('span', { class: 'small muted pc-email' }, u.email),
         h('span', { class: 'pc-badges' }, badge(u.role === 'teacher', 'teacher', 'vis'), badge(u.owner, 'owner'), badge(u.admin && !u.owner, 'admin'), badge(u.verified, 'verified', 'vis'), badge(u.profileLocked, 'locked', 'vis'),
           badge(!!u.archived, 'archived', 'urgent'), badge(!!u.pendingPhoto, 'photo to approve', 'vis'))),
-      h('span', { class: 'small muted pc-seen' }, fmtAgo(u.lastLogin)))) : h('p', { class: 'muted' }, 'No one matches.'));
+      h('span', { class: 'small muted pc-seen', title: 'Last used the site' }, fmtAgo(u.lastSeen)))) : h('p', { class: 'muted' }, 'No one matches.'));
   }
   $('people-q').addEventListener('input', renderUsers);
   $('people-filter').addEventListener('change', renderUsers);
@@ -583,7 +583,7 @@
       if (fresh) personDialog(fresh); else dlg.close();
     });
     const details = [u.fullName && u.fullName !== u.name ? `Google name: ${u.fullName}` : null, u.pronouns, u.grade ? `${u.grade}th grade` : null,
-      `${plural(u.friends, 'friend')}`, u.searchable ? null : 'hidden from search', `joined ${fmtAgo(u.created)}`, `last signed in ${fmtAgo(u.lastLogin)}`].filter(Boolean);
+      `${plural(u.friends, 'friend')}`, u.searchable ? null : 'hidden from search', `joined ${fmtAgo(u.created)}`, `last seen ${fmtAgo(u.lastSeen)}`, `last signed in ${fmtAgo(u.lastLogin)}`].filter(Boolean);
     openDialog(u.name,
       h('div', { class: 'person' }, avatarEl(u, 56), h('div', null,
         h('div', null, h('strong', null, u.name), ' ', badge(u.role === 'teacher', 'teacher', 'vis'), ' ', badge(u.owner, 'owner'), ' ', badge(u.admin && !u.owner, 'admin'), ' ', badge(u.verified, 'verified', 'vis'), ' ', badge(u.profileLocked, 'locked', 'vis')),

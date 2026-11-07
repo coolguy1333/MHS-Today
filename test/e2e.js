@@ -266,11 +266,19 @@ const step = (m) => console.log('•', m);
   await sp.click('#class-form button[type=submit]');
   await sp.waitForSelector('#class-items .list-row:has-text("Moles quiz")');
   assert.match(await text(sp, '#class-items'), /Quiz[\s\S]*Moles quiz[\s\S]*Chemistry · Due tomorrow/);
+  // fixed without deleting it: the person who added it edits it in place
+  await sp.click('#class-items button:has-text("Edit")'); await sp.waitForSelector('dialog[open] form');
+  await sp.locator('dialog[open] label:has-text("Title") input').fill('Moles quiz (ch. 4)');
+  await sp.locator('dialog[open] label:has-text("Notes") textarea').fill('Calculators allowed');
+  await sp.click('dialog[open] button[type=submit]');
+  await sp.waitForSelector('#class-items .list-row:has-text("Moles quiz (ch. 4)")');
+  assert.match(await text(sp, '#class-items'), /Calculators allowed/);
+  assert.equal(await sp.locator('dialog[open]').count(), 0);
   assert.equal(await sp.locator('#study-card').isVisible(), true, 'study sessions still work');
   await sp.screenshot({ path: path.join(SHOTS, 'assignments.png'), fullPage: true });
   await sp.goto(base + '/index.html'); await sp.waitForSelector('#tasks-preview .list-row');
   assert.match(await text(sp, '#tasks-preview'), /Quiz[\s\S]*Moles quiz[\s\S]*Due tomorrow · Chemistry/);
-  assert.match(await text(sp, '#schedule-body tr[data-hour="3"]'), /Chemistry[\s\S]*Quiz Moles quiz · tomorrow/);
+  assert.match(await text(sp, '#schedule-body tr[data-hour="3"]'), /Chemistry[\s\S]*Quiz Moles quiz \(ch\. 4\) · tomorrow/);
   step('assignments: a classmate quiz added for Chemistry shows on Assignments, Due soon and next to the class; Google Tasks "coming soon"');
 
   // ---------------------------------------------------------------- friends (Ben on a phone-sized screen)
@@ -348,6 +356,15 @@ const step = (m) => console.log('•', m);
   assert.equal(await ep.locator('#upcoming button:has-text("Delete")').count(), 1);
   await ap.goto(base + '/events.html'); await ap.waitForSelector('#upcoming .list-row');
   assert.equal(await ap.locator('#upcoming button:has-text("Delete")').count(), 1, 'admins can delete any event');
+  // the person who posted it changes it in place (others can't)
+  assert.equal(await bp.locator('#upcoming button:has-text("Edit")').count(), 0);
+  await ep.click('#upcoming button:has-text("Edit")'); await ep.waitForSelector('dialog[open] form');
+  await ep.locator('dialog[open] label:has-text("Starts") input').fill('15:00');
+  await ep.locator('dialog[open] label:has-text("Where") input').fill('Main gym');
+  await ep.click('dialog[open] button[type=submit]');
+  await ep.waitForSelector('#upcoming .list-row:has-text("3:00 PM")');
+  assert.match(await text(ep, '#upcoming'), /Main gym/);
+  assert.equal(await ep.locator('#upcoming img, #upcoming script').count(), 0);
   await ep.click('#upcoming button:has-text("Delete")');
   await ep.waitForFunction(() => /No upcoming events/.test(document.querySelector('#upcoming').innerText));
   step('events: HTML in titles/details stays text; delete rights are right');
@@ -501,6 +518,43 @@ const step = (m) => console.log('•', m);
   await signIn(dark);
   await dark.page.goto(base + '/index.html'); await dark.page.waitForSelector('#schedule-body tr.current');
   await dark.page.screenshot({ path: path.join(SHOTS, 'dashboard-dark.png'), fullPage: true });
+  // ---------------------------------------------------------------- Simple mode: its own page to bookmark or embed
+  await sp.goto(base + '/index.html'); await sp.click('a.simple-open-btn'); await sp.waitForURL(/\/simple$/);
+  await sp.waitForFunction(() => /Chemistry/.test(document.querySelector('#sm-title').textContent));
+  const secsLeft = () => sp.evaluate(() => { const [m, s] = document.querySelector('#sm-left-num').textContent.split(':').map(Number); return m * 60 + s; });
+  const s1 = await secsLeft(); await sp.waitForTimeout(2100); const s2 = await secsLeft();
+  assert.ok(s1 - s2 === 2 || s1 - s2 === 3, `the countdown goes down once a second (${s1} -> ${s2})`);
+  assert.equal(await sp.locator('#sm-next').isVisible(), false, 'what is next only when asked for');
+  await sp.click('#sm-options-btn'); await sp.check('#opt-next'); await sp.check('#opt-schedule');
+  assert.match(sp.url(), /\/simple\?next=1&schedule=1$/);
+  assert.match(await text(sp, '#sm-next'), /^Next: Hour 4/);
+  assert.match(await text(sp, '#sm-schedule li.now'), /Chemistry/);
+  assert.ok(await sp.locator('#sm-schedule li.done').count() >= 2, 'earlier blocks are dimmed');
+  await sp.screenshot({ path: path.join(SHOTS, 'simple-options.png') });
+  await sp.goto(base + '/simple?schedule=1'); await sp.waitForSelector('#sm-schedule li.now');
+  assert.equal(await sp.locator('#sm-next').isVisible(), false);
+  await sp.setViewportSize({ width: 390, height: 800 }); await sp.screenshot({ path: path.join(SHOTS, 'simple-phone.png') });
+  assert.equal(await sp.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'no sideways scrolling on a phone');
+  await sp.setViewportSize({ width: 1280, height: 800 });
+  // on another website: Simple mode shows (signed out: the school's schedule), the rest of the site refuses to be framed
+  const emb = await sp.context().newPage();
+  emb.on('pageerror', (e) => problems.push(`[embed] ${e.message}`));
+  // (another site: a second little server, reached as "localhost" so it is a different site from 127.0.0.1)
+  const site = require('node:http').createServer((q, r) => { r.setHeader('Content-Type', 'text/html'); r.end(
+    `<h1>Room 214</h1><iframe id="ok" src="${base}/simple?next=1" width="800" height="420"></iframe><iframe id="no" src="${base}/index.html" width="400" height="300"></iframe>`); });
+  await new Promise((ok) => site.listen(0, '127.0.0.1', ok));
+  await emb.goto(`http://localhost:${site.address().port}/`);
+  const okFrame = await (await emb.waitForSelector('#ok')).contentFrame();
+  await okFrame.waitForFunction(() => { const t = document.querySelector('#sm-title'), n = document.querySelector('#sm-next'); return t && t.textContent && n && !n.hidden; });
+  assert.match(await okFrame.locator('#sm-title').innerText(), /^Hour 3/); // the viewer's own classes if their browser shares the sign-in, else the school's
+  assert.equal(await okFrame.evaluate(() => document.body.classList.contains('framed') && document.querySelector('#sm-home').target), '_blank');
+  await emb.waitForTimeout(500);
+  const noFrame = await (await emb.$('#no')).contentFrame();
+  assert.equal(await noFrame.evaluate(() => !!document.querySelector('#day-head')).catch(() => false), false, 'Today page is not framed');
+  await emb.screenshot({ path: path.join(SHOTS, 'simple-embedded.png') });
+  await emb.close(); site.close();
+  step('simple mode: /simple opens from Today, ticks once a second, ?next=1 and ?schedule=1, embeds on another site, other pages refuse framing');
+
   await sp.goto(base + '/index.html'); await sp.waitForSelector('#day-head h1');
   await sp.keyboard.press('Tab');
   assert.equal(await sp.evaluate(() => document.activeElement.className), 'skip-link');

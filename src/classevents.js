@@ -5,7 +5,7 @@
 // on Today, in calendar feeds, and in the evening-before reminder. Reportable like everything else.
 const KINDS = ['test', 'quiz', 'assignment', 'project'];
 const MAX_ITEMS = 3000;
-const KEEP_DAYS = 14; // removed this long after they're due
+const KEEP_DAYS = 1; // gone once their day is over (hidden the next day, removed by the next cleanup)
 
 module.exports = function classEvents(app) {
   const { route, state, db, HttpError, bad, isAdmin, getUser, cleanText, randomId, limiter, today, cal, bell, isPlainObject, hasOwn, num, checkWords, reports, isTeacher } = app;
@@ -40,8 +40,8 @@ module.exports = function classEvents(app) {
 
   // Your classes' upcoming tests and assignments (and the last few days').
   route('GET', '/api/classwork', { auth: 'user' }, ({ user }) => {
-    const from = cal.addDays(today(), -3);
-    return state.classEvents.filter((i) => i.due >= from && shows(user, i)).sort(byDue).map((i) => view(user, i));
+    const t = today(); // only what's still coming: today's and later
+    return state.classEvents.filter((i) => i.due >= t && shows(user, i)).sort(byDue).map((i) => view(user, i));
   });
   route('POST', '/api/classwork', { auth: 'user' }, ({ user, body }) => {
     const block = typeof body.block === 'string' && bell.BLOCK_KEYS.includes(body.block) && hasOwn(user.classes, body.block) ? body.block : null;
@@ -56,6 +56,19 @@ module.exports = function classEvents(app) {
     if (!isAdmin(user) && !limiter.hit(`classwork:${user.id}`, 15, 86400e3)) throw new HttpError(429, 'You can add up to 15 a day');
     const item = { id: randomId(), block, name: cls.name, teacher: cls.teacher, ...f, by: user.id, created: Date.now() };
     state.classEvents.push(item);
+    db.save();
+    return view(user, item);
+  });
+  // Fix a mistake (title, kind, date, notes) without deleting it: the person who added it, or an admin.
+  route('PUT', '/api/classwork/:id', { auth: 'user' }, ({ user, params, body }) => {
+    const item = state.classEvents.find((x) => x.id === params.id);
+    if (!item || !(inClass(user, item) || isAdmin(user))) throw new HttpError(404, 'Not found');
+    if (item.by !== user.id && !isAdmin(user)) throw new HttpError(403, 'Only the person who added it (or an admin) can change it');
+    const f = cleanItem(body, 0);
+    checkWords(f.title, f.notes);
+    const twin = state.classEvents.find((i) => i !== item && classMatch(item, i) && i.kind === f.kind && i.due === f.due && norm(i.title) === norm(f.title));
+    if (twin) throw new HttpError(409, 'A classmate already added that');
+    Object.assign(item, f, { edited: Date.now() });
     db.save();
     return view(user, item);
   });
@@ -81,7 +94,7 @@ module.exports = function classEvents(app) {
   return {
     // for the evening-before reminder: what's due on `date` in `user`'s classes
     classEventsDueOn: (user, date) => state.classEvents.filter((i) => i.due === date && shows(user, i)).map((i) => `${KIND_LABEL[i.kind]}: ${i.title} (${i.name})`),
-    calendarItems: (user) => state.classEvents.filter((i) => i.due >= cal.addDays(today(), -14) && shows(user, i))
+    calendarItems: (user) => state.classEvents.filter((i) => i.due >= today() && shows(user, i))
       .map((i) => ({ uid: `cw-${i.id}`, kind: 'classwork', date: i.due, time: null, title: `${KIND_LABEL[i.kind]}: ${i.title} (${i.name})`, description: i.notes })),
     userData: (user) => ({ classEventsPosted: state.classEvents.filter((i) => i.by === user.id).map((i) => ({ kind: i.kind, title: i.title, due: i.due, class: i.name, notes: i.notes })) }),
     status: () => ({ classEvents: state.classEvents.length }),
@@ -101,8 +114,8 @@ module.exports = function classEvents(app) {
       return {};
     },
     maintain() {
-      const cutoff = cal.addDays(today(), -KEEP_DAYS);
-      state.classEvents = state.classEvents.filter((i) => i.due >= cutoff);
+      const t = today();
+      state.classEvents = state.classEvents.filter((i) => i.due >= t);
     },
     forgetUser(id) { state.classEvents = state.classEvents.filter((i) => i.by !== id); }
   };

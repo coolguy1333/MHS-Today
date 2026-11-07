@@ -24,6 +24,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const MB = 1024 * 1024;
 const MAX_FRIENDS = 150;
 const MAX_SESSIONS_PER_USER = 10;
+const SEEN_EVERY = 5 * 60e3; // how often "last seen" is updated
 // What a friend may see of your schedule: everything, only which lunch you have, or nothing.
 const SHARE_LEVELS = ['full', 'lunch', 'none'];
 const SUGGEST_KEYS = ['show', 'viaFriends', 'viaClasses'];
@@ -69,6 +70,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const secrets = openSecretBox(config.dataDir); // encrypts Google Tasks tokens at rest
   const state = db.state;
   const limiter = new RateLimiter();
+  let seenDirty = false; // someone's lastSeen changed since the last save
   const loginKey = crypto.randomBytes(32); // signs the short-lived "sign-in in progress" cookie
   // __Host- cookies can't be set or overwritten from sibling subdomains (other sites hosted on the same domain).
   const SID = config.secure ? '__Host-mhs_sid' : 'mhs_sid';
@@ -159,7 +161,11 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const hash = sha256hex(token);
     const s = hasOwn(state.sessions, hash) ? state.sessions[hash] : null;
     if (!s || s.expires < Date.now()) return null;
-    return getUser(s.userId);
+    const user = getUser(s.userId);
+    // when they last used the site (not just signed in: a session lasts weeks). Noted at most every
+    // five minutes, and saved with the next write or by the five-minute timer below.
+    if (user && Date.now() - (user.lastSeen || 0) > SEEN_EVERY) { user.lastSeen = Date.now(); seenDirty = true; }
+    return user;
   }
   function createSession(req, res, user) {
     const old = parseCookies(req.headers.cookie)[SID];
@@ -242,6 +248,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     user.email = email; // follows the Google account if the address changes
     Object.assign(user, names);
     user.lastLogin = Date.now();
+    user.lastSeen = user.lastLogin;
     return { user, isNew };
   }
   function deleteUser(id) {
@@ -371,7 +378,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       // 'mhs-hub' is the file format's id from before the rename: kept so old backups still restore
       app: 'mhs-hub', version: 2, exportedAt: new Date().toISOString(),
       users: Object.values(state.users).map((u) => ({
-        id: u.id, sub: u.sub, email: u.email, name: u.name, created: u.created, lastLogin: u.lastLogin,
+        id: u.id, sub: u.sub, email: u.email, name: u.name, created: u.created, lastLogin: u.lastLogin, lastSeen: u.lastSeen || u.lastLogin,
         classes: u.classes, friends: u.friends, friendCode: u.friendCode, shareSchedule: u.shareSchedule, verified: u.verified === true,
         givenName: u.givenName, familyName: u.familyName, searchable: u.searchable, shareLevels: u.shareLevels, shareDefault: u.shareDefault, suggest: u.suggest,
         grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, adminGranted: u.adminGranted,
@@ -403,7 +410,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (code) codes.add(code);
       friendIds[u.id] = Array.isArray(u.friends) ? u.friends : [];
       users[u.id] = fillUserDefaults({
-        id: u.id, sub, email, name: cleanText(u.name, 40) || 'Student', created: num(u.created), lastLogin: num(u.lastLogin),
+        id: u.id, sub, email, name: cleanText(u.name, 40) || 'Student', created: num(u.created), lastLogin: num(u.lastLogin), lastSeen: Math.max(num(u.lastSeen), num(u.lastLogin)),
         classes: cleanClasses(isPlainObject(u.classes) ? u.classes : {}), friends: [], friendCode: code, shareSchedule: u.shareSchedule !== false,
         verified: u.verified === true, givenName: cleanText(u.givenName, 30), familyName: cleanText(u.familyName, 40),
         searchable: u.searchable !== false, grade: GRADES.includes(u.grade) ? u.grade : null, bio: cleanText(u.bio, 160),
@@ -551,7 +558,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     const friends = confirmedFriends(user).map(getUser).filter(Boolean).map((f) => f.name);
     const data = Object.assign({
       exported: new Date().toISOString(),
-      account: { ...profile(user), email: user.email, created: user.created, lastLogin: user.lastLogin, agreed: user.agreed || null },
+      account: { ...profile(user), email: user.email, created: user.created, lastLogin: user.lastLogin, lastSeen: user.lastSeen || user.lastLogin, agreed: user.agreed || null },
       classes: user.classes, friends, calendarLink: !!user.calendarToken
     }, ...features.map((f) => (f.userData ? f.userData(user) : {})));
     const body = JSON.stringify(data, null, 2);
@@ -753,14 +760,14 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }));
   route('GET', '/api/admin/users', { auth: 'admin' }, () => Object.values(state.users)
     .map((u) => ({
-      id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, admin: isAdmin(u),
+      id: u.id, name: u.name, email: u.email, created: u.created, lastLogin: u.lastLogin, lastSeen: Math.max(u.lastSeen || 0, u.lastLogin || 0), admin: isAdmin(u),
       verified: u.verified === true, friends: u.friends.length, fullName: `${u.givenName} ${u.familyName}`.trim(),
       grade: u.grade, bio: u.bio, profileLocked: u.profileLocked, searchable: u.searchable, role: u.role || 'student',
       owner: isOwner(u), pronouns: u.pronouns, interests: u.interests, avatar: u.avatar, photo: photoUrl(u),
       pendingPhoto: isPlainObject(u.photo) && u.photo.pending ? `/photos/${u.photo.pending}.jpg` : null,
       archived: u.archived ? { at: u.archived.at, deleteAfter: u.archived.deleteAfter } : null
     }))
-    .sort((a, b) => b.lastLogin - a.lastLogin));
+    .sort((a, b) => b.lastSeen - a.lastSeen));
   // Admins can verify people, edit or reset anyone's profile, and lock a profile against changes.
   route('PUT', '/api/admin/users/:id', { auth: 'admin' }, ({ user, params, body }) => {
     const target = getUser(params.id);
@@ -1061,6 +1068,10 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       const headers = {
         'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag
       };
+      if (path.basename(file) === 'simple.html') { // Simple mode can be embedded in other sites (a teacher's page, a hallway screen)
+        res.setHeader('Content-Security-Policy', SECURITY_HEADERS['Content-Security-Policy'].replace("frame-ancestors 'none'", 'frame-ancestors *'));
+        res.removeHeader('X-Frame-Options');
+      }
       if (file.endsWith('.html') && !['404.html', 'offline.html'].includes(path.basename(file))) { // someone opened a page
         const viewer = currentUser(req);
         visits.hit(req, clientIp(req), viewer && viewer.id);
@@ -1161,6 +1172,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   let timer = null;
   let reminderTimer = null;
   const runReminders = () => push.runReminders().catch((e) => log(`Reminders failed: ${e.message}`));
+  const saveSeen = () => { if (seenDirty) { seenDirty = false; db.save(); } };
 
   function listen() {
     return new Promise((resolve, reject) => {
@@ -1170,7 +1182,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         maintain();
         timer = setInterval(maintain, 6 * 3600e3);
         timer.unref();
-        reminderTimer = setInterval(runReminders, 5 * 60e3);
+        reminderTimer = setInterval(() => { runReminders(); saveSeen(); }, 5 * 60e3);
         reminderTimer.unref();
         resolve(server.address().port);
       });
@@ -1182,7 +1194,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       if (reminderTimer) clearInterval(reminderTimer);
       const force = setTimeout(() => server.closeAllConnections(), 3000);
       force.unref();
-      server.close(() => { clearTimeout(force); db.close(); auditLog.close(); visits.close(); resolve(); }); // also fires if it was never listening
+      server.close(() => { clearTimeout(force); saveSeen(); db.close(); auditLog.close(); visits.close(); resolve(); }); // also fires if it was never listening
       server.closeIdleConnections();
     });
   }
