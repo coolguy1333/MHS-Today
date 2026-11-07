@@ -512,6 +512,33 @@ const step = (m) => console.log('•', m);
   await tea.page.waitForSelector('.plan-state:has-text("Saved")');
   assert.equal((await tea.page.evaluate(() => fetch('/api/plans').then((r) => r.json()))).length, 1);
   step('teacher: picked at sign-up; Today, Lesson plans and Groups only; classes without room or teacher; a lesson plan saved as they type');
+  // who sees it: a student who typed the class differently; one click switches to their name and the plan follows
+  const mo = await newUser('mo', { sub: 's-mt', email: 'mo@school.test', given_name: 'Mo', family_name: 'Tran' });
+  await signIn(mo);
+  await mo.page.evaluate(() => fetch('/api/classes', { method: 'PUT', headers: { 'X-Requested-With': 'mhs', 'Content-Type': 'application/json' }, body: JSON.stringify({ red: { name: 'Machine Tool 1', teacher: 'Mr. Wienke' } }) }));
+  await tea.page.reload(); await tea.page.waitForSelector('.reach-badge');
+  assert.equal(await text(tea.page, '.reach-badge >> nth=0'), 'No students yet');
+  await tea.page.locator('.reach-badge').first().click();
+  await tea.page.waitForSelector('.reach-panel');
+  assert.equal(await tea.page.getAttribute('#tab-class', 'aria-selected'), 'true');
+  assert.match(await text(tea.page, '.reach-panel'), /1 student with you in Red calls it "Machine Tool 1"/);
+  await tea.page.click('.reach-panel button:has-text("Use")');
+  await tea.page.waitForSelector('.reach-panel:has-text("1 student has Machine Tool 1 (Red) with you on MHS Today and sees these plans.")');
+  assert.equal((await mo.page.evaluate(() => fetch('/api/plans').then((r) => r.json()))).length, 1, 'the student sees the plan now');
+  // by class: every day Red meets over four weeks; "Copy from last class" fills the next one
+  const rows = tea.page.locator('.plan-row:has(textarea)');
+  assert.ok(await rows.count() >= 8, 'four weeks of meetings');
+  assert.equal(await rows.nth(0).locator('textarea').inputValue(), 'Lathe safety quiz');
+  await rows.nth(1).locator('button:has-text("Copy from last class")').click();
+  await tea.page.waitForFunction(() => document.querySelectorAll('.plan-row textarea')[1].value === 'Lathe safety quiz');
+  await rows.nth(1).locator('.plan-state:has-text("Saved")').waitFor();
+  assert.equal((await tea.page.evaluate(() => fetch('/api/plans').then((r) => r.json()))).length, 2);
+  assert.equal(await rows.nth(1).locator('button:has-text("Copy from last class")').isVisible(), false, 'only offered for an empty box');
+  await tea.page.screenshot({ path: path.join(SHOTS, 'plans-by-class.png'), fullPage: true });
+  await tea.page.click('#tab-week'); await tea.page.waitForSelector('.plan-day textarea');
+  assert.equal(await text(tea.page, '.reach-badge >> nth=0'), '1 student sees it');
+  await tea.page.screenshot({ path: path.join(SHOTS, 'plans-week.png'), fullPage: true });
+  step('lesson plans: reach per class, rename to the students\' name in one click, by-class view, copy from last class');
 
   // ---------------------------------------------------------------- look & feel: dark mode + keyboard
   const dark = await newUser('dark', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' }, { colorScheme: 'dark' });

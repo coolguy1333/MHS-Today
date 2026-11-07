@@ -39,6 +39,50 @@ module.exports = function plans(app) {
     return state.plans.filter((p) => p.date >= from && p.date <= to && visible(user, p))
       .sort((a, b) => a.date.localeCompare(b.date) || bell.BLOCK_KEYS.indexOf(a.block) - bell.BLOCK_KEYS.indexOf(b.block)).map(view);
   });
+  // Who a teacher's plans reach, per class: how many students have the class (same block, same name,
+  // the teacher's last name) and so see the plans; and, to fix mismatches, how many have that block
+  // with the teacher's name but call the class something else, or have the class with no teacher.
+  // Counts only, never who.
+  route('GET', '/api/plans/reach', { auth: 'user' }, ({ user }) => {
+    if (!isTeacher(user)) throw new HttpError(403, 'Only teachers have lesson plans');
+    const key = lastName(user);
+    const out = {};
+    for (const block of bell.BLOCK_KEYS.filter((b) => hasOwn(user.classes, b))) out[block] = { students: 0, noTeacher: 0, other: {} };
+    for (const u of Object.values(state.users)) {
+      if (isTeacher(u) || u.archived || !isPlainObject(u.classes)) continue;
+      for (const block of Object.keys(out)) {
+        const c = hasOwn(u.classes, block) ? u.classes[block] : null;
+        if (!c) continue;
+        const same = norm(c.name) === norm(user.classes[block].name), tk = bell.teacherKey(c.teacher);
+        if (same && tk && tk === key) out[block].students++;
+        else if (same && !tk) out[block].noTeacher++;
+        else if (!same && tk && tk === key && norm(c.name)) {
+          const o = out[block].other[norm(c.name)] || (out[block].other[norm(c.name)] = { name: c.name, students: 0 });
+          o.students++;
+        }
+      }
+    }
+    const classes = {};
+    for (const [block, r] of Object.entries(out)) {
+      classes[block] = { students: r.students, noTeacher: r.noTeacher, otherNames: Object.values(r.other).sort((a, b) => b.students - a.students).slice(0, 3) };
+    }
+    const shown = user.familyName || String(user.name || '').split(/\s+/).filter((w) => !/\.$/.test(w)).pop() || '';
+    return { lastName: key ? shown : '', classes };
+  });
+  // Rename one of the teacher's classes (to match what their students call it); their plans for it follow.
+  route('PUT', '/api/plans/class-name', { auth: 'user' }, ({ user, body }) => {
+    if (!isTeacher(user)) throw new HttpError(403, 'Only teachers have lesson plans');
+    const block = typeof body.block === 'string' && bell.BLOCK_KEYS.includes(body.block) && hasOwn(user.classes, body.block) ? body.block : null;
+    if (!block) throw bad('Pick one of your classes');
+    const name = cleanText(body.name, 60);
+    if (!name) throw bad('Type a class name');
+    checkWords(name);
+    const old = user.classes[block].name;
+    user.classes[block].name = name;
+    for (const p of state.plans) if (p.by === user.id && p.block === block && norm(p.name) === norm(old)) p.name = name;
+    db.save();
+    return { block, name };
+  });
   // A teacher sets the plan for one of their classes on one day; empty text removes it.
   route('PUT', '/api/plans', { auth: 'user' }, ({ user, body }) => {
     if (!isTeacher(user)) throw new HttpError(403, 'Only teachers add lesson plans');
