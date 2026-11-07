@@ -12,8 +12,8 @@
 </head>
 <body class="simple-page">
   <!-- Just the clock, the block you're in and the time left, big: for a classroom screen, a Chromebook
-       on the desk, or a box on another website. Bookmark it, or embed it:
-       /simple?next=1 also shows what's next, /simple?schedule=1 also shows the day's bell schedule. -->
+       on the desk, or a box on another website. Bookmark it, or embed it. The options (what's next, the
+       full schedule, theme, color, size, a heading...) are in the link: see js/pages/simple.js. -->
   <main class="simple-mode" id="main">
     <noscript><p>MHS Today needs JavaScript turned on to work.</p></noscript>
     <div class="sm-bar">
@@ -21,16 +21,37 @@
       <button class="sm-btn" id="sm-options-btn" type="button" aria-expanded="false" aria-controls="sm-options">Options</button>
       <button class="sm-btn" id="sm-full" type="button" hidden>Full screen</button>
     </div>
-    <div class="sm-options" id="sm-options" hidden>
-      <label class="sm-check"><input type="checkbox" id="opt-next" /> Show what's next</label>
-      <label class="sm-check"><input type="checkbox" id="opt-schedule" /> Show the full schedule</label>
+    <div class="sm-options" id="sm-options" hidden role="group" aria-label="Simple mode options">
+      <fieldset>
+        <legend>Show</legend>
+        <label class="sm-check"><input type="checkbox" id="opt-next" /> What's next</label>
+        <label class="sm-check"><input type="checkbox" id="opt-schedule" /> The full schedule</label>
+        <label class="sm-check"><input type="checkbox" id="opt-date" /> The date and day letter</label>
+        <label class="sm-check"><input type="checkbox" id="opt-seconds" /> Seconds on the clock</label>
+        <label class="sm-check"><input type="checkbox" id="opt-h24" /> 24-hour clock</label>
+        <label class="sm-check"><input type="checkbox" id="opt-minutes" /> Time left in minutes only</label>
+      </fieldset>
+      <fieldset>
+        <legend>Look</legend>
+        <label class="sm-field"><span>Theme</span>
+          <select id="opt-theme"><option value="dark">Dark blue</option><option value="black">Black</option><option value="light">Light</option></select></label>
+        <label class="sm-field"><span>Color</span>
+          <select id="opt-accent"><option value="gold">Gold</option><option value="blue">Blue</option><option value="green">Green</option><option value="pink">Pink</option><option value="plain">Plain</option></select></label>
+        <label class="sm-field"><span>Text size</span>
+          <select id="opt-size"><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select></label>
+        <label class="sm-field sm-wide"><span>Heading (optional)</span>
+          <input id="opt-heading" type="text" maxlength="60" placeholder="Room 214 · Mr. Lee" autocomplete="off" /></label>
+      </fieldset>
       <div class="sm-option-btns">
         <button class="sm-btn" id="copy-link" type="button">Copy link</button>
         <button class="sm-btn" id="copy-embed" type="button">Copy embed code</button>
+        <button class="sm-btn" id="opt-reset" type="button">Reset</button>
       </div>
+      <p class="sm-hint">The link and embed code keep these choices.</p>
       <p class="sm-hint" id="sm-hint"></p>
     </div>
     <div class="sm-main">
+      <div class="sm-heading" id="sm-heading" hidden></div>
       <div class="sm-date" id="sm-date"></div>
       <div class="sm-clock" id="sm-clock" aria-live="off"><span id="sm-hm"></span><span class="sm-ampm" id="sm-ampm"></span></div>
       <div class="sm-title" id="sm-title"></div>

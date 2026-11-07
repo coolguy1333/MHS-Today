@@ -512,6 +512,32 @@ const step = (m) => console.log('•', m);
   await tea.page.waitForSelector('.plan-state:has-text("Saved")');
   assert.equal((await tea.page.evaluate(() => fetch('/api/plans').then((r) => r.json()))).length, 1);
   step('teacher: picked at sign-up; Today, Lesson plans and Groups only; classes without room or teacher; a lesson plan saved as they type');
+  // who sees it: a student who typed the class name differently still gets the plan (same block, same teacher)
+  const mo = await newUser('mo', { sub: 's-mt', email: 'mo@school.test', given_name: 'Mo', family_name: 'Tran' });
+  await signIn(mo);
+  await tea.page.reload(); await tea.page.waitForSelector('.reach-badge');
+  assert.equal(await text(tea.page, '.reach-badge >> nth=0'), 'No students yet');
+  await mo.page.evaluate(() => fetch('/api/classes', { method: 'PUT', headers: { 'X-Requested-With': 'mhs', 'Content-Type': 'application/json' }, body: JSON.stringify({ red: { name: 'Machine Tool 1', teacher: 'Mr. Wienke' } }) }));
+  assert.equal((await mo.page.evaluate(() => fetch('/api/plans').then((r) => r.json()))).length, 1, 'the student sees the plan');
+  await tea.page.reload(); await tea.page.waitForSelector('.reach-badge');
+  assert.equal(await text(tea.page, '.reach-badge >> nth=0'), '1 student sees it');
+  await tea.page.locator('.reach-badge').first().click();
+  await tea.page.waitForSelector('.reach-panel');
+  assert.equal(await tea.page.getAttribute('#tab-class', 'aria-selected'), 'true');
+  assert.match(await text(tea.page, '.reach-panel'), /1 student has you for Red on MHS Today and sees these plans/);
+  // by class: every day Red meets over four weeks; "Copy from last class" fills the next one
+  const rows = tea.page.locator('.plan-row:has(textarea)');
+  assert.ok(await rows.count() >= 8, 'four weeks of meetings');
+  assert.equal(await rows.nth(0).locator('textarea').inputValue(), 'Lathe safety quiz');
+  await rows.nth(1).locator('button:has-text("Copy from last class")').click();
+  await tea.page.waitForFunction(() => document.querySelectorAll('.plan-row textarea')[1].value === 'Lathe safety quiz');
+  await rows.nth(1).locator('.plan-state:has-text("Saved")').waitFor();
+  assert.equal((await tea.page.evaluate(() => fetch('/api/plans').then((r) => r.json()))).length, 2);
+  assert.equal(await rows.nth(1).locator('button:has-text("Copy from last class")').isVisible(), false, 'only offered for an empty box');
+  await tea.page.screenshot({ path: path.join(SHOTS, 'plans-by-class.png'), fullPage: true });
+  await tea.page.click('#tab-week'); await tea.page.waitForSelector('.plan-day textarea');
+  await tea.page.screenshot({ path: path.join(SHOTS, 'plans-week.png'), fullPage: true });
+  step('lesson plans: reach per class (by block and teacher, however the class is spelled), by-class view, copy from last class');
 
   // ---------------------------------------------------------------- look & feel: dark mode + keyboard
   const dark = await newUser('dark', { sub: 's1', email: 'ann@school.test', given_name: 'Ann', family_name: 'Lee' }, { colorScheme: 'dark' });
@@ -531,6 +557,28 @@ const step = (m) => console.log('•', m);
   assert.match(await text(sp, '#sm-schedule li.now'), /Chemistry/);
   assert.ok(await sp.locator('#sm-schedule li.done').count() >= 2, 'earlier blocks are dimmed');
   await sp.screenshot({ path: path.join(SHOTS, 'simple-options.png') });
+  // customizing: theme, color, size, heading, seconds, 24-hour clock, minutes only; all in the address and remembered
+  await sp.selectOption('#opt-theme', 'light'); await sp.selectOption('#opt-accent', 'green'); await sp.selectOption('#opt-size', 'large');
+  await sp.fill('#opt-heading', 'Room 214 <b>Mr. Lee</b>');
+  await sp.check('#opt-seconds'); await sp.check('#opt-h24'); await sp.check('#opt-minutes'); await sp.uncheck('#opt-date');
+  const q = new URL(sp.url()).searchParams;
+  assert.deepEqual(Object.fromEntries(q), { next: '1', schedule: '1', date: '0', seconds: '1', '24h': '1', minutes: '1', theme: 'light', accent: 'green', size: 'large', heading: 'Room 214 <b>Mr. Lee</b>' });
+  await sp.waitForFunction(() => /^\d{1,2}:\d{2}:\d{2}$/.test(document.querySelector('#sm-hm').textContent));
+  assert.equal(await text(sp, '#sm-ampm'), '');
+  assert.match(await text(sp, '#sm-left-num'), /^\d+ min$/);
+  assert.equal(await text(sp, '#sm-heading'), 'Room 214 <b>Mr. Lee</b>', 'the heading is plain text');
+  assert.equal(await sp.locator('#sm-heading b').count(), 0);
+  assert.equal(await sp.locator('#sm-date').isVisible(), false);
+  assert.match(await text(sp, '#sm-schedule li.now'), /^9:44 – 10:51/);
+  assert.equal(await sp.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(244, 246, 251)');
+  assert.equal(await sp.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await sp.click('#sm-options-btn'); await sp.screenshot({ path: path.join(SHOTS, 'simple-custom.png') });
+  await sp.goto(base + '/simple'); await sp.waitForFunction(() => document.querySelector('#sm-heading').textContent === 'Room 214 <b>Mr. Lee</b>'); // remembered on this device
+  assert.match(sp.url(), /theme=light/);
+  await sp.click('#sm-options-btn'); await sp.click('#opt-reset');
+  assert.match(sp.url(), /\/simple$/);
+  assert.equal(await sp.locator('#sm-heading').isVisible(), false);
+  await sp.check('#opt-next'); await sp.check('#opt-schedule');
   await sp.goto(base + '/simple?schedule=1'); await sp.waitForSelector('#sm-schedule li.now');
   assert.equal(await sp.locator('#sm-next').isVisible(), false);
   await sp.setViewportSize({ width: 390, height: 800 }); await sp.screenshot({ path: path.join(SHOTS, 'simple-phone.png') });
@@ -553,7 +601,7 @@ const step = (m) => console.log('•', m);
   assert.equal(await noFrame.evaluate(() => !!document.querySelector('#day-head')).catch(() => false), false, 'Today page is not framed');
   await emb.screenshot({ path: path.join(SHOTS, 'simple-embedded.png') });
   await emb.close(); site.close();
-  step('simple mode: /simple opens from Today, ticks once a second, ?next=1 and ?schedule=1, embeds on another site, other pages refuse framing');
+  step('simple mode: /simple opens from Today, ticks once a second, ?next=1 and ?schedule=1, theme/color/size/heading/seconds/24h/minutes kept in the link and remembered, reset, embeds on another site, other pages refuse framing');
 
   await sp.goto(base + '/index.html'); await sp.waitForSelector('#day-head h1');
   await sp.keyboard.press('Tab');

@@ -4,8 +4,9 @@
 // on Today and on the Calendar page (and in the classes calendar feed).
 //
 // A plan is { id, by: teacherId, block, name: the class name, date, text }. A student sees it when
-// they have a class in the same block with the same name and the teacher's last name as its teacher
-// (from Google, or the last word of the teacher's display name).
+// they have a class in the same block with the teacher's last name as its teacher (from Google, or the
+// last word of the teacher's display name). A teacher has one class per block, so that is enough; only
+// when two teachers share a last name must the class name match too.
 const MAX_PLANS = 20000;
 const KEEP_DAYS = 60; // removed this long after their day
 
@@ -15,13 +16,24 @@ module.exports = function plans(app) {
 
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const lastName = (t) => bell.teacherKey(t.familyName) || bell.teacherKey(t.name);
-  // does `user` (a student) have the class this plan is for?
-  function forStudent(user, p) {
-    const c = hasOwn(user.classes, p.block) ? user.classes[p.block] : null;
-    const t = getUser(p.by);
-    return !!c && !!t && !isTeacher(user) && norm(c.name) === norm(p.name) && !!bell.teacherKey(c.teacher) && bell.teacherKey(c.teacher) === lastName(t);
+  // how many teachers have each last name (two "Smith"s need the class name to tell them apart)
+  function lastNameCounts() {
+    const n = new Map();
+    for (const u of Object.values(state.users)) if (isTeacher(u) && !u.archived) { const k = lastName(u); if (k) n.set(k, (n.get(k) || 0) + 1); }
+    return n;
   }
-  const visible = (user, p) => (isTeacher(user) ? p.by === user.id : forStudent(user, p));
+  // is the student's class `c` (in the plan's block) the teacher's class named `name`?
+  function sameSection(c, teacher, name, counts) {
+    const k = lastName(teacher);
+    if (!c || !k || bell.teacherKey(c.teacher) !== k) return false;
+    return norm(c.name) === norm(name) || (counts.get(k) || 0) <= 1;
+  }
+  // does `user` (a student) have the class this plan is for?
+  function forStudent(user, p, counts) {
+    const t = getUser(p.by);
+    return !isTeacher(user) && !!t && sameSection(hasOwn(user.classes, p.block) ? user.classes[p.block] : null, t, p.name, counts);
+  }
+  const visible = (user, p, counts) => (isTeacher(user) ? p.by === user.id : forStudent(user, p, counts));
   const view = (p) => {
     const t = getUser(p.by);
     return { id: p.id, date: p.date, block: p.block, className: p.name, text: p.text, teacher: t ? t.name : 'Former teacher', updated: p.updated };
@@ -36,8 +48,53 @@ module.exports = function plans(app) {
     const from = cal.parseDate(url.searchParams.get('from')) !== null ? url.searchParams.get('from') : cal.addDays(t, -7);
     const to = cal.parseDate(url.searchParams.get('to')) !== null ? url.searchParams.get('to') : cal.addDays(t, 30);
     if (to < from || cal.parseDate(to) - cal.parseDate(from) > 100 * 86400e3) throw bad('Pick up to about three months');
-    return state.plans.filter((p) => p.date >= from && p.date <= to && visible(user, p))
+    const counts = lastNameCounts();
+    return state.plans.filter((p) => p.date >= from && p.date <= to && visible(user, p, counts))
       .sort((a, b) => a.date.localeCompare(b.date) || bell.BLOCK_KEYS.indexOf(a.block) - bell.BLOCK_KEYS.indexOf(b.block)).map(view);
+  });
+  // Who a teacher's plans reach, per class: how many students see them (the block with the teacher's
+  // last name); and, to fix mismatches, how many have the class in that block with no teacher, and,
+  // when another teacher shares the last name, what else students call the class. Counts only.
+  route('GET', '/api/plans/reach', { auth: 'user' }, ({ user }) => {
+    if (!isTeacher(user)) throw new HttpError(403, 'Only teachers have lesson plans');
+    const key = lastName(user);
+    const counts = lastNameCounts();
+    const out = {};
+    for (const block of bell.BLOCK_KEYS.filter((b) => hasOwn(user.classes, b))) out[block] = { students: 0, noTeacher: 0, other: {} };
+    for (const u of Object.values(state.users)) {
+      if (isTeacher(u) || u.archived || !isPlainObject(u.classes)) continue;
+      for (const block of Object.keys(out)) {
+        const c = hasOwn(u.classes, block) ? u.classes[block] : null;
+        if (!c) continue;
+        const same = norm(c.name) === norm(user.classes[block].name), tk = bell.teacherKey(c.teacher);
+        if (sameSection(c, user, user.classes[block].name, counts)) out[block].students++;
+        else if (same && !tk) out[block].noTeacher++;
+        else if (!same && tk && tk === key && norm(c.name)) {
+          const o = out[block].other[norm(c.name)] || (out[block].other[norm(c.name)] = { name: c.name, students: 0 });
+          o.students++;
+        }
+      }
+    }
+    const classes = {};
+    for (const [block, r] of Object.entries(out)) {
+      classes[block] = { students: r.students, noTeacher: r.noTeacher, otherNames: Object.values(r.other).sort((a, b) => b.students - a.students).slice(0, 3) };
+    }
+    const shown = user.familyName || String(user.name || '').split(/\s+/).filter((w) => !/\.$/.test(w)).pop() || '';
+    return { lastName: key ? shown : '', classes };
+  });
+  // Rename one of the teacher's classes (to match what their students call it); their plans for it follow.
+  route('PUT', '/api/plans/class-name', { auth: 'user' }, ({ user, body }) => {
+    if (!isTeacher(user)) throw new HttpError(403, 'Only teachers have lesson plans');
+    const block = typeof body.block === 'string' && bell.BLOCK_KEYS.includes(body.block) && hasOwn(user.classes, body.block) ? body.block : null;
+    if (!block) throw bad('Pick one of your classes');
+    const name = cleanText(body.name, 60);
+    if (!name) throw bad('Type a class name');
+    checkWords(name);
+    const old = user.classes[block].name;
+    user.classes[block].name = name;
+    for (const p of state.plans) if (p.by === user.id && p.block === block && norm(p.name) === norm(old)) p.name = name;
+    db.save();
+    return { block, name };
   });
   // A teacher sets the plan for one of their classes on one day; empty text removes it.
   route('PUT', '/api/plans', { auth: 'user' }, ({ user, body }) => {
@@ -64,9 +121,9 @@ module.exports = function plans(app) {
   });
 
   return {
-    calendarItems: (user) => state.plans.filter((p) => p.date >= cal.addDays(today(), -14) && visible(user, p)).map((p) => ({
+    calendarItems: (user) => { const counts = lastNameCounts(); return state.plans.filter((p) => p.date >= cal.addDays(today(), -14) && visible(user, p, counts)).map((p) => ({
       uid: `plan-${p.id}`, kind: 'plan', date: p.date, time: null, title: `${p.name}: ${p.text.split('\n')[0].slice(0, 80)}`, description: p.text
-    })),
+    })); },
     userData: (user) => ({ lessonPlans: state.plans.filter((p) => p.by === user.id).map((p) => ({ date: p.date, class: p.name, text: p.text })) }),
     status: () => ({ plans: state.plans.length }),
     exportData: () => ({ plans: state.plans }),

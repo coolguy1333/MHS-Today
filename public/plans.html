@@ -20,18 +20,29 @@
   <main class="container" id="main">
     <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <h1>Lesson plans</h1>
-    <p class="muted">What each of your classes is doing, day by day. Students in your classes see it next to the class on their Today page and calendar. It saves as you type.</p>
-    <div class="card">
+    <p class="muted">Write what each class is doing. Your students see it next to the class on their Today page and calendar. Everything saves as you type.</p>
+    <div class="plan-tabs" role="tablist" aria-label="How to plan">
+      <button class="plan-tab" type="button" role="tab" id="tab-week" aria-controls="plan-panel">By week</button>
+      <button class="plan-tab" type="button" role="tab" id="tab-class" aria-controls="plan-panel">By class</button>
+    </div>
+    <div class="card" id="plan-panel" role="tabpanel">
+      <div class="plan-classes" id="class-pick" hidden role="group" aria-label="Class"></div>
+      <div id="reach" hidden></div>
       <div class="row between month-head">
-        <h2 id="week-title">This week</h2>
+        <h2 id="range-title">This week</h2>
         <div class="row nowrap">
-          <button class="btn small secondary" type="button" id="week-prev" aria-label="Previous week">←</button>
-          <button class="btn small secondary" type="button" id="week-today">This week</button>
-          <button class="btn small secondary" type="button" id="week-next" aria-label="Next week">→</button>
+          <button class="btn small secondary" type="button" id="range-prev" aria-label="Earlier">←</button>
+          <button class="btn small secondary" type="button" id="range-today">Today</button>
+          <button class="btn small secondary" type="button" id="range-next" aria-label="Later">→</button>
         </div>
       </div>
-      <div class="plan-week" id="week"><p class="muted">Loading…</p></div>
+      <div id="plans"><p class="muted">Loading…</p></div>
     </div>
+    <details class="card plan-help">
+      <summary>How students see your plans</summary>
+      <p class="small">A student sees your plan when their <a href="schedule.html">My classes</a> has your last name as the teacher of the same color block (it doesn't matter how they spell the class). Each class shows how many students that is. If another teacher has your last name, the class name must match too; the page then shows what students call it, and you can switch to their name with one click.</p>
+      <p class="small">Prep or duty periods (a class named "Prep", "Planning" or "Duty") don't get a plan box.</p>
+    </details>
   </main>
   <script src="js/calendar.js"></script>
   <script src="js/bellSchedule.js"></script>
