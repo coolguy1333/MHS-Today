@@ -471,6 +471,62 @@ function repeatPicker(dateInput) {
   };
 }
 
+// A small form in a dialog, filled with `values`; `save(values)` runs on Save (an error keeps it open).
+// fields: [{ key, label, type: 'text' | 'date' | 'time' | 'number' | 'textarea' | 'select', options: [[value, label]], attrs, wide }]
+function editDialog(title, fields, values, save) {
+  const dlg = h('dialog', { class: 'dialog', 'aria-labelledby': 'edit-title' });
+  const inputs = {};
+  const form = h('form', { class: 'form-grid' },
+    fields.map((f) => {
+      const el = f.type === 'textarea' ? h('textarea', { rows: '3', ...f.attrs })
+        : f.type === 'select' ? h('select', f.attrs, f.options.map(([v, label]) => h('option', { value: v }, label)))
+          : h('input', { type: f.type || 'text', ...f.attrs });
+      el.value = values[f.key] == null ? '' : String(values[f.key]);
+      inputs[f.key] = el;
+      return h('label', { class: f.wide ? 'wide' : null }, h('span', null, f.label), el);
+    }),
+    h('div', { class: 'wide row' }, h('button', { class: 'btn', type: 'submit' }, 'Save changes'), h('button', { class: 'btn secondary', type: 'button', onclick: () => dlg.close() }, 'Cancel')));
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    busy(ev.submitter, async () => {
+      await save(Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value])));
+      dlg.close();
+    });
+  });
+  add(dlg, h('div', { class: 'dialog-head' }, h('h2', { id: 'edit-title' }, title),
+    h('button', { class: 'linklike', type: 'button', 'aria-label': 'Close', onclick: () => dlg.close() }, '×')), form);
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  const first = form.querySelector('input, textarea, select');
+  if (first) first.focus();
+}
+
+// Change an event: when, where, what, and its sign-up limit (who can see it stays the same).
+function editEvent(e, reload) {
+  const fields = [
+    { key: 'title', label: 'Title', attrs: { maxlength: '120', required: true }, wide: true },
+    { key: 'date', label: e.repeat ? 'First day' : 'Date', type: 'date', attrs: { required: true } },
+    { key: 'time', label: 'Starts (optional)', type: 'time' },
+    e.repeat ? { key: 'until', label: 'Repeats until', type: 'date', attrs: { required: true } } : { key: 'endDate', label: 'Ends on (optional, for several days)', type: 'date' },
+    { key: 'endTime', label: 'Ends (optional)', type: 'time' },
+    { key: 'location', label: 'Where (optional)', attrs: { maxlength: '120' }, wide: true },
+    { key: 'category', label: 'Kind', type: 'select', options: Object.entries(EVENT_CATEGORIES) },
+    e.signup ? { key: 'limit', label: 'Sign-up limit (empty = no limit)', type: 'number', attrs: { min: '1', max: '500' } } : null,
+    { key: 'description', label: 'Details (optional)', type: 'textarea', attrs: { maxlength: '500' }, wide: true }
+  ].filter(Boolean);
+  editDialog(`Edit "${e.title}"`, fields, { ...e, until: e.repeat && e.repeat.until, limit: e.signup && e.signup.limit ? e.signup.limit : '' }, async (v) => {
+    await api('PUT', `/api/events/${e.id}`, {
+      title: v.title, date: v.date, time: v.time, endTime: v.endTime, location: v.location, category: v.category, description: v.description,
+      endDate: e.repeat ? null : v.endDate || null,
+      repeat: e.repeat ? { ...e.repeat, until: v.until } : null,
+      ...(e.signup ? { signup: { limit: v.limit ? Number(v.limit) : 0 } } : {})
+    });
+    toast('Event updated');
+    await reload();
+  });
+}
+
 function eventRow(e, today, reload) {
   const VIS = { group: 'Group members', private: 'Private' };
   const s = e.signup;
@@ -500,6 +556,7 @@ function eventRow(e, today, reload) {
       e.invitees && e.invitees.length ? h('div', { class: 'small muted' }, `Invited: ${e.invitees.map((p) => p.name).join(', ')}`) : null,
       signupLine),
     e.by !== undefined && !e.own ? reportButton('event', { id: e.id }, `"${e.title}"`) : null,
+    e.mine ? h('button', { class: 'linklike', type: 'button', 'aria-label': `Edit ${e.title}`, onclick: () => editEvent(e, reload) }, 'Edit') : null,
     e.mine ? h('button', {
       class: 'linklike danger', type: 'button', 'aria-label': `Delete ${e.title}`,
       onclick: (ev) => busy(ev.currentTarget, async () => {

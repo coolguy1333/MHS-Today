@@ -53,88 +53,8 @@
         prev ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Previous school day', onclick: () => go(prev) }, '← Previous') : null,
         S.viewDate ? h('button', { class: 'btn small', type: 'button', onclick: () => go(null) }, 'Back to today') : null,
         next ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Next school day', onclick: () => go(next) }, 'Next →') : null,
-        h('button', { class: 'linklike small simple-open-btn', type: 'button', onclick: openSimple, title: 'Just the clock, time left and what is next' }, 'Simple mode'))
+        h('a', { class: 'small simple-open-btn', href: '/simple', title: 'A big clock and the time left. Bookmark it, put it on a screen, or embed it.' }, 'Simple mode'))
     );
-  }
-
-  // ---- Simple mode: the clock, the block you're in and the time left, big (a classroom screen, a
-  // Chromebook on the desk). It sits over the Today page, which stays as it is.
-  let simple = null; // { el, timer, wake }
-  const countdown = (mins) => {
-    const s = Math.max(0, Math.round(mins * 60)); // whole seconds (the clock has no fractions; this undoes float noise)
-    const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, '0');
-    return hh ? `${hh}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
-  };
-  function simpleState() {
-    const now = schoolClock(S.info);
-    const day = dayInfo(S.info.calendar, now.date);
-    const out = { now, day, title: '', left: null, leftLabel: 'left' };
-    if (!day.schoolDay) { out.title = noSchoolText(day); return out; }
-    const name = (p) => {
-      const c = classAt(S.classes, day.dayLetter, p.hour);
-      if (MHSBell.outOfSchool(c)) return `${p.label} – out of school`;
-      return c && !(p.hour === 'advisory' && c.name === 'Advisory') ? `${p.label} – ${c.name}` : p.label;
-    };
-    const cur = getCurrentPeriod(day.scheduleType, now.minutes);
-    const lunch = cur.status === 'in-class' && cur.period.hour === LUNCH_HOUR ? lunchFor(S.classes, day.dayLetter) : null;
-    const eating = lunch && atLunch(day.scheduleType, lunch, now.minutes);
-    if (eating) Object.assign(out, { title: `${lunch} Lunch`, left: eating.minutesLeft });
-    else if (cur.status === 'in-class') Object.assign(out, { title: name(cur.period), left: cur.minutesLeft });
-    else if (cur.status === 'passing') Object.assign(out, { title: 'Passing period', left: cur.minutesUntil, leftLabel: 'until the bell' });
-    else if (cur.status === 'before-school') Object.assign(out, { title: 'Before school', left: cur.minutesUntil, leftLabel: 'until school starts' });
-    else out.title = "School's out";
-    return out;
-  }
-  function paintSimple() {
-    const st = simpleState();
-    const [hm, ampm] = formatTime(MHSBell.minutesToTime(Math.floor(st.now.minutes))).split(' ');
-    const q = (c) => simple.el.querySelector(c);
-    q('.sm-clock').firstChild.textContent = hm;
-    q('.sm-ampm').textContent = ampm;
-    q('.sm-date').textContent = `${fmtLongDay(st.now.date)}${st.day.dayLetter ? ` · Day ${st.day.dayLetter}` : ''}`;
-    q('.sm-title').textContent = st.title;
-    q('.sm-left').hidden = st.left === null;
-    q('.sm-left strong').textContent = st.left === null ? '' : countdown(st.left);
-    q('.sm-left span').textContent = st.leftLabel;
-  }
-  // Tick just after each second starts on the (server-corrected) clock, so the countdown goes down
-  // by exactly one every second: a plain 1-second timer drifts, then skips or repeats a number.
-  function tickSimple() {
-    if (!simple) return;
-    if (!document.hidden) paintSimple();
-    const ms = Date.now() + S.info.offset;
-    simple.timer = setTimeout(tickSimple, 1000 - (ms % 1000) + 15);
-  }
-  function openSimple() {
-    if (simple || !S.info) return;
-    const full = h('button', { class: 'sm-btn', type: 'button', hidden: !document.fullscreenEnabled }, 'Full screen');
-    const el = h('div', { class: 'simple-mode', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Simple mode' },
-      h('div', { class: 'sm-bar' }, full, h('button', { class: 'sm-btn', type: 'button', onclick: closeSimple }, 'Close')),
-      h('div', { class: 'sm-date' }),
-      h('div', { class: 'sm-clock', 'aria-live': 'off' }, '', h('span', { class: 'sm-ampm' })),
-      h('div', { class: 'sm-title' }),
-      h('div', { class: 'sm-left' }, h('strong', null), h('span', null)));
-    full.addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen()).catch(() => {}));
-    el.addEventListener('fullscreenchange', () => { full.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen'; });
-    el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.fullscreenElement) closeSimple(); });
-    document.body.append(el);
-    document.body.classList.add('simple-open');
-    simple = { el, timer: null, wake: null };
-    tickSimple();
-    el.querySelector('.sm-btn:not([hidden])').focus();
-    // keep the screen on while it's showing, where the browser allows it
-    if (navigator.wakeLock) navigator.wakeLock.request('screen').then((w) => { if (simple) simple.wake = w; else w.release(); }).catch(() => {});
-  }
-  function closeSimple() {
-    if (!simple) return;
-    clearTimeout(simple.timer);
-    if (simple.wake) simple.wake.release().catch(() => {});
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    simple.el.remove();
-    simple = null;
-    document.body.classList.remove('simple-open');
-    const back = document.querySelector('.simple-open-btn');
-    if (back) back.focus();
   }
 
   // Hour 4 also says which lunch you have and which friends share it.

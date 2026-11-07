@@ -48,6 +48,27 @@ test('security headers are on every kind of response', async () => {
   assert.equal((await c.raw('GET', '/api/health')).headers.get('cache-control'), 'no-store');
 });
 
+test('only Simple mode can be put on another website (in a frame)', async () => {
+  const ctx = await startApp({ mock });
+  const c = ctx.client();
+  for (const p of ['/simple', '/simple.html', '/simple?next=1&schedule=1']) {
+    const r = await c.raw('GET', p);
+    assert.equal(r.status, 200, p);
+    const csp = r.headers.get('content-security-policy');
+    assert.match(csp, /frame-ancestors \*/, p);
+    assert.match(csp, /default-src 'none'/);
+    assert.match(csp, /script-src 'self'(;|$)/);
+    assert.equal(r.headers.get('x-frame-options'), null, p);
+    assert.match(await r.text(), /js\/pages\/simple\.js/);
+  }
+  for (const p of ['/', '/index.html', '/login.html', '/account.html', '/js/pages/simple.js']) { // everything else stays un-frameable
+    const r = await c.raw('GET', p);
+    assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'none'/, p);
+    assert.equal(r.headers.get('x-frame-options'), 'DENY', p);
+    await r.arrayBuffer();
+  }
+});
+
 test('static files: clean URLs, caching, no path traversal, no dotfiles or source', async () => {
   const ctx = await startApp({ mock });
   const c = ctx.client();

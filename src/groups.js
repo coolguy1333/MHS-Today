@@ -538,6 +538,25 @@ module.exports = function groups(app) {
     return { id: ev.id };
   });
 
+  // Change an event without deleting it (and losing its sign-ups): its organizers or an admin. Who
+  // can see it (everyone, a group, invited friends) stays as it was; the sign-up list can get a new
+  // limit (`signup: { limit }`), be added (`true`), or be removed (`null`).
+  route('PUT', '/api/events/:id', { auth: 'user' }, ({ user, params, body }) => {
+    const e = state.events.find((x) => x.id === params.id);
+    if (!e || !canSee(e, user)) throw new HttpError(404, 'Event not found');
+    if (!canEdit(e, user)) throw new HttpError(403, 'Only the organizers (or an admin) can change this event');
+    const fields = cleanEventFields(body, 7, e.category);
+    checkWords(fields.title, fields.description, fields.location);
+    Object.assign(e, fields, { edited: Date.now() });
+    if (body.signup === null || body.signup === false) e.signup = null;
+    else if (body.signup !== undefined) {
+      const s = cleanSignup(body.signup);
+      if (e.signup && s.limit && e.signup.people.length > s.limit) throw bad(`${e.signup.people.length} people already signed up, so the limit can't be lower than that`);
+      e.signup = { limit: s.limit, people: e.signup ? e.signup.people : [] };
+    }
+    db.save();
+    return eventView(e, user);
+  });
   route('DELETE', '/api/events/:id', { auth: 'user' }, ({ user, params }) => {
     const i = state.events.findIndex((e) => e.id === params.id);
     if (i < 0) throw new HttpError(404, 'Event not found');

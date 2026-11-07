@@ -87,3 +87,36 @@ test('study sessions: everyone in the same class sees them, whatever block they 
   assert.deepEqual((await ben.get('/api/study')).data.map((s) => [s.title, s.block]), [['Unit 3 review', 'red']]);
   assert.deepEqual((await cy.get('/api/study')).data, []);
 });
+
+test('old assignments and study sessions clear once their day is over', async () => {
+  const ctx = await startApp({ mock });
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  await ann.put('/api/classes', { yellow: { name: 'Algebra II', teacher: 'Smith' } });
+  await ann.post('/api/classwork', { block: 'yellow', kind: 'quiz', title: 'Today quiz', due: soon(0) });
+  await ann.post('/api/classwork', { block: 'yellow', kind: 'test', title: 'Next week test', due: soon(7) });
+  await ann.post('/api/study', { block: 'yellow', title: 'Review', date: soon(0) });
+  // a day passes: what was due "today" is now yesterday's
+  for (const i of ctx.app.state.classEvents) if (i.title === 'Today quiz') i.due = soon(-1);
+  for (const s of ctx.app.state.studySessions) s.date = soon(-1);
+  assert.deepEqual((await ann.get('/api/classwork')).data.map((i) => i.title), ['Next week test'], 'hidden straight away');
+  assert.deepEqual((await ann.get('/api/study')).data, []);
+  ctx.app.runMaintenance();
+  assert.deepEqual(ctx.app.state.classEvents.map((i) => i.title), ['Next week test'], 'and removed by the cleanup');
+  assert.deepEqual(ctx.app.state.studySessions, []);
+});
+
+test('editing: the person who added a test (or an admin) can fix it without deleting it', async () => {
+  const ctx = await startApp({ mock });
+  const boss = await owner(ctx);
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  const ben = await as(ctx, 2, { given_name: 'Ben' });
+  for (const c of [ann, ben]) await c.put('/api/classes', { yellow: { name: 'Algebra II', teacher: 'Smith' } });
+  const q = (await ann.post('/api/classwork', { block: 'yellow', kind: 'quiz', title: 'Unit 3 quiz', due: soon(2) })).data;
+  assert.equal((await ben.put(`/api/classwork/${q.id}`, { kind: 'test', title: 'x', due: soon(3) })).status, 403, 'not theirs');
+  assert.equal((await ann.put(`/api/classwork/${q.id}`, { kind: 'quiz', title: '', due: soon(3) })).status, 400);
+  const fixed = (await ann.put(`/api/classwork/${q.id}`, { kind: 'test', title: 'Unit 3 test', due: soon(4), notes: 'Moved to Friday' })).data;
+  assert.deepEqual([fixed.id, fixed.kind, fixed.title, fixed.due, fixed.notes], [q.id, 'test', 'Unit 3 test', soon(4), 'Moved to Friday']);
+  assert.deepEqual((await ben.get('/api/classwork')).data.map((i) => i.title), ['Unit 3 test'], 'classmates see the change');
+  assert.equal((await boss.put(`/api/classwork/${q.id}`, { kind: 'test', title: 'Unit 3 test (fixed)', due: soon(4) })).status, 200, 'admins can fix anything (as they can delete it)');
+  assert.deepEqual((await ann.get('/api/classwork')).data.map((i) => i.title), ['Unit 3 test (fixed)']);
+});

@@ -662,24 +662,51 @@ select.fit { width: auto; min-width: 200px; max-width: 100%; }
 .visit-bar.today span { opacity: 1; background: var(--gold-edge); }
 .visit-axis { display: flex; justify-content: space-between; margin-top: 4px; }
 @media (max-width: 560px) { .visit-nums { grid-template-columns: 1fr 1fr; } }
-/* ---- Simple mode (Today): big clock, block, time left, next ---- */
+/* ---- Simple mode (/simple): big clock, block, time left; optional next and full schedule ---- */
 .simple-open-btn { margin-left: auto; }
-body.simple-open { overflow: hidden; }
+body.simple-page { background: #0b1636; color: #fff; }
 .simple-mode {
-  position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5vh;
-  padding: 24px; text-align: center; background: #0b1636; color: #fff;
+  position: fixed; inset: 0; display: flex; align-items: safe center; justify-content: safe center; gap: 4vw;
+  padding: 56px 24px 24px; text-align: center; background: #0b1636; color: #fff; overflow: auto;
 }
-.simple-mode .sm-bar { position: absolute; top: 14px; right: 14px; display: flex; gap: 8px; }
-.simple-mode .sm-btn { font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.35); background: transparent; color: #fff; cursor: pointer; }
+.simple-mode .sm-main { display: flex; flex-direction: column; align-items: center; gap: 1.5vh; min-width: 0; }
+.simple-mode .sm-bar { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 2; }
+.simple-mode .sm-btn { font: inherit; font-size: 0.9rem; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.35); background: transparent; color: #fff; cursor: pointer; text-decoration: none; }
 .simple-mode .sm-btn:hover, .simple-mode .sm-btn:focus-visible { background: rgba(255, 255, 255, 0.12); }
-.simple-mode .sm-date { font-size: clamp(1rem, 2.4vw, 1.6rem); opacity: 0.75; }
-.simple-mode .sm-clock { font-size: clamp(5rem, 21vw, 13rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.simple-mode .sm-btn[hidden] { display: none; }
+.simple-mode .sm-options {
+  position: absolute; top: 54px; right: 12px; z-index: 2; width: min(340px, calc(100vw - 24px)); padding: 14px 16px; text-align: left;
+  display: flex; flex-direction: column; gap: 10px; background: #15255a; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.simple-mode .sm-options[hidden] { display: none; }
+.simple-mode .sm-check { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.95rem; font-weight: 600; color: #fff; cursor: pointer; }
+.simple-mode .sm-check input { width: 18px; height: 18px; accent-color: #ffd84d; }
+.simple-mode .sm-option-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.simple-mode .sm-hint { margin: 0; font-size: 0.82rem; opacity: 0.75; }
+.simple-mode .sm-date { font-size: clamp(0.95rem, min(2.4vw, 4vh), 1.6rem); opacity: 0.75; }
+.simple-mode .sm-clock { font-size: clamp(3.2rem, min(21vw, 30vh), 13rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .simple-mode .sm-ampm { font-size: 0.28em; font-weight: 700; margin-left: 0.15em; opacity: 0.8; }
-.simple-mode .sm-title { font-size: clamp(1.4rem, 4.2vw, 3rem); font-weight: 700; color: #ffd84d; max-width: 90vw; }
+.simple-mode .sm-title { font-size: clamp(1.2rem, min(4.2vw, 7vh), 3rem); font-weight: 700; color: #ffd84d; max-width: 90vw; }
 .simple-mode .sm-left { display: flex; align-items: baseline; gap: 0.4em; }
-.simple-mode .sm-left[hidden] { display: none; }
-.simple-mode .sm-left strong { font-size: clamp(3.4rem, 13vw, 7.5rem); font-variant-numeric: tabular-nums; line-height: 1; }
-.simple-mode .sm-left span { font-size: clamp(1rem, 2.6vw, 1.8rem); opacity: 0.8; }
+.simple-mode .sm-left[hidden], .simple-mode .sm-next[hidden], .simple-mode .sm-error[hidden], .simple-mode .sm-schedule[hidden] { display: none; }
+.simple-mode .sm-left strong { font-size: clamp(2.4rem, min(13vw, 18vh), 7.5rem); font-variant-numeric: tabular-nums; line-height: 1; }
+.simple-mode .sm-left span { font-size: clamp(0.95rem, min(2.6vw, 4.2vh), 1.8rem); opacity: 0.8; }
+.simple-mode .sm-next { font-size: clamp(1rem, min(2.8vw, 4.6vh), 1.9rem); opacity: 0.85; }
+.simple-mode .sm-error { margin: 0; padding: 8px 14px; border-radius: 8px; background: rgba(255, 90, 90, 0.18); }
+.simple-mode .sm-schedule { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); row-gap: 4px; text-align: left; min-width: min(360px, 100%); max-width: 100%; font-size: clamp(0.85rem, min(1.6vw, 2.8vh), 1.15rem); }
+.simple-mode .sm-schedule li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; column-gap: 14px; padding: 6px 12px; border-radius: 8px; border-left: 4px solid transparent; }
+.simple-mode .sm-schedule li.done { opacity: 0.45; }
+.simple-mode .sm-schedule li.now { background: rgba(255, 216, 77, 0.16); color: #fff; border-left-color: #ffd84d; font-weight: 700; opacity: 1; }
+.simple-mode .sm-schedule small { opacity: 0.75; font-weight: 400; }
+.simple-mode .sm-s-time { font-variant-numeric: tabular-nums; opacity: 0.8; white-space: nowrap; }
+/* with the schedule: side by side on a wide screen, the clock a little smaller; stacked when narrow */
+.with-schedule .simple-mode .sm-clock { font-size: clamp(3rem, min(14vw, 24vh), 10rem); }
+.with-schedule .simple-mode .sm-left strong { font-size: clamp(2.2rem, min(9vw, 15vh), 6rem); }
+@media (max-width: 760px) {
+  .with-schedule .simple-mode { flex-direction: column; justify-content: flex-start; gap: 24px; }
+  .with-schedule .simple-mode .sm-clock { font-size: clamp(3rem, 21vw, 8rem); }
+  .simple-mode .sm-schedule { width: 100%; }
+}
 .choice-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px; }
 body.teacher .student-only { display: none !important; }
 .names-only .slot { grid-template-columns: 110px 1fr 7.5rem; }

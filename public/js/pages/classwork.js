@@ -129,6 +129,15 @@
         h('div', { class: 'small muted' }, `added by ${i.by}`)),
       h('div', { class: 'row nowrap small' },
         i.canDelete ? h('button', {
+          class: 'linklike', type: 'button', 'aria-label': `Edit ${i.title}`,
+          onclick: () => editDialog(`Edit "${i.title}"`, [
+            { key: 'kind', label: 'What', type: 'select', options: Object.entries(KIND_LABEL) },
+            { key: 'due', label: 'Due', type: 'date', attrs: { required: true } },
+            { key: 'title', label: 'Title', attrs: { maxlength: '100', required: true }, wide: true },
+            { key: 'notes', label: 'Notes (optional)', type: 'textarea', attrs: { maxlength: '300' }, wide: true }
+          ], i, async (v) => { await api('PUT', `/api/classwork/${i.id}`, v); toast('Updated for everyone in the class'); await loadClassItems(); })
+        }, 'Edit') : null,
+        i.canDelete ? h('button', {
           class: 'linklike danger', type: 'button', 'aria-label': `Delete ${i.title}`,
           onclick: (e) => { if (confirm(`Delete "${i.title}" for everyone in the class?`)) busy(e.currentTarget, async () => { await api('DELETE', `/api/classwork/${i.id}`); await loadClassItems(); }); }
         }, 'Delete') : null,

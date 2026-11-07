@@ -41,7 +41,7 @@ module.exports = function study(app) {
     exists: (ref) => state.studySessions.some((s) => s.id === ref.id)
   });
   route('GET', '/api/study', { auth: 'user' }, ({ user }) => state.studySessions
-    .filter((s) => blockOf(user, s) && reports.visible('study', s.id, s.by, user))
+    .filter((s) => s.date >= today() && blockOf(user, s) && reports.visible('study', s.id, s.by, user)) // not ones whose day is over
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
     .map((s) => sessionView(user, s)));
   route('POST', '/api/study', { auth: 'user' }, ({ user, body }) => {
@@ -101,8 +101,8 @@ module.exports = function study(app) {
       state.studySessions = sessions;
     },
     maintain() {
-      const yesterday = cal.addDays(today(), -1);
-      state.studySessions = state.studySessions.filter((s) => s.date >= yesterday);
+      const t = today(); // a study session is gone once its day is over
+      state.studySessions = state.studySessions.filter((s) => s.date >= t);
     },
     forgetUser(id) {
       state.studySessions = state.studySessions.filter((s) => s.by !== id);
