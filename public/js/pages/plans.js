@@ -120,11 +120,11 @@
     if (!r) return null;
     const lines = [];
     lines.push(h('p', null, r.students
-      ? [h('strong', null, plural(r.students, 'student', 'students')), ` ${r.students === 1 ? 'has' : 'have'} ${c.name} (${b.label}) with you on MHS Today and ${r.students === 1 ? 'sees' : 'see'} these plans.`]
-      : [h('strong', null, 'No students see these plans yet.'), ` They will when they add ${b.label}: "${c.name}" with teacher "${S.reach.lastName || 'your last name'}" on My classes.`]));
+      ? [h('strong', null, plural(r.students, 'student', 'students')), ` ${r.students === 1 ? 'has' : 'have'} you for ${b.label} on MHS Today and ${r.students === 1 ? 'sees' : 'see'} these plans.`]
+      : [h('strong', null, 'No students see these plans yet.'), ` They will once they put "${S.reach.lastName || 'your last name'}" as the teacher of their ${b.label} class on My classes.`]));
     for (const o of r.otherNames) {
       lines.push(h('p', { class: 'reach-fix' },
-        `${plural(o.students, 'student', 'students')} with you in ${b.label} ${o.students === 1 ? 'calls' : 'call'} it "${o.name}". `,
+        `Another teacher has your last name, so the class names must match: ${plural(o.students, 'student', 'students')} with you in ${b.label} ${o.students === 1 ? 'calls' : 'call'} it "${o.name}". `,
         h('button', {
           class: 'btn small', type: 'button',
           onclick: (e) => {

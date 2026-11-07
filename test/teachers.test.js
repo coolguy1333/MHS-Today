@@ -181,7 +181,7 @@ test('lesson plans: a teacher writes what each class is doing; their students (s
   assert.deepEqual((await kim.get('/api/plans')).data, []);
 });
 
-test('lesson plans: teachers see how many students each class reaches, and can rename a class to the name students use', async () => {
+test('lesson plans: students see them by block and teacher (the name only matters when two teachers share a last name); teachers see the reach and can rename', async () => {
   const ctx = await startApp({ mock });
   const t = await teacher(ctx, 5); // Jason Wienke
   const kim = await as(ctx, 1, { given_name: 'Kim' });
@@ -196,12 +196,19 @@ test('lesson plans: teachers see how many students each class reaches, and can r
   const day = cal.addDays(cal.schoolNow('America/Chicago').date, 1);
   await t.put('/api/plans', { block: 'pink', date: day, text: 'Bridge build' });
   assert.equal((await kim.get('/api/plans/reach')).status, 403, 'teachers only');
-  const r = (await t.get('/api/plans/reach')).data;
+  let r = (await t.get('/api/plans/reach')).data;
   assert.equal(r.lastName, 'Wienke');
   assert.deepEqual(r.classes.red, { students: 2, noTeacher: 1, otherNames: [] });
-  assert.deepEqual(r.classes.pink, { students: 0, noTeacher: 0, otherNames: [{ name: 'Engineering 1', students: 2 }] });
+  assert.deepEqual(r.classes.pink, { students: 2, noTeacher: 0, otherNames: [] }, '"Engineering 1" is still his Pink class');
   assert.equal(JSON.stringify(r).includes('Kim'), false, 'counts only, never who');
-  assert.deepEqual((await kim.get('/api/plans')).data, [], 'name differs: not seen yet');
+  assert.deepEqual((await kim.get('/api/plans')).data.map((x) => x.text), ['Bridge build']);
+  assert.deepEqual((await ivy.get('/api/plans')).data, []);
+  // a second Wienke: now the class name has to match to tell them apart
+  const t2 = await teacher(ctx, 6, { given_name: 'Amy' });
+  await t2.put('/api/classes', { pink: { name: 'Art' } });
+  assert.deepEqual((await kim.get('/api/plans')).data, [], 'ambiguous: not seen');
+  r = (await t.get('/api/plans/reach')).data;
+  assert.deepEqual(r.classes.pink, { students: 0, noTeacher: 0, otherNames: [{ name: 'Engineering 1', students: 2 }] });
   // one click: use the students' name; the plan follows the class
   assert.equal((await kim.put('/api/plans/class-name', { block: 'pink', name: 'x' })).status, 403);
   assert.equal((await t.put('/api/plans/class-name', { block: 'blue', name: 'x' })).status, 400);
@@ -209,4 +216,5 @@ test('lesson plans: teachers see how many students each class reaches, and can r
   assert.equal((await t.get('/api/classes')).data.pink.name, 'Engineering 1');
   assert.deepEqual((await kim.get('/api/plans')).data.map((x) => [x.className, x.text]), [['Engineering 1', 'Bridge build']]);
   assert.equal((await t.get('/api/plans/reach')).data.classes.pink.students, 2);
+  assert.equal((await t2.get('/api/plans/reach')).data.classes.pink.students, 0, "the other Wienke's Art class isn't theirs");
 });

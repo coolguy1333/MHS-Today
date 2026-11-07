@@ -555,9 +555,10 @@ function eventRow(e, today, reload) {
       e.description ? h('div', { class: 'small' }, e.description) : null,
       e.invitees && e.invitees.length ? h('div', { class: 'small muted' }, `Invited: ${e.invitees.map((p) => p.name).join(', ')}`) : null,
       signupLine),
-    e.by !== undefined && !e.own ? reportButton('event', { id: e.id }, `"${e.title}"`) : null,
-    e.mine ? h('button', { class: 'linklike', type: 'button', 'aria-label': `Edit ${e.title}`, onclick: () => editEvent(e, reload) }, 'Edit') : null,
-    e.mine ? h('button', {
+    h('div', { class: 'row nowrap small row-actions' },
+      e.by !== undefined && !e.own ? reportButton('event', { id: e.id }, `"${e.title}"`) : null,
+      e.mine ? h('button', { class: 'linklike', type: 'button', 'aria-label': `Edit ${e.title}`, onclick: () => editEvent(e, reload) }, 'Edit') : null,
+      e.mine ? h('button', {
       class: 'linklike danger', type: 'button', 'aria-label': `Delete ${e.title}`,
       onclick: (ev) => busy(ev.currentTarget, async () => {
         if (!confirm(`Delete "${e.title}"?`)) return;
@@ -565,7 +566,7 @@ function eventRow(e, today, reload) {
         toast('Event deleted');
         await reload();
       })
-    }, 'Delete') : null);
+    }, 'Delete') : null));
 }
 
 // A round avatar: the person's emoji, or their initials, on their color.

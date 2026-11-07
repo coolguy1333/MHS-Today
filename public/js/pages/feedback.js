@@ -9,6 +9,11 @@
   async function load() {
     try {
       const mine = await api('GET', '/api/feedback');
+      // opening this page reads the replies: take the "new reply" marks off the menu and footer
+      for (const link of document.querySelectorAll('a[href="feedback.html"]')) {
+        link.querySelectorAll('.dot').forEach((d) => d.remove());
+        if (/\(new reply\)$/.test(link.textContent)) link.textContent = 'Feedback';
+      }
       fill($('mine'), mine.length ? mine.map((f) => h('div', { class: 'feedback-item' + (f.unread ? ' unread' : '') },
         h('div', { class: 'row between' }, h('strong', null, TYPES[f.type]), h('span', { class: `badge status-${f.status}` }, STATUS[f.status])),
         h('p', { class: 'pre' }, f.message),
