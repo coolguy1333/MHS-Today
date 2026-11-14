@@ -13,7 +13,7 @@ module.exports = function icalendar(app) {
   // Calendar (its own name, color and on/off switch): /cal/<token>.ics, /cal/<token>-school.ics …
   const PARTS = {
     school: { name: 'MHS Today · School days', kinds: ['school'] },
-    classes: { name: 'MHS Today · Classes & assignments', kinds: ['classwork', 'study', 'plan'] },
+    classes: { name: 'MHS Today · Classes & assignments', kinds: ['classwork', 'study', 'plan', 'todo'] },
     events: { name: 'MHS Today · Events & clubs', kinds: ['event', 'group'] }
   };
   const feedUrl = (u, part) => (u.calendarToken ? `${config.publicUrl}/cal/${u.calendarToken}${part ? `-${part}` : ''}.ics` : null);

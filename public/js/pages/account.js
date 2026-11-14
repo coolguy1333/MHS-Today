@@ -345,4 +345,7 @@
       location.href = 'index.html';
     });
   });
+  // theme (kept on this device; see setTheme in app.js)
+  $('theme-select').value = getTheme();
+  $('theme-select').addEventListener('change', (e) => setTheme(e.target.value));
 })();

@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 
 const cal = require('../public/js/calendar.js');
 const bell = require('../public/js/bellSchedule.js');
@@ -30,7 +31,7 @@ const SHARE_LEVELS = ['full', 'lunch', 'none'];
 const SUGGEST_KEYS = ['show', 'viaFriends', 'viaClasses'];
 const ROLES = ['student', 'teacher'];
 // Teachers use Today (their own classes) and the groups they advise; the rest is for students.
-const STUDENT_ONLY = /^\/api\/(friends|study|classwork|tasks|tools\/suggestions|me\/friend-code)(\/|$)/;
+const STUDENT_ONLY = /^\/api\/(friends|study|classwork|tasks|todos|tools\/suggestions|me\/friend-code)(\/|$)/;
 const GRADES = [9, 10, 11, 12];
 const MAX_LINKS = 100;
 const MAX_HIDDEN_SUGGESTIONS = 300;
@@ -62,6 +63,15 @@ const MIME = {
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8'
 };
+
+// Text files and JSON are sent compressed (Brotli or gzip, whichever the browser takes): the pages are
+// about a third of the size on a slow school connection.
+const COMPRESSIBLE = new Set(['.html', '.css', '.js', '.json', '.svg', '.txt', '.webmanifest']);
+function pickEncoding(req) {
+  const accept = String(req.headers['accept-encoding'] || '').toLowerCase();
+  const takes = (name) => new RegExp(`(^|,)\\s*${name}\\s*(;\\s*q=(?!0(\\.0*)?\\s*(,|$))[^,]*)?\\s*(,|$)`).test(accept);
+  return takes('br') ? 'br' : takes('gzip') ? 'gzip' : null;
+}
 
 function createApp(config, { log = (...a) => console.log(new Date().toISOString(), ...a), fetchFn } = {}) {
   const db = openDb(config.dataDir, log);
@@ -123,12 +133,20 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const clearCookie = (res, name) => addCookie(res, serializeCookie(name, '', { maxAge: 0, secure: config.secure }));
 
   function sendJson(res, status, data, headers) {
-    const body = JSON.stringify(data);
+    let body = Buffer.from(JSON.stringify(data));
+    const extra = {};
+    if (body.length > 1024 && res.mhsEncoding) { // bigger answers (the calendar, lists) go compressed; fast settings
+      body = res.mhsEncoding === 'br'
+        ? zlib.brotliCompressSync(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: body.length } })
+        : zlib.gzipSync(body, { level: 6 });
+      extra['Content-Encoding'] = res.mhsEncoding;
+      extra.Vary = 'Accept-Encoding';
+    }
     res.writeHead(status, {
-      'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body),
-      'Cache-Control': 'no-store', ...headers
+      'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length,
+      'Cache-Control': 'no-store', ...extra, ...headers
     });
-    res.end(body);
+    res.end(res.mhsHead ? undefined : body);
   }
   function redirect(res, location) {
     res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' });
@@ -504,12 +522,16 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   const tasks = require('./tasks')(shared);
   feedbackFeature = require('./feedback')(shared);
   photosFeature = require('./photos')(shared);
-  features.push(reports, require('./study')(shared), require('./classevents')(shared), require('./plans')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, photosFeature, calendarFeed);
+  features.push(reports, require('./study')(shared), require('./classevents')(shared), require('./plans')(shared), require('./todos')(shared), tasks, require('./groups')(shared), require('./tools')(shared), require('./notices')(shared), feedbackFeature, photosFeature, calendarFeed);
   push = require('./push')(shared);
   features.push(push);
   for (const f of features) if (f.upgrade) f.upgrade();
 
-  route('GET', '/api/health', { auth: 'none' }, () => ({ ok: true }));
+  // What the host checks: fine while the server answers and its data is being saved.
+  route('GET', '/api/health', { auth: 'none' }, () => {
+    if (db.failing()) throw new HttpError(503, 'Data is not being saved (see the server log)');
+    return { ok: true };
+  });
 
   route('GET', '/api/me', { auth: 'none' }, ({ user }) => ({
     user: user ? profile(user) : null,
@@ -1048,6 +1070,23 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
   }
 
   // ---------- static files ----------
+  // The site's own files, kept in memory (they are small and only change with a new version), each
+  // compressed once per encoding instead of on every request.
+  const staticCache = new Map(); // file -> { tag, raw, br, gzip }
+  async function staticBody(file, tag, enc) {
+    let c = staticCache.get(file);
+    if (!c || c.tag !== tag) {
+      c = { tag, raw: await fs.promises.readFile(file) };
+      if (c.raw.length <= 2 * MB) staticCache.set(file, c); // anything bigger is just read each time
+    }
+    if (!enc) return c.raw;
+    if (!c[enc]) {
+      c[enc] = enc === 'br'
+        ? zlib.brotliCompressSync(c.raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: c.raw.length } })
+        : zlib.gzipSync(c.raw, { level: 9 });
+    }
+    return c[enc];
+  }
   async function serveStatic(req, res, url) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { Allow: 'GET, HEAD' });
@@ -1064,10 +1103,13 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
       let st;
       try { st = await fs.promises.stat(file); } catch { continue; }
       if (!st.isFile()) continue;
-      const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
-      const headers = {
-        'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag
-      };
+      const base = `${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}`;
+      const ext = path.extname(file);
+      const enc = COMPRESSIBLE.has(ext) && st.size > 512 ? pickEncoding(req) : null;
+      const etag = `"${base}${enc ? `-${enc}` : ''}"`; // each form of the file has its own tag
+      const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag };
+      if (COMPRESSIBLE.has(ext)) headers.Vary = 'Accept-Encoding';
+      if (enc) headers['Content-Encoding'] = enc;
       if (path.basename(file) === 'simple.html') { // Simple mode can be embedded in other sites (a teacher's page, a hallway screen)
         res.setHeader('Content-Security-Policy', SECURITY_HEADERS['Content-Security-Policy'].replace("frame-ancestors 'none'", 'frame-ancestors *'));
         res.removeHeader('X-Frame-Options');
@@ -1077,11 +1119,10 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
         visits.hit(req, clientIp(req), viewer && viewer.id);
       }
       if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
-      const data = await fs.promises.readFile(file);
+      const data = await staticBody(file, base, enc);
       res.writeHead(200, { ...headers, 'Content-Length': data.length });
       return res.end(req.method === 'HEAD' ? undefined : data);
     }
-    // Not found: friendly page for browsers, plain status otherwise.
     if (String(req.headers.accept || '').includes('text/html')) {
       try {
         const page = await fs.promises.readFile(path.join(PUBLIC_DIR, '404.html'));
@@ -1094,6 +1135,8 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
 
   async function handle(req, res) {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+    res.mhsEncoding = pickEncoding(req);
+    res.mhsHead = req.method === 'HEAD';
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { return sendJson(res, 400, { error: 'Bad request' }); }
     try {
@@ -1199,7 +1242,7 @@ function createApp(config, { log = (...a) => console.log(new Date().toISOString(
     });
   }
 
-  return { server, listen, close, config, state, db, google: !!google, runReminders: () => push.runReminders(), runMaintenance: maintain };
+  return { server, listen, close, config, state, db, google: !!google, runReminders: () => push.runReminders(), runMaintenance: maintain, flush: () => db.flush() };
 }
 
 module.exports = { createApp };

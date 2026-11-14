@@ -152,4 +152,10 @@
   // Nothing saved yet: the Infinite Campus import is the quickest start
   if (teacher) $('import-card').remove();
   else if (!Object.keys(classes).length) $('import-card').open = true;
+  // print just the rotation grid (the page's print styles hide the rest)
+  $('print-btn').addEventListener('click', () => {
+    document.body.classList.add('print-rotation');
+    window.addEventListener('afterprint', () => document.body.classList.remove('print-rotation'), { once: true });
+    window.print();
+  });
 })();

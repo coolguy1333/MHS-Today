@@ -10,4 +10,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # every script the server or a browser will load must at least parse
+      - run: for f in server.js src/*.js public/sw.js public/js/*.js public/js/pages/*.js test/*.js; do node --check "$f" || exit 1; done
       - run: npm test
+  browser:
+    # the real pages in Chromium against the real server (test/e2e.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

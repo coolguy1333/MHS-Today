@@ -23,8 +23,11 @@
   --radius: 12px;
   color-scheme: light dark;
 }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+/* dark: when the device asks for it (unless Light was picked), or when Dark was picked (js/theme.js) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --primary: #8aa4ff;
     --on-primary: #0b1224;
     --gold-edge: #f8dd23;
@@ -43,6 +46,25 @@
     --focus: #8fb0ff;
     --nav-bg: #12296b;
   }
+}
+:root[data-theme="dark"] {
+  --primary: #8aa4ff;
+  --on-primary: #0b1224;
+  --gold-edge: #f8dd23;
+  --link: #9bb0ff;
+  --bg: #0e1320;
+  --card: #171d2c;
+  --text: #e8ebf2;
+  --muted: #a0aabb;
+  --border: #2b3448;
+  --input-bg: #10162a;
+  --current: #3b3412;
+  --danger: #ff8a80;
+  --ok: #6fd3a0;
+  --warn-bg: #3b3412;
+  --warn-text: #ffd97a;
+  --focus: #8fb0ff;
+  --nav-bg: #12296b;
 }
 
 * { box-sizing: border-box; }
@@ -418,9 +440,17 @@ html { scroll-padding-top: 12px; }
 .more-opts .form-grid { margin-top: 8px; }
 @media (max-width: 480px) { .quick-row { flex-wrap: wrap; } .quick-row #tk-title { flex-basis: 100%; } .quick-row #tk-due { flex: 1; } }
 
-/* ---- "coming soon" ---- */
-.soon-card { border-left: 4px solid var(--gold-edge); }
-.soon-card .badge { margin-bottom: 8px; }
+/* ---- my to-do list ---- */
+.quick-row #td-title { flex: 1; min-width: 0; }
+.quick-row #td-due, .quick-row #td-block { width: auto; flex: 0 1 auto; min-width: 0; max-width: 11rem; }
+.todo-meta { display: block; }
+.todo-row .check { flex: 1; min-width: 0; cursor: pointer; }
+.todo-row .check input, #tasks-preview .check input { width: 18px; height: 18px; flex: none; margin-top: 3px; }
+.todo-row.done strong { text-decoration: line-through; color: var(--muted); font-weight: 500; }
+#tasks-preview .check { cursor: pointer; }
+#todo-done { margin: 8px 0; }
+#todo-done summary { cursor: pointer; color: var(--muted); }
+@media (max-width: 560px) { #todo-form .quick-row { flex-wrap: wrap; } .quick-row #td-title { flex-basis: 100%; } .quick-row #td-due, .quick-row #td-block { flex: 1 1 0; min-width: 0; max-width: none; } }
 
 /* ---- event categories ---- */
 .badge.cat { background: var(--border); color: var(--text); font-weight: 600; }
@@ -428,12 +458,17 @@ html { scroll-padding-top: 12px; }
 .badge.cat-clubs { background: #fdf3c4; color: #5c4a00; }
 .badge.cat-community { background: #dcf3e4; color: #13562f; }
 .badge.cat-holidays { background: #fde2e1; color: #8a1c14; }
+/* dark: when the device asks for it (unless Light was picked), or when Dark was picked (js/theme.js) */
 @media (prefers-color-scheme: dark) {
-  .badge.cat-sports { background: #22345f; color: #c9d6ff; }
-  .badge.cat-clubs { background: #4a3f0e; color: #fde58a; }
-  .badge.cat-community { background: #173d27; color: #a6e7bf; }
-  .badge.cat-holidays { background: #4d1d1a; color: #ffc1bb; }
+  :root:not([data-theme="light"]) .badge.cat-sports { background: #22345f; color: #c9d6ff; }
+  :root:not([data-theme="light"]) .badge.cat-clubs { background: #4a3f0e; color: #fde58a; }
+  :root:not([data-theme="light"]) .badge.cat-community { background: #173d27; color: #a6e7bf; }
+  :root:not([data-theme="light"]) .badge.cat-holidays { background: #4d1d1a; color: #ffc1bb; }
 }
+:root[data-theme="dark"] .badge.cat-sports { background: #22345f; color: #c9d6ff; }
+:root[data-theme="dark"] .badge.cat-clubs { background: #4a3f0e; color: #fde58a; }
+:root[data-theme="dark"] .badge.cat-community { background: #173d27; color: #a6e7bf; }
+:root[data-theme="dark"] .badge.cat-holidays { background: #4d1d1a; color: #ffc1bb; }
 .inline-select select { padding: 6px 10px; font-size: 0.9rem; }
 
 /* ---- footer ---- */
@@ -574,12 +609,17 @@ fieldset.plain { border: 0; padding: 0; margin: 0; }
 .badge.kind-quiz { background: #fdf3c4; color: #5c4a00; }
 .badge.kind-assignment { background: #dbe4ff; color: #183890; }
 .badge.kind-project { background: #dcf3e4; color: #13562f; }
+/* dark: when the device asks for it (unless Light was picked), or when Dark was picked (js/theme.js) */
 @media (prefers-color-scheme: dark) {
-  .badge.kind-test { background: #4d1d1a; color: #ffc1bb; }
-  .badge.kind-quiz { background: #4a3f0e; color: #fde58a; }
-  .badge.kind-assignment { background: #22345f; color: #c9d6ff; }
-  .badge.kind-project { background: #173d27; color: #a6e7bf; }
+  :root:not([data-theme="light"]) .badge.kind-test { background: #4d1d1a; color: #ffc1bb; }
+  :root:not([data-theme="light"]) .badge.kind-quiz { background: #4a3f0e; color: #fde58a; }
+  :root:not([data-theme="light"]) .badge.kind-assignment { background: #22345f; color: #c9d6ff; }
+  :root:not([data-theme="light"]) .badge.kind-project { background: #173d27; color: #a6e7bf; }
 }
+:root[data-theme="dark"] .badge.kind-test { background: #4d1d1a; color: #ffc1bb; }
+:root[data-theme="dark"] .badge.kind-quiz { background: #4a3f0e; color: #fde58a; }
+:root[data-theme="dark"] .badge.kind-assignment { background: #22345f; color: #c9d6ff; }
+:root[data-theme="dark"] .badge.kind-project { background: #173d27; color: #a6e7bf; }
 .due-line { font-size: 0.82rem; margin-top: 2px; }
 
 /* ---- repeating events ---- */
@@ -756,7 +796,7 @@ body:not(.teacher) .teacher-only { display: none !important; }
 .cal-filter.on { color: var(--text); border-color: var(--text); }
 .cal-filter:not(.on) .cal-dot { opacity: 0.3; }
 .cal-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--k); }
-.kind-event { --k: #2f6fbf; } .kind-group { --k: #16a34a; } .kind-classwork { --k: #e0731d; } .kind-study { --k: #9b5de5; } .kind-plan { --k: #0e9aa7; } .kind-off { --k: #8a8f98; }
+.kind-event { --k: #2f6fbf; } .kind-group { --k: #16a34a; } .kind-classwork { --k: #e0731d; } .kind-study { --k: #9b5de5; } .kind-plan { --k: #0e9aa7; } .kind-todo { --k: #d6336c; } .kind-off { --k: #8a8f98; }
 .cal-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 0.7fr)); gap: 4px; }
 .cal-head { text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; padding: 2px 0; }
 .cal-cell { display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-height: 96px; padding: 5px; text-align: left; font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; overflow: hidden; }
@@ -828,3 +868,28 @@ body.agreeing .tabbar, body.agreeing .nav-wide { display: none !important; } bod
 .emoji-more { margin: 4px 0 8px; }
 .emoji-more summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; color: var(--link); padding: 4px 0; }
 .plan-day { scroll-margin-top: 12px; }
+
+/* ---- the theme picker (footer, Profile) ---- */
+.theme-btn { font-size: inherit; }
+/* ---- printing: just the content, in ink-friendly colors ---- */
+@media print {
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+    --bg: #fff; --card: #fff; --text: #000; --muted: #333; --border: #999; --link: #000; --primary: #000; --current: #eee; --input-bg: #fff; color-scheme: light;
+  }
+  .nav, .tabbar, .more-sheet, .site-footer, .skip-link, #toasts, .toast, .banners, .no-print, .btn, .linklike, details:not([open]), .day-nav, #setup-card, .profile-tabs, .profile-hero { display: none !important; }
+  body { background: #fff; font-size: 11pt; }
+  .container { max-width: none; margin: 0; padding: 0; }
+  .card { border: 0; box-shadow: none; padding: 0; margin: 0 0 14pt; break-inside: avoid; }
+  a { text-decoration: none; }
+  .rotation-table td, .rotation-table th, .schedule-table td, .schedule-table th { border: 1px solid #999; }
+  .rotation-table td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body.print-rotation main > :not(.print-keep) { display: none !important; }
+  .print-title { display: block !important; font-size: 16pt; font-weight: 700; margin: 0 0 8pt; }
+}
+.print-title { display: none; }
+/* on a phone, Edit / Delete / Report go under the text instead of squeezing it */
+@media (max-width: 560px) {
+  .list-row:has(> .row-actions) { flex-wrap: wrap; row-gap: 2px; }
+  .list-row:has(> .row-actions) > :first-child { flex: 1 1 100%; }
+  .list-row > .row-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+}

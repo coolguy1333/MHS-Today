@@ -5,7 +5,7 @@
   const { SCHEDULES, getCurrentPeriod, formatTime, blockFor, blockInfo, LUNCH_HOUR, lunchFor, lunchTimes, atLunch } = MHSBell;
 
   // viewDate: null = automatic (today, or the next school day when there's no school today)
-  const S = { info: null, me: null, classes: {}, friends: [], events: [], tasks: null, classItems: [], notices: {}, viewDate: null, lastDate: null, key: '' };
+  const S = { info: null, me: null, classes: {}, friends: [], events: [], tasks: null, classItems: [], todos: [], notices: {}, viewDate: null, lastDate: null, key: '' };
   const KIND_LABEL = { test: 'Test', quiz: 'Quiz', assignment: 'Assignment', project: 'Project' };
 
   function model() {
@@ -314,25 +314,39 @@
     }
   }
 
-  // Due soon: overdue and the next week from the person's Google Tasks.
-  // Due soon: classmates' tests and assignments for your classes, and your Google Tasks when they're on.
+  // Due soon: your own to-do list (overdue and the next week; check things off right here),
+  // classmates' tests and assignments for your classes, and your Google Tasks when they're on.
   function renderTasks(m) {
     const card = $('tasks-card');
-    card.hidden = !S.me || isTeacher(S.me) || !Object.keys(S.classes).length;
+    card.hidden = !S.me || isTeacher(S.me);
     if (card.hidden) return;
     const t = m.now.date;
     const week = MHSCalendar.addDays(t, 7);
-    const fromClass = S.classItems.filter((i) => i.due >= t && i.due <= week)
+    // a classmate's test you already copied to your own list shows once (as yours, with its checkbox)
+    const copied = new Set(S.todos.filter((x) => !x.done).map((x) => `${x.due}|${x.title.toLowerCase()}`));
+    const fromClass = S.classItems.filter((i) => i.due >= t && i.due <= week && !copied.has(`${i.due}|${KIND_LABEL[i.kind]}: ${i.title}`.toLowerCase()))
       .map((i) => ({ title: [h('span', { class: `badge kind-${i.kind}` }, KIND_LABEL[i.kind]), ' ', i.title], due: i.due, sub: i.className }));
     const tasksOn = S.tasks && S.tasks.available !== false && S.tasks.connected && !S.tasks.error;
     const mine = tasksOn ? S.tasks.tasks.filter((x) => x.due && x.due <= week).map((x) => ({ title: x.title, due: x.due, sub: 'My Google Tasks' })) : [];
-    const soon = [...fromClass, ...mine].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 6);
+    const own = S.todos.filter((x) => !x.done && x.due && x.due <= week).map((x) => ({ title: x.title, due: x.due, sub: x.className || 'My to-do list', todo: x }));
+    const soon = [...own, ...fromClass, ...mine].sort((a, b) => a.due.localeCompare(b.due)).slice(0, 8);
+    const undated = S.todos.filter((x) => !x.done && !x.due).length;
+    const checkOff = (x) => {
+      const box = h('input', { type: 'checkbox', 'aria-label': `Done: ${x.title}` });
+      box.addEventListener('change', async () => {
+        box.disabled = true;
+        try { await api('PUT', `/api/todos/${x.todo.id}`, { done: true }); toast('Done!'); } catch (e) { showError(e); }
+        await load();
+      });
+      return box;
+    };
     const connect = S.tasks && S.tasks.available !== false && !S.tasks.connected
-      ? h('p', { class: 'muted small' }, h('a', { href: 'classwork.html' }, 'Connect Google Tasks'), ' to see your own to-do list here too.') : null;
-    fill($('tasks-preview'), soon.length ? soon.map((x) => h('div', { class: 'list-row' }, h('div', null,
-      h('strong', null, x.title),
-      h('div', { class: 'small' + (x.due < t ? ' bad' : ' muted') }, x.due < t ? `Overdue · ${fmtRelativeDay(x.due, t)}` : fmtDue(x.due, t), ` · ${x.sub}`))))
-      : h('p', { class: 'muted small' }, 'Nothing due in the next week. ', h('a', { href: 'classwork.html' }, 'Add a test or assignment'), ' when you hear about one.'), connect);
+      ? h('p', { class: 'muted small' }, h('a', { href: 'classwork.html' }, 'Connect Google Tasks'), ' to see your Google Tasks here too.') : null;
+    const text = (x) => h('span', null, h('strong', null, x.title),
+      h('span', { class: 'small todo-meta' + (x.due < t ? ' bad' : ' muted') }, x.due < t ? `Overdue · ${fmtRelativeDay(x.due, t)}` : fmtDue(x.due, t), ` · ${x.sub}`));
+    fill($('tasks-preview'), soon.length ? soon.map((x) => h('div', { class: 'list-row' }, x.todo ? h('label', { class: 'check' }, checkOff(x), text(x)) : h('div', null, text(x))))
+      : h('p', { class: 'muted small' }, 'Nothing due in the next week. ', h('a', { href: 'classwork.html' }, 'Add to your to-do list'), ' so you don\'t forget something.'),
+    undated ? h('p', { class: 'muted small' }, `${undated} more on your to-do list with no date.`) : null, connect);
   }
 
   function renderAll() {
@@ -360,23 +374,23 @@
   async function load() {
     try {
       const [info, me, events, notices] = await Promise.all([loadCalendar(true), getMe(), api('GET', '/api/events'), api('GET', '/api/notices')]);
-      let classes = {}, friends = [], tasks = null, classItems = [], plans = [];
+      let classes = {}, friends = [], tasks = null, classItems = [], plans = [], todos = [];
       const now = schoolClock(info).date;
       const planRange = `/api/plans?from=${MHSCalendar.addDays(now, -3)}&to=${MHSCalendar.addDays(now, 21)}`; // teachers' lesson plans
       if (isTeacher(me.user)) [classes, plans] = await Promise.all([api('GET', '/api/classes'), api('GET', planRange)]); // teachers: their own classes and plans; no friends, events or assignments
       else if (me.user) {
         // Google Tasks can be slow or unreachable; the rest of the page doesn't wait on it failing
-        const [c, f, t, ci, pl] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
+        const [c, f, t, ci, pl, td] = await Promise.all([api('GET', '/api/classes'), api('GET', '/api/friends'),
           api('GET', '/api/tasks').catch((e) => (e.status === 409 ? { available: true, connected: false } : { connected: true, error: e.message, tasks: [] })),
-          api('GET', '/api/classwork').catch(() => []), api('GET', planRange).catch(() => [])]);
-        classes = c; friends = f.friends; tasks = t; classItems = ci; plans = pl;
+          api('GET', '/api/classwork').catch(() => []), api('GET', planRange).catch(() => []), api('GET', '/api/todos').catch(() => [])]);
+        classes = c; friends = f.friends; tasks = t; classItems = ci; plans = pl; todos = td;
       }
       S.info = info; // always keep the newest clock offset
-      const key = JSON.stringify([info.calendar, events, classes, friends, tasks, classItems, plans, notices, me.user && me.user.admin]);
+      const key = JSON.stringify([info.calendar, events, classes, friends, tasks, classItems, plans, todos, notices, me.user && me.user.admin]);
       $('load-error').hidden = true;
       if (key === S.key) return; // nothing changed: leave the page (and keyboard focus) alone
       S.key = key;
-      Object.assign(S, { me: me.user, classes, friends, events: isTeacher(me.user) ? [] : events, tasks, classItems, plans, notices });
+      Object.assign(S, { me: me.user, classes, friends, events: isTeacher(me.user) ? [] : events, tasks, classItems, plans, todos, notices });
       document.body.classList.toggle('teacher', isTeacher(me.user));
       S.lastDate = schoolClock(info).date;
       renderAll();

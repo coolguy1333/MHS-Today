@@ -12,6 +12,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="MHS Today" />
+  <script src="js/theme.js"></script>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -103,6 +104,11 @@
     </div>
     </section>
     <section class="profile-section" id="sec-account" aria-labelledby="h-account" hidden>
+    <div class="card">
+      <h2>Appearance</h2>
+      <div class="form-grid"><label><span>Theme on this device</span>
+        <select class="theme-select" id="theme-select"><option value="auto">Match my device</option><option value="light">Light</option><option value="dark">Dark</option></select></label></div>
+    </div>
     <div class="card">
       <h2 id="h-account">Your data</h2>
       <p class="small muted">Everything MHS Today keeps about you, as one file.</p>

@@ -12,6 +12,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="MHS Today" />
+  <script src="js/theme.js"></script>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -20,8 +21,25 @@
   <main class="container" id="main">
     <noscript><p class="notice">MHS Today needs JavaScript turned on to work.</p></noscript>
     <h1>Assignments</h1>
-    <p class="muted" id="tasks-intro" hidden>Your own Google Tasks: the same list as in Gmail, Google Calendar and the Google Tasks app. Only you see them.</p>
+    <p class="muted">Your own to-do list, and the tests and assignments classmates add for your classes.</p>
     <div id="tasks-msg" class="notice" hidden></div>
+    <div class="card" id="todo-card">
+      <div class="row between"><h2>My to-do list</h2><span class="small muted" id="todo-count"></span></div>
+      <form id="todo-form" class="quick-add">
+        <div class="quick-row">
+          <input type="text" id="td-title" maxlength="120" required placeholder="Add something to do…" aria-label="New to-do" autocomplete="off" />
+          <input type="date" id="td-due" aria-label="Due date (optional)" title="Due date (optional)" />
+          <select id="td-block" aria-label="Class (optional)" title="Class (optional)"><option value="">No class</option></select>
+          <button class="btn" type="submit">Add</button>
+        </div>
+      </form>
+      <div id="todos"><p class="muted small">Loading…</p></div>
+      <details id="todo-done" hidden>
+        <summary class="small" id="todo-done-title">Done</summary>
+        <div id="todos-done"></div>
+      </details>
+      <p class="small muted">Only you see this list. Things with a due date also show on Today, on your calendar, and in the evening-before reminder.</p>
+    </div>
     <div class="card" id="class-card" hidden>
       <h2>Tests &amp; assignments</h2>
       <p class="small muted">Added by classmates who have the same class and teacher (whatever hour). Only they see them, and they disappear once the day has passed.</p>
@@ -39,18 +57,13 @@
         </form>
       </details>
     </div>
-    <div class="card soon-card" id="soon-card" hidden>
-      <span class="badge">Coming soon</span>
-      <h2>Your own to-do list</h2>
-      <p class="muted small">Your Google Tasks right here, to check things off. We're working on it with the district.</p>
-    </div>
     <div class="card" id="connect-card" hidden>
       <h2>Connect Google Tasks</h2>
       <p>See and check off your assignments here. Google will ask you to let MHS Today see and edit your tasks; you can disconnect any time.</p>
       <p><a class="btn" id="connect-btn" href="/auth/google?connect=tasks">Connect Google Tasks</a></p>
     </div>
     <div class="card" id="tasks-card" hidden>
-      <div class="row between"><h2>To do</h2><a class="small" href="https://tasks.google.com/" target="_blank" rel="noopener noreferrer">Open Google Tasks</a></div>
+      <div class="row between"><h2>Google Tasks</h2><a class="small" href="https://tasks.google.com/" target="_blank" rel="noopener noreferrer">Open Google Tasks</a></div>
       <form id="task-form" class="quick-add">
         <div class="quick-row">
           <input type="text" id="tk-title" maxlength="300" required placeholder="Add an assignment…" aria-label="New assignment" />

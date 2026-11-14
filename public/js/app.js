@@ -230,7 +230,22 @@ function renderProfileHeader(user, active) {
   fill($('profile-tabs'), PROFILE_TABS.filter(([key]) => !(isTeacher(user) && key === 'privacy')).map(([key, label, href]) => h('a', { href, class: key === active ? 'active' : null, 'aria-current': key === active ? 'page' : null }, label)));
 }
 
-// The footer on every page: About, Privacy & Terms, Feedback.
+// ---- theme: follow the device (the default), or always light / always dark on this device --------
+// js/theme.js applies the saved choice before the page paints; this changes it.
+const THEMES = { auto: 'Match my device', light: 'Light', dark: 'Dark' };
+function getTheme() {
+  try { const t = localStorage.getItem('mhs-theme'); return t === 'light' || t === 'dark' ? t : 'auto'; } catch { return 'auto'; }
+}
+function setTheme(t) {
+  const theme = hasTheme(t) ? t : 'auto';
+  try { if (theme === 'auto') localStorage.removeItem('mhs-theme'); else localStorage.setItem('mhs-theme', theme); } catch { /* storage blocked: just this page */ }
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', theme);
+  for (const el of document.querySelectorAll('.theme-btn')) el.textContent = `Theme: ${THEMES[theme]}`;
+  for (const el of document.querySelectorAll('select.theme-select')) el.value = theme;
+}
+const hasTheme = (t) => Object.prototype.hasOwnProperty.call(THEMES, t);
+
+// The footer on every page: About, Privacy & Terms, Feedback, and the theme.
 function renderFooter(user) {
   for (const old of document.querySelectorAll('body > .site-footer')) old.remove();
   const main = document.querySelector('main');
@@ -238,6 +253,10 @@ function renderFooter(user) {
   main.after(h('footer', { class: 'site-footer' },
     h('a', { href: 'about.html' }, 'About'), h('a', { href: 'terms.html' }, 'Privacy & Terms'),
     user ? h('a', { href: 'feedback.html' }, 'Feedback', user.unreadFeedback ? ' (new reply)' : '') : null,
+    h('button', {
+      class: 'linklike theme-btn', type: 'button', title: 'Switch between your device\'s setting, light and dark',
+      onclick: () => { const order = Object.keys(THEMES); setTheme(order[(order.indexOf(getTheme()) + 1) % order.length]); }
+    }, `Theme: ${THEMES[getTheme()]}`),
     h('span', { class: 'muted' }, 'An independent student project · not endorsed by MHS')));
 }
 
