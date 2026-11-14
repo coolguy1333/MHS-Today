@@ -6,7 +6,7 @@
   renderNav('calendar');
   await requireLogin();
   const { addDays, dayInfo } = MHSCalendar;
-  const KINDS = [['event', 'Events'], ['group', 'My groups'], ['classwork', 'Tests & assignments'], ['plan', 'Lesson plans'], ['study', 'Study'], ['off', 'Days off']];
+  const KINDS = [['event', 'Events'], ['group', 'My groups'], ['classwork', 'Tests & assignments'], ['todo', 'My to-dos'], ['plan', 'Lesson plans'], ['study', 'Study'], ['off', 'Days off']];
   const shown = new Set(KINDS.map(([k]) => k));
   let info, items = [], month = null, picked = null;
 

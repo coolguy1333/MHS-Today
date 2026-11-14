@@ -338,6 +338,31 @@ test('push: subscribe, choose kinds, test message, group announcements, gone dev
   assert.ok(!JSON.stringify((await boss.get('/api/admin/backup')).data).includes('privateKey'), 'push keys are not in backups');
 });
 
+test('push: the evening reminder lists your own to-do list with classmates\' tests, each thing once', async () => {
+  const phone = fakeDevice();
+  const svc = fakePushService([phone]);
+  const ctx = await startApp({ mock, fetchFn: svc.fetch });
+  const ann = await as(ctx, 1, { given_name: 'Ann' });
+  const ben = await as(ctx, 2, { given_name: 'Ben' });
+  for (const c of [ann, ben]) await c.put('/api/classes', { pink: { name: 'Chemistry', teacher: 'Mole' } });
+  await ann.post('/api/push/subscribe', phone.sub);
+  const t = today();
+  const tomorrow = cal.addDays(t, 1);
+  await ben.post('/api/classwork', { block: 'pink', kind: 'quiz', title: 'Moles', due: tomorrow });
+  await ann.post('/api/todos', { title: 'Quiz: Moles', due: tomorrow, block: 'pink' }); // copied from the class list
+  await ann.post('/api/todos', { title: 'Permission slip', due: tomorrow });
+  await ann.post('/api/todos', { title: 'Next week', due: cal.addDays(t, 6) });
+  const done = (await ann.post('/api/todos', { title: 'Already did it', due: tomorrow })).data;
+  await ann.put(`/api/todos/${done.id}`, { done: true });
+  const realNow = Date.now;
+  try {
+    const evening = [5, 6].map((off) => Date.parse(`${t}T19:30:00Z`) + off * 3600e3).find((ms) => { const s = cal.schoolNow('America/Chicago', new Date(ms)); return s.date === t && Math.round(s.minutes) === 19 * 60 + 30; });
+    Date.now = () => evening;
+    await ctx.app.runReminders();
+    assert.deepEqual(svc.got.map((g) => [g.msg.title, g.msg.body]), [['2 things due tomorrow', 'Quiz: Moles (Chemistry)\nPermission slip']]);
+  } finally { Date.now = realNow; }
+});
+
 test('push: evening reminders from Google Tasks and an hour-before reminders, each sent once', async () => {
   const phone = fakeDevice();
   const svc = fakePushService([phone]);

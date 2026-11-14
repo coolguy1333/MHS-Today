@@ -48,6 +48,43 @@ test('security headers are on every kind of response', async () => {
   assert.equal((await c.raw('GET', '/api/health')).headers.get('cache-control'), 'no-store');
 });
 
+test('pages, scripts and big answers are sent compressed; each form has its own ETag', async () => {
+  const ctx = await startApp({ mock });
+  const zlib = require('node:zlib');
+  const get = (p, enc, extra = {}) => fetch(ctx.local + p, { headers: { ...(enc ? { 'accept-encoding': enc } : { 'accept-encoding': 'identity' }), ...extra } });
+  const plain = await get('/css/style.css');
+  assert.equal(plain.headers.get('content-encoding'), null);
+  assert.equal(plain.headers.get('vary'), 'Accept-Encoding');
+  const text = await plain.text();
+  const tags = new Set([plain.headers.get('etag')]);
+  for (const [enc, unpack] of [['br', zlib.brotliDecompressSync], ['gzip', zlib.gunzipSync], ['gzip, deflate, br', zlib.brotliDecompressSync], ['br;q=0, gzip', zlib.gunzipSync]]) {
+    const res = await new Promise((ok, no) => require('node:http').get(ctx.local + '/css/style.css', { headers: { 'accept-encoding': enc } }, (r) => {
+      const parts = []; r.on('data', (d) => parts.push(d)); r.on('end', () => ok({ headers: r.headers, body: Buffer.concat(parts) }));
+    }).on('error', no));
+    assert.equal(res.headers['content-encoding'], unpack === zlib.gunzipSync ? 'gzip' : 'br', enc);
+    assert.equal(Number(res.headers['content-length']), res.body.length);
+    assert.ok(res.body.length < text.length / 3, `${enc}: ${res.body.length} of ${text.length}`);
+    assert.equal(unpack(res.body).toString(), text, enc);
+    tags.add(res.headers.etag);
+    assert.equal((await get('/css/style.css', enc, { 'if-none-match': res.headers.etag })).status, 304);
+  }
+  assert.equal(tags.size, 3, 'plain, br and gzip are told apart');
+  assert.equal((await get('/css/style.css', 'br', { 'if-none-match': plain.headers.get('etag') })).status, 200, "a plain copy's tag doesn't match the compressed one");
+  assert.equal((await get('/icon-32.png', 'br')).headers.get('content-encoding'), null, 'images are already compressed');
+  assert.equal((await get('/robots.txt', 'br')).headers.get('content-encoding'), null, 'tiny files are left alone');
+  // API: small answers plain, big ones compressed; fetch() unpacks them like a browser
+  assert.equal((await get('/api/health', 'br')).headers.get('content-encoding'), null);
+  const c = await as(ctx, 99, { email: 'admin@school.test' });
+  const noSchool = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [cal.addDays('2026-01-01', i * 3), `Day off number ${i}`]));
+  await c.put('/api/admin/calendar', { anchorDate: '2026-01-05', anchorLetter: 'A', noSchool });
+  const big = await fetch(ctx.local + '/api/calendar');
+  assert.ok(['br', 'gzip'].includes(big.headers.get('content-encoding')));
+  assert.equal(Object.keys((await big.json()).calendar.noSchool).length, 60);
+  const head = await fetch(ctx.local + '/api/calendar', { method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
+});
+
 test('only Simple mode can be put on another website (in a frame)', async () => {
   const ctx = await startApp({ mock });
   const c = ctx.client();

@@ -1,10 +1,10 @@
-// Assignments: the signed-in person's own Google Tasks (connect, check off, add), and study
-// sessions with classmates.
+// Assignments: the signed-in person's own to-do list, the tests and assignments classmates add for
+// their classes, study sessions, and (when it's turned on) their Google Tasks.
 (async function () {
   renderNav('classwork');
   await requireLogin();
   const { blockInfo, BLOCKS } = MHSBell;
-  let info = null, sessions = [], data = null;
+  let info = null, sessions = [], data = null, todos = [], classes = {};
 
   // ---- messages after coming back from Google
   const MESSAGES = {
@@ -50,8 +50,6 @@
       t.link ? h('a', { class: 'small', href: t.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open') : null);
   }
   function renderTasks() {
-    $('soon-card').hidden = data.available;
-    $('tasks-intro').hidden = !data.available;
     $('connect-card').hidden = data.connected || !data.available;
     $('tasks-card').hidden = !data.connected;
     if (!data.connected) return;
@@ -84,6 +82,73 @@
   $('disconnect-btn').addEventListener('click', (e) => {
     if (!confirm('Disconnect Google Tasks? Your tasks stay in Google; MHS Today just stops showing them.')) return;
     busy(e.currentTarget, async () => { await api('DELETE', '/api/tasks/connection'); toast('Google Tasks disconnected'); await loadTasks(); });
+  });
+
+  // ---- my to-do list (private; works without Google Tasks)
+  const classOptions = () => BLOCKS.filter((b) => classes[b.key]).map((b) => [b.key, classes[b.key].name]);
+  function todoRow(t, today) {
+    const b = t.block ? blockInfo(t.block) : null;
+    const box = h('input', { type: 'checkbox', 'aria-label': t.done ? `Not done: ${t.title}` : `Done: ${t.title}` });
+    box.checked = t.done;
+    box.addEventListener('change', async () => {
+      box.disabled = true;
+      try {
+        await api('PUT', `/api/todos/${t.id}`, { done: box.checked });
+        if (box.checked) toast('Done!');
+      } catch (e) { box.checked = !box.checked; showError(e); }
+      await loadTodos();
+    });
+    const meta = [
+      t.due ? (t.due < today && !t.done ? h('span', { class: 'bad' }, `Overdue · ${fmtRelativeDay(t.due, today)}`) : fmtDue(t.due, today)) : null,
+      t.className ? [colorDot(b && b.color), t.className] : null
+    ].filter(Boolean);
+    return h('div', { class: 'list-row todo-row' + (t.done ? ' done' : '') },
+      h('label', { class: 'check' }, box, h('span', null,
+        h('strong', null, t.title),
+        meta.length ? h('span', { class: 'small muted todo-meta' }, meta.flatMap((x, i) => (i ? [' · ', x] : [x]))) : null,
+        t.notes ? h('span', { class: 'small todo-meta' }, t.notes) : null)),
+      h('div', { class: 'row nowrap small row-actions' },
+        t.done ? null : h('button', {
+          class: 'linklike', type: 'button', 'aria-label': `Edit ${t.title}`,
+          onclick: () => editDialog('Edit to-do', [
+            { key: 'title', label: 'What', attrs: { maxlength: '120', required: true }, wide: true },
+            { key: 'due', label: 'Due (optional)', type: 'date' },
+            { key: 'block', label: 'Class (optional)', type: 'select', options: [['', 'No class'], ...classOptions()] },
+            { key: 'notes', label: 'Notes (optional)', type: 'textarea', attrs: { maxlength: '300' }, wide: true }
+          ], t, async (v) => { await api('PUT', `/api/todos/${t.id}`, { title: v.title, due: v.due || null, block: v.block || null, notes: v.notes }); toast('Saved'); await loadTodos(); })
+        }, 'Edit'),
+        h('button', {
+          class: 'linklike danger', type: 'button', 'aria-label': `Delete ${t.title}`,
+          onclick: (e) => busy(e.currentTarget, async () => { await api('DELETE', `/api/todos/${t.id}`); await loadTodos(); })
+        }, 'Delete')));
+  }
+  function renderTodos() {
+    const today = schoolClock(info).date;
+    const open = todos.filter((t) => !t.done), done = todos.filter((t) => t.done);
+    $('todo-count').textContent = open.length ? `${open.length} to do` : '';
+    fill($('todos'), open.length ? open.map((t) => todoRow(t, today))
+      : h('p', { class: 'muted small' }, done.length ? 'All done. Nice!' : 'Nothing yet. Add your homework, a form to bring back, anything you need to remember.'));
+    $('todo-done').hidden = !done.length;
+    $('todo-done-title').textContent = `Done (${done.length})`;
+    fill($('todos-done'), done.map((t) => todoRow(t, today)));
+  }
+  async function loadTodos() {
+    try {
+      todos = await api('GET', '/api/todos');
+      renderTodos();
+      if ($('class-items').dataset.ready) await loadClassItems(); // "On my list" marks follow
+    } catch (e) {
+      fill($('todos'), h('p', { class: 'notice error' }, e.message));
+    }
+  }
+  $('todo-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(e.submitter, async () => {
+      await api('POST', '/api/todos', { title: $('td-title').value, due: $('td-due').value || null, block: $('td-block').value || null });
+      $('td-title').value = '';
+      await loadTodos();
+      $('td-title').focus(); // ready for the next one
+    });
   });
 
   // ---- study sessions
@@ -119,6 +184,8 @@
 
   // ---- tests & assignments classmates added for your classes
   const KIND_LABEL = { test: 'Test', quiz: 'Quiz', assignment: 'Assignment', project: 'Project' };
+  const todoTitle = (i) => `${KIND_LABEL[i.kind]}: ${i.title}`;
+  const onMyList = (i) => todos.some((t) => !t.done && t.due === i.due && t.title.toLowerCase() === todoTitle(i).toLowerCase());
   function classItemRow(i, today) {
     const b = blockInfo(i.block);
     return h('div', { class: 'list-row' },
@@ -127,7 +194,15 @@
         h('div', { class: 'small' }, colorDot(b && b.color), i.className, ' · ', h('span', { class: i.due < today ? 'muted' : null }, fmtDue(i.due, today))),
         i.notes ? h('div', { class: 'small' }, i.notes) : null,
         h('div', { class: 'small muted' }, `added by ${i.by}`)),
-      h('div', { class: 'row nowrap small' },
+      h('div', { class: 'row nowrap small row-actions' },
+        onMyList(i) ? h('span', { class: 'muted' }, 'On my list ✓') : h('button', {
+          class: 'linklike', type: 'button', 'aria-label': `Add ${i.title} to my to-do list`,
+          onclick: (e) => busy(e.currentTarget, async () => {
+            await api('POST', '/api/todos', { title: todoTitle(i), due: i.due, block: i.block, notes: i.notes });
+            toast('Added to your to-do list');
+            await loadTodos();
+          })
+        }, 'Add to my list'),
         i.canDelete ? h('button', {
           class: 'linklike', type: 'button', 'aria-label': `Edit ${i.title}`,
           onclick: () => editDialog(`Edit "${i.title}"`, [
@@ -147,6 +222,7 @@
     try {
       const items = await api('GET', '/api/classwork');
       const today = schoolClock(info).date;
+      $('class-items').dataset.ready = '1';
       fill($('class-items'), items.length ? items.map((i) => classItemRow(i, today))
         : h('p', { class: 'muted small' }, 'Nothing yet. When you hear about a test or assignment, add it so your class knows.'));
     } catch (e) {
@@ -164,11 +240,10 @@
     });
   });
 
-  let classes;
   try {
     [classes, info] = await Promise.all([api('GET', '/api/classes'), loadCalendar()]);
   } catch (e) {
-    fill($('tasks'), h('p', { class: 'notice error' }, e.message));
+    fill($('todos'), h('p', { class: 'notice error' }, e.message));
     return;
   }
   const mine = BLOCKS.filter((b) => classes[b.key]);
@@ -201,7 +276,11 @@
   $('st-date').min = today;
   $('st-date').value = today;
   $('tk-due').value = MHSCalendar.nextSchoolDay(info.calendar, today) || '';
+  $('td-due').value = MHSCalendar.nextSchoolDay(info.calendar, today) || ''; // the usual: due next class day (clear it for no date)
+  add($('td-block'), classOptions().map(([v, label]) => h('option', { value: v }, label)));
+  $('td-block').hidden = !mine.length;
   $('ce-due').min = today;
   $('ce-due').value = MHSCalendar.nextSchoolDay(info.calendar, today) || '';
+  await loadTodos(); // first: the class list marks what's already on it
   await Promise.all([loadTasks(), mine.length ? loadSessions() : null, mine.length ? loadClassItems() : null]);
 })();

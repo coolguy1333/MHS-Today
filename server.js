@@ -23,9 +23,21 @@ app.listen().then((port) => {
   process.exit(1);
 });
 
-function shutdown() {
-  app.close().then(() => process.exit(0));
+// Stop cleanly: finish what's in flight, save, then exit. A second signal, or 10 seconds, forces it.
+let stopping = false;
+function shutdown(code = 0) {
+  if (stopping) process.exit(code || 1);
+  stopping = true;
+  const force = setTimeout(() => process.exit(code || 1), 10e3);
+  force.unref();
+  app.close().then(() => process.exit(code), () => process.exit(1));
 }
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => shutdown(0));
+process.on('SIGINT', () => shutdown(0));
 process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e));
+// A bug nobody caught: say what it was, save everyone's data, and let the host restart the app
+// (carrying on in an unknown state would be worse).
+process.on('uncaughtException', (e) => {
+  console.error('Uncaught exception, restarting:', e);
+  shutdown(1);
+});

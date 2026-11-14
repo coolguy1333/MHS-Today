@@ -86,6 +86,7 @@ module.exports = function push(app) {
     const t = now.date;
     const tasks = features.find((f) => f.tasksDueOn);
     const classEvents = features.find((f) => f.classEventsDueOn);
+    const todos = features.find((f) => f.todosDueOn);
     const study = features.find((f) => f.studySessions);
     const groups = features.find((f) => f.eventsForReminders);
     const jobs = [];
@@ -98,7 +99,9 @@ module.exports = function push(app) {
       const tomorrow = cal.addDays(t, 1);
       for (const u of Object.values(state.users)) {
         if (!subsOf(u).length || !prefsOf(u).classwork) continue;
+        // classmates' tests first, then what's on their own to-do list (not twice, if they copied one over)
         const fromClass = classEvents ? classEvents.classEventsDueOn(u, tomorrow) : [];
+        for (const title of todos ? todos.todosDueOn(u, tomorrow) : []) if (!fromClass.some((c) => c.includes(title) || title.includes(c))) fromClass.push(title);
         const withTasks = !!tasks && tasks.enabled && tasks.connected(u);
         if ((!fromClass.length && !withTasks) || !once(`cw:${t}:${u.id}`, 3)) continue;
         changed = true;

@@ -25,6 +25,7 @@ function emptyState() {
     reports: [],       // see src/reports.js
     classEvents: [],   // see src/classevents.js
     plans: [],         // teachers' lesson plans: src/plans.js
+    todos: [],         // each student's own to-do list: src/todos.js
     school: { graduation: null, graduated: null }, // graduation day (src/app.js: graduate())
     vapid: null,       // push notification keys (src/push.js); made on first start
     sentReminders: {}  // reminder key -> expiry, so each reminder goes out once
@@ -49,7 +50,7 @@ function openDb(dataDir, log = () => {}) {
     if (!isObj(parsed)) throw new Error(`${file} has an unexpected format.`);
     if (parsed.version === VERSION) {
       for (const k of ['users', 'sessions', 'calendar', 'vapid', 'sentReminders', 'school']) if (isObj(parsed[k])) state[k] = parsed[k];
-      for (const k of ['events', 'links', 'groups', 'tools', 'toolSuggestions', 'announcements', 'countdowns', 'blockedWords', 'studySessions', 'feedback', 'reports', 'classEvents', 'plans']) {
+      for (const k of ['events', 'links', 'groups', 'tools', 'toolSuggestions', 'announcements', 'countdowns', 'blockedWords', 'studySessions', 'feedback', 'reports', 'classEvents', 'plans', 'todos']) {
         if (Array.isArray(parsed[k])) state[k] = parsed[k];
       }
     } else if (parsed.version > VERSION) {
@@ -64,6 +65,7 @@ function openDb(dataDir, log = () => {}) {
 
   let timer = null;
   let dirty = false;
+  let failedSince = 0; // when saving started failing (0 = saving works)
 
   function writeAtomic(target, text) {
     const tmp = target + '.tmp';
@@ -78,8 +80,11 @@ function openDb(dataDir, log = () => {}) {
     try {
       writeAtomic(file, JSON.stringify(state));
       dirty = false;
+      if (failedSince) log('Saving data works again.');
+      failedSince = 0;
       return true;
     } catch (e) {
+      if (!failedSince) failedSince = Date.now();
       log(`Could not save data: ${e.message} (will retry)`);
       timer = setTimeout(flush, 5000);
       timer.unref();
@@ -116,8 +121,10 @@ function openDb(dataDir, log = () => {}) {
     return names.length ? names[names.length - 1] : null;
   }
   function close() { flush(); }
+  // true once saving has been failing for a minute (a full disk, a read-only volume): the health check reports it
+  const failing = () => failedSince > 0 && Date.now() - failedSince > 60e3;
 
-  return { state, save, flush, snapshot, dailySnapshot, lastSnapshot, close, file, backupDir };
+  return { state, save, flush, snapshot, dailySnapshot, lastSnapshot, close, failing, file, backupDir };
 }
 
 module.exports = { openDb, emptyState, VERSION };

@@ -258,8 +258,25 @@ const step = (m) => console.log('•', m);
 
   // ---------------------------------------------------------------- assignments: classmates' tests; Google Tasks "coming soon"
   await sp.goto(base + '/classwork.html'); await sp.waitForSelector('#class-card:not([hidden])');
-  assert.match(await text(sp, '#soon-card'), /Coming soon/);
-  assert.equal(await sp.locator('#connect-card').isHidden(), true);
+  assert.equal(await sp.locator('#connect-card').isHidden(), true, 'Google Tasks stays out of the way while it is off');
+  // my to-do list: add (Enter), check off, undo, edit
+  assert.match(await text(sp, '#todos'), /Nothing yet/);
+  assert.equal(await sp.inputValue('#td-due'), '2026-10-02', 'due the next school day unless you change it');
+  await sp.fill('#td-title', 'Read ch. 4 <b>tonight</b>'); await sp.selectOption('#td-block', 'pink'); await sp.press('#td-title', 'Enter');
+  await sp.waitForSelector('#todos .todo-row');
+  assert.match(await text(sp, '#todos'), /Read ch\. 4 <b>tonight<\/b>[\s\S]*Due tomorrow · Chemistry/);
+  assert.equal(await sp.locator('#todos b').count(), 0, 'typed HTML stays text');
+  assert.equal(await sp.evaluate(() => document.activeElement.id), 'td-title', 'ready for the next one');
+  await sp.fill('#td-title', 'Permission slip'); await sp.fill('#td-due', ''); await sp.click('#todo-form button[type=submit]');
+  await sp.waitForSelector('#todos .todo-row >> nth=1');
+  assert.equal(await text(sp, '#todo-count'), '2 to do');
+  await sp.check('#todos .todo-row:has-text("Permission slip") input[type=checkbox]');
+  await sp.waitForSelector('#todo-done:not([hidden])');
+  assert.equal(await text(sp, '#todo-done-title'), 'Done (1)');
+  await sp.click('#todo-done summary'); await sp.uncheck('#todos-done input[type=checkbox]');
+  await sp.waitForFunction(() => document.querySelectorAll('#todos .todo-row').length === 2);
+  await sp.click('#todos .todo-row:has-text("Permission slip") button:has-text("Delete")');
+  await sp.waitForFunction(() => document.querySelectorAll('#todos .todo-row').length === 1);
   await sp.click('#class-add summary');
   await sp.selectOption('#ce-block', 'pink'); await sp.selectOption('#ce-kind', 'quiz');
   await sp.fill('#ce-title', 'Moles quiz'); await sp.fill('#ce-due', '2026-10-02');
@@ -274,12 +291,19 @@ const step = (m) => console.log('•', m);
   await sp.waitForSelector('#class-items .list-row:has-text("Moles quiz (ch. 4)")');
   assert.match(await text(sp, '#class-items'), /Calculators allowed/);
   assert.equal(await sp.locator('dialog[open]').count(), 0);
+  // a classmate's test goes on my own list with one click, and shows once on Today
+  await sp.click('#class-items button:has-text("Add to my list")');
+  await sp.waitForSelector('#class-items :text("On my list ✓")');
+  assert.match(await text(sp, '#todos'), /Quiz: Moles quiz \(ch\. 4\)[\s\S]*Due tomorrow · Chemistry/);
   assert.equal(await sp.locator('#study-card').isVisible(), true, 'study sessions still work');
   await sp.screenshot({ path: path.join(SHOTS, 'assignments.png'), fullPage: true });
   await sp.goto(base + '/index.html'); await sp.waitForSelector('#tasks-preview .list-row');
   assert.match(await text(sp, '#tasks-preview'), /Quiz[\s\S]*Moles quiz[\s\S]*Due tomorrow · Chemistry/);
+  assert.equal(await sp.locator('#tasks-preview .list-row').count(), 2, 'the copied quiz is not listed twice');
+  await sp.check('#tasks-preview .list-row:has-text("Read ch. 4") input[type=checkbox]'); // checked off right on Today
+  await sp.waitForFunction(() => document.querySelectorAll('#tasks-preview .list-row').length === 1);
   assert.match(await text(sp, '#schedule-body tr[data-hour="3"]'), /Chemistry[\s\S]*Quiz Moles quiz \(ch\. 4\) · tomorrow/);
-  step('assignments: a classmate quiz added for Chemistry shows on Assignments, Due soon and next to the class; Google Tasks "coming soon"');
+  step('assignments: my to-do list (add, check off, undo, delete; check off from Today); a classmate quiz shows on Assignments, Due soon and next to the class, and copies to my list');
 
   // ---------------------------------------------------------------- friends (Ben on a phone-sized screen)
   await sp.goto(base + '/friends.html'); await sp.waitForSelector('#my-code:not(:text("…"))');
@@ -602,6 +626,32 @@ const step = (m) => console.log('•', m);
   await emb.screenshot({ path: path.join(SHOTS, 'simple-embedded.png') });
   await emb.close(); site.close();
   step('simple mode: /simple opens from Today, ticks once a second, ?next=1 and ?schedule=1, theme/color/size/heading/seconds/24h/minutes kept in the link and remembered, reset, embeds on another site, other pages refuse framing');
+
+  // theme: the device's by default; Light or Dark sticks on this device, on every page, before it paints
+  const bg = (p) => p.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  assert.equal(await bg(dark.page), 'rgb(14, 19, 32)', 'dark device: dark');
+  await dark.page.click('.theme-btn'); // Match my device -> Light
+  assert.equal(await text(dark.page, '.theme-btn'), 'Theme: Light');
+  assert.equal(await bg(dark.page), 'rgb(244, 246, 251)');
+  await dark.page.goto(base + '/account.html#account'); await dark.page.waitForSelector('#theme-select');
+  assert.equal(await bg(dark.page), 'rgb(244, 246, 251)', 'still light on the next page');
+  assert.equal(await dark.page.inputValue('#theme-select'), 'light');
+  await sp.goto(base + '/account.html#account'); await sp.waitForSelector('#sec-account:not([hidden]) #theme-select');
+  await sp.selectOption('#theme-select', 'dark');
+  assert.equal(await bg(sp), 'rgb(14, 19, 32)', 'light device, Dark picked');
+  assert.equal(await text(sp, '.theme-btn'), 'Theme: Dark');
+  await sp.goto(base + '/schedule.html'); await sp.waitForSelector('#rotation td');
+  assert.equal(await bg(sp), 'rgb(14, 19, 32)');
+  // printing: just the rotation grid, in light colors, whatever the theme
+  await sp.emulateMedia({ media: 'print' });
+  await sp.evaluate(() => document.body.classList.add('print-rotation'));
+  assert.equal(await bg(sp), 'rgb(255, 255, 255)');
+  assert.deepEqual(await sp.evaluate(() => ['.nav', '.site-footer', '#print-btn', '#save-bar'].map((s) => { const el = document.querySelector(s); return !el || getComputedStyle(el).display === 'none' || !el.offsetParent; })), [true, true, true, true]);
+  assert.equal(await sp.locator('#rotation').isVisible(), true);
+  await sp.screenshot({ path: path.join(SHOTS, 'print-rotation.png'), fullPage: true });
+  await sp.emulateMedia({ media: null }); await sp.evaluate(() => document.body.classList.remove('print-rotation'));
+  await sp.selectOption('.theme-select, #theme-select', 'auto').catch(() => sp.evaluate(() => setTheme('auto')));
+  step('theme: follows the device, or Light/Dark kept on this device (footer and Profile); print shows just the schedule');
 
   await sp.goto(base + '/index.html'); await sp.waitForSelector('#day-head h1');
   await sp.keyboard.press('Tab');
